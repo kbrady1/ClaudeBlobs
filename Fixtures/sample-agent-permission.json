@@ -1,0 +1,12 @@
+{
+  "session_id": "session-abc-003",
+  "pid": 12347,
+  "cwd": "/Users/kent/projects/myapp",
+  "agent_type": null,
+  "status": "permission",
+  "last_message": null,
+  "last_tool_use": "rm -rf build/",
+  "cmux_workspace": null,
+  "cmux_surface": null,
+  "updated_at": 1710000300
+}

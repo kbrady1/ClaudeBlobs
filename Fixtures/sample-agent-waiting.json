@@ -1,0 +1,12 @@
+{
+  "session_id": "session-abc-002",
+  "pid": 12346,
+  "cwd": "/Users/kent/projects/myapp",
+  "agent_type": null,
+  "status": "waiting",
+  "last_message": "Should I delete the old test files?",
+  "last_tool_use": null,
+  "cmux_workspace": null,
+  "cmux_surface": null,
+  "updated_at": 1710000200
+}
