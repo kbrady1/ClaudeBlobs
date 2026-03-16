@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": ["Read"],
+    "deny": []
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      { "type": "command", "command": "echo existing-hook" }
+    ]
+  }
+}
