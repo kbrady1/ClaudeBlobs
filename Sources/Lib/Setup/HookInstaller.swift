@@ -6,7 +6,9 @@ struct HookInstaller {
 
     static let hookEvents = [
         "SessionStart", "UserPromptSubmit", "PreToolUse",
-        "Stop", "PermissionRequest", "Notification", "SessionEnd"
+        "Stop", "PermissionRequest", "Notification", "SessionEnd",
+        "SubagentStart", "SubagentStop", "PostToolUse",
+        "TaskCompleted", "PreCompact", "PostCompact"
     ]
 
     static let hookFileNames: [String: String] = [
@@ -17,6 +19,12 @@ struct HookInstaller {
         "PermissionRequest": "hook-permission.sh",
         "Notification": "hook-notification.sh",
         "SessionEnd": "hook-session-end.sh",
+        "SubagentStart": "hook-subagent-start.sh",
+        "SubagentStop": "hook-subagent-stop.sh",
+        "PostToolUse": "hook-post-tool.sh",
+        "TaskCompleted": "hook-task-completed.sh",
+        "PreCompact": "hook-pre-compact.sh",
+        "PostCompact": "hook-post-compact.sh",
     ]
 
     init(settingsPath: URL? = nil, hooksDir: String? = nil) {

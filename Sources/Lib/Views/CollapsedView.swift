@@ -19,7 +19,8 @@ struct CollapsedView: View {
                         isDone: agent.isDone,
                         hasNotified: notifiedIds.contains(agent.id),
                         staleness: agent.staleness,
-                        isPlanApproval: agent.isPlanApproval
+                        isPlanApproval: agent.isPlanApproval,
+                        isTaskJustCompleted: agent.isTaskJustCompleted
                     )
                 }
                 .transition(

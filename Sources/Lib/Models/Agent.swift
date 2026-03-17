@@ -68,6 +68,8 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
             return ""
         case .starting:
             return "Starting up..."
+        case .compacting:
+            return "Compacting context..."
         }
     }
 

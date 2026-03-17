@@ -60,7 +60,8 @@ struct ExpandedView: View {
                         isDone: agent.isDone,
                         hasNotified: notifiedIds.contains(agent.id),
                         staleness: agent.staleness,
-                        isPlanApproval: agent.isPlanApproval
+                        isPlanApproval: agent.isPlanApproval,
+                        isTaskJustCompleted: agent.isTaskJustCompleted
                     )
                     .frame(width: 48, height: 44)
 

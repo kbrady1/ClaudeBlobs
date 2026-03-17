@@ -173,17 +173,11 @@ final class AgentStore: ObservableObject {
         snoozedSessionIds = snoozedSessionIds.intersection(activeIds)
         ntfyScheduler?.cleanupGone(activeIds: activeIds)
 
-        // Build parent-child relationships via PID ancestry
+        // Build parent-child relationships from parentSessionId
         var newChildren: [String: [String]] = [:]
-        let pidToSession = Dictionary(loaded.map { ($0.pid, $0.sessionId) }, uniquingKeysWith: { a, _ in a })
-        for agent in loaded where agent.agentType != nil {
-            if let parentPid = ProcessTree.findAncestor(of: Int32(agent.pid), where: { candidate in
-                let candidateId = pidToSession[Int(candidate)]
-                return candidateId != nil && candidateId != agent.sessionId
-            }) {
-                if let parentId = pidToSession[Int(parentPid)] {
-                    newChildren[parentId, default: []].append(agent.sessionId)
-                }
+        for agent in loaded {
+            if let parentId = agent.parentSessionId {
+                newChildren[parentId, default: []].append(agent.sessionId)
             }
         }
 

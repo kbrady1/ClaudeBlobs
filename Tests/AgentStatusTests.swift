@@ -24,6 +24,13 @@ struct AgentStatusTests {
         #expect(AgentStatus.permission.visibleWhenCollapsed == true)
         #expect(AgentStatus.starting.visibleWhenCollapsed == true)
         #expect(AgentStatus.working.visibleWhenCollapsed == false)
+        #expect(AgentStatus.compacting.visibleWhenCollapsed == false)
+    }
+
+    @Test func compactingStatus() {
+        let status = AgentStatus.compacting
+        #expect(status.displayName == "Compacting")
+        #expect(status.visibleWhenCollapsed == false)
     }
 
     @Test func speechBubbleText() {

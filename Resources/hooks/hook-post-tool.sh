@@ -1,0 +1,17 @@
+#!/bin/bash
+INPUT=$(cat)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
+STATUS_DIR="$HOME/.claude/agent-status"
+mkdir -p "$STATUS_DIR"
+STATUS_FILE="$STATUS_DIR/$SESSION_ID.json"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/hook-ensure-status.sh"
+ensure_status_file
+
+TS=$(date +%s000)
+
+atomic_update "$STATUS_FILE" \
+  --arg status "working" \
+  --argjson ts "$TS" \
+  '.status = $status | .updatedAt = $ts'

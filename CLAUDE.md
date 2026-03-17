@@ -17,6 +17,14 @@ Other targets:
 - `make stop` — kill running instance
 - `make install` — copy bundle to /Applications
 
+## Testing
+
+Run tests before considering any task complete:
+
+```sh
+swift test
+```
+
 ## Architecture
 
 - **Sources/Lib/Store/AgentStore.swift** — watches `~/.claude/agent-status/*.json` for agent state

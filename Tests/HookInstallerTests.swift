@@ -27,7 +27,7 @@ struct HookInstallerTests {
         let settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         let hooks = settings["hooks"] as! [String: Any]
 
-        #expect(hooks.count == 7)
+        #expect(hooks.count == 13)
         for event in HookInstaller.hookEvents {
             let eventHooks = hooks[event] as! [[String: Any]]
             #expect(eventHooks.count == 1)
@@ -125,6 +125,6 @@ struct HookInstallerTests {
         let data = try Data(contentsOf: path)
         let settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         let hooks = settings["hooks"] as! [String: Any]
-        #expect(hooks.count == 7)
+        #expect(hooks.count == 13)
     }
 }

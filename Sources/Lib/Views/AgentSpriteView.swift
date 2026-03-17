@@ -11,11 +11,14 @@ struct AgentSpriteView: View {
     var hasNotified: Bool = false
     var staleness: AgentStaleness = .active
     var isPlanApproval: Bool = false
+    var isTaskJustCompleted: Bool = false
 
     @State private var animationPhase: CGFloat = 0
     @State private var expressionFrame: Int = 0
     @State private var expressionTimer: AnyCancellable?
     @State private var bounceTimer: AnyCancellable?
+    @State private var isShowingCheckmark: Bool = false
+    @State private var checkmarkTimer: AnyCancellable?
 
     var body: some View {
         ZStack {
@@ -48,6 +51,11 @@ struct AgentSpriteView: View {
             }
         }
         .saturation(staleness == .hung ? 0 : 1)
+        .scaleEffect(
+            x: status == .compacting ? 1.3 : 1.0,
+            y: status == .compacting ? 0.5 : 1.0
+        )
+        .animation(.spring(response: 0.4, dampingFraction: 0.5), value: status == .compacting)
         .offset(y: animationOffset)
         .animation(bounceAnimation, value: animationPhase)
         .onAppear {
@@ -57,6 +65,7 @@ struct AgentSpriteView: View {
         .onDisappear {
             expressionTimer?.cancel()
             bounceTimer?.cancel()
+            checkmarkTimer?.cancel()
         }
         .onChange(of: isSnoozed) { _ in
             expressionFrame = 0
@@ -65,6 +74,22 @@ struct AgentSpriteView: View {
         }
         .onChange(of: status) { _ in
             startBounceTimer()
+        }
+        .onChange(of: isTaskJustCompleted) { completed in
+            if completed {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isShowingCheckmark = true
+                }
+                checkmarkTimer?.cancel()
+                checkmarkTimer = Timer.publish(every: 3.0, on: .main, in: .common)
+                    .autoconnect()
+                    .first()
+                    .sink { _ in
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isShowingCheckmark = false
+                        }
+                    }
+            }
         }
     }
 
@@ -83,7 +108,10 @@ struct AgentSpriteView: View {
 
     @ViewBuilder
     private var faceView: some View {
-        if isSnoozed {
+        if isShowingCheckmark {
+            CheckmarkFace()
+                .transition(.opacity)
+        } else if isSnoozed {
             SnoozeFace(phase: animationPhase)
         } else {
             switch status {
@@ -101,6 +129,7 @@ struct AgentSpriteView: View {
                 }
             case .working:    WorkingFace(frame: expressionFrame, isStale: isStale)
             case .starting:   StartingFace(frame: expressionFrame, isStale: isStale)
+            case .compacting: CompactingFace()
             }
         }
     }
@@ -148,6 +177,7 @@ struct AgentSpriteView: View {
         case .waiting:    return isDone ? 0 : 0.8
         case .working:    return 1.2
         case .starting:   return 0
+        case .compacting: return 0
         }
     }
 
@@ -190,6 +220,7 @@ struct AgentSpriteView: View {
             case .waiting:    interval = isDone ? 2.5 : 1.5
             case .permission: interval = 1.8
             case .working:    interval = 1.2
+            case .compacting: interval = 1.2
             }
         }
         expressionTimer = Timer.publish(every: interval, on: .main, in: .common)
@@ -227,7 +258,7 @@ struct AgentSpriteView: View {
         case .permission:
             // Alternate: tense mouth (0), yelling (1), extra angry (2)
             expressionFrame = (expressionFrame + 1) % 3
-        case .working:
+        case .working, .compacting:
             // Cycle: center (0), look left (1), look right (2), thinking mouth (3)
             expressionFrame = (expressionFrame + 1) % 4
         }
@@ -576,6 +607,61 @@ private struct WorkingFace: View {
                     .stroke(.black, style: stroke)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Compacting Face: squished dizzy look
+
+private struct CompactingFace: View {
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let stroke = StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round)
+
+            ZStack {
+                // Dizzy spiral left eye
+                Text("@")
+                    .font(.system(size: max(4, w * 0.32), weight: .bold, design: .monospaced))
+                    .foregroundColor(.black)
+                    .position(x: w * 0.28, y: h * 0.30)
+
+                // Dizzy spiral right eye
+                Text("@")
+                    .font(.system(size: max(4, w * 0.32), weight: .bold, design: .monospaced))
+                    .foregroundColor(.black)
+                    .position(x: w * 0.72, y: h * 0.30)
+
+                // Wavy mouth
+                Path { path in
+                    path.move(to: CGPoint(x: w * 0.20, y: h * 0.75))
+                    path.addCurve(
+                        to: CGPoint(x: w * 0.80, y: h * 0.75),
+                        control1: CGPoint(x: w * 0.35, y: h * 0.60),
+                        control2: CGPoint(x: w * 0.65, y: h * 0.90)
+                    )
+                }
+                .stroke(.black, style: stroke)
+            }
+        }
+    }
+}
+
+// MARK: - Checkmark Face: task completed flash
+
+private struct CheckmarkFace: View {
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+
+            Path { path in
+                path.move(to: CGPoint(x: w * 0.15, y: h * 0.50))
+                path.addLine(to: CGPoint(x: w * 0.40, y: h * 0.80))
+                path.addLine(to: CGPoint(x: w * 0.85, y: h * 0.15))
+            }
+            .stroke(.black, style: StrokeStyle(lineWidth: max(2, w * 0.10), lineCap: .round, lineJoin: .round))
         }
     }
 }

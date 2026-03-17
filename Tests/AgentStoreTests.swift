@@ -69,4 +69,21 @@ struct AgentStoreTests {
         #expect(store.agents[1].sessionId == "b")
         #expect(store.agents[2].sessionId == "c")
     }
+
+    @Test func buildsChildRelationshipsFromParentSessionId() throws {
+        let parent = Agent.fixture(sessionId: "parent", pid: 200, status: .working, updatedAt: 1000)
+        let child = Agent.fixture(sessionId: "child", pid: 201, status: .working, parentSessionId: "parent", updatedAt: 1000)
+
+        for agent in [parent, child] {
+            let data = try JSONEncoder().encode(agent)
+            try data.write(to: tmpDir.appendingPathComponent("\(agent.sessionId).json"))
+        }
+
+        let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.reload()
+
+        #expect(store.childSessionIds["parent"] == ["child"])
+        #expect(store.topLevelAgents.count == 1)
+        #expect(store.topLevelAgents.first?.sessionId == "parent")
+    }
 }
