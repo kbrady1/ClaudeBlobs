@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.local.Claudblobs</string>
+    <string>com.local.ClaudeBlobs</string>
     <key>CFBundleName</key>
-    <string>Claudblobs</string>
+    <string>ClaudeBlobs</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>CFBundleShortVersionString</key>
@@ -15,7 +15,7 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>Claudblobs</string>
+    <string>ClaudeBlobs</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
 </dict>

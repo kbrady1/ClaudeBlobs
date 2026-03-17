@@ -33,7 +33,7 @@ struct HookInstaller {
                 .appendingPathComponent(".claude/settings.json")
         self.hooksDir = hooksDir
             ?? Bundle.main.resourcePath.map { $0 + "/hooks" }
-            ?? "/usr/local/share/Claudblobs/hooks"
+            ?? "/usr/local/share/ClaudeBlobs/hooks"
     }
 
     func install() throws {
@@ -45,12 +45,12 @@ struct HookInstaller {
             let command = "\(hooksDir)/\(fileName)"
             var eventHooks = hooks[event] as? [[String: Any]] ?? []
 
-            // Remove any existing Claudblobs hooks for this event (from any build path)
+            // Remove any existing ClaudeBlobs hooks for this event (from any build path)
             eventHooks.removeAll { entry in
                 guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
                 return innerHooks.contains { cmd in
                     guard let c = cmd["command"] as? String else { return false }
-                    return c.hasSuffix("/\(fileName)") && c.contains("Claudblobs")
+                    return c.hasSuffix("/\(fileName)") && c.localizedCaseInsensitiveContains("claudeblobs")
                 }
             }
 
@@ -72,18 +72,18 @@ struct HookInstaller {
 
         for event in Self.hookEvents {
             guard var eventHooks = hooks[event] as? [[String: Any]] else { continue }
-            // Remove entries from any Claudblobs build path
+            // Remove entries from any ClaudeBlobs build path (case-insensitive to catch old "Claudblobs" too)
             eventHooks.removeAll { entry in
                 guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
                 return innerHooks.contains { cmd in
                     guard let command = cmd["command"] as? String else { return false }
-                    return command.contains("Claudblobs")
+                    return command.localizedCaseInsensitiveContains("claudeblobs")
                 }
             }
             // Also clean up any old-format entries (bare command at top level)
             eventHooks.removeAll { entry in
                 guard let cmd = entry["command"] as? String, entry["matcher"] == nil else { return false }
-                return cmd.contains("Claudblobs")
+                return cmd.localizedCaseInsensitiveContains("claudeblobs")
             }
             if eventHooks.isEmpty {
                 hooks.removeValue(forKey: event)

@@ -1,4 +1,4 @@
-# Claudblobs
+# ClaudeBlobs
 
 A macOS menu bar app that monitors your running Claude Code agent sessions and lets you jump back to them with a keystroke.
 
@@ -6,7 +6,7 @@ A macOS menu bar app that monitors your running Claude Code agent sessions and l
 
 ## What It Does
 
-Claudblobs watches for active Claude Code agent sessions and displays them as animated sprite faces floating at the top of your screen. Each face reflects what the agent is doing — working, waiting for input, or asking for permission — so you can keep tabs on multiple agents at a glance.
+ClaudeBlobs watches for active Claude Code agent sessions and displays them as animated sprite faces floating at the top of your screen. Each face reflects what the agent is doing — working, waiting for input, or asking for permission — so you can keep tabs on multiple agents at a glance.
 
 Click a face or use the keyboard picker to deep-link straight back to the terminal, cmux workspace, or Claude Desktop session that spawned it.
 
@@ -46,8 +46,8 @@ Optional push notifications via [ntfy.sh](https://ntfy.sh) when agents need atte
 Requires Xcode command-line tools (Swift 5.9+).
 
 ```sh
-git clone https://github.com/yourusername/Claudblobs.git
-cd Claudblobs
+git clone https://github.com/yourusername/ClaudeBlobs.git
+cd ClaudeBlobs
 make install
 ```
 
@@ -77,7 +77,7 @@ Right-click (or click) the menu bar icon for:
 - **Hide/Show Agents** — toggle the floating panel
 - **Show All Agents** — include working agents in the collapsed view (off by default, only actionable states shown)
 - **Dismiss All Agents** — snooze everything at once
-- **Debug Mode** — log to `~/Library/Logs/Claudblobs/debug.log`
+- **Debug Mode** — log to `~/Library/Logs/ClaudeBlobs/debug.log`
 - **Push Notifications** — toggle ntfy.sh integration
 - **Notification Settings** — configure endpoint, topic, delay, and priorities
 - **Change Hotkey** — re-bind the global picker hotkey
@@ -101,7 +101,7 @@ Deep linking is determined by process ancestry — the app walks the process tre
 Use **Uninstall Hooks & Quit** from the menu bar, then delete the app from `/Applications`. Or manually:
 
 ```sh
-rm -rf /Applications/Claudblobs.app
+rm -rf /Applications/ClaudeBlobs.app
 rm -rf ~/.claude/agent-status
 ```
 

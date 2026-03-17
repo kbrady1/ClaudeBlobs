@@ -143,7 +143,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         // First launch: confirm and install hooks
         if !UserDefaults.standard.bool(forKey: "hooksInstalled") {
             let confirm = NSAlert()
-            confirm.messageText = "Set up Claudblobs?"
+            confirm.messageText = "Set up ClaudeBlobs?"
             confirm.informativeText = "This will install hooks into your Claude Code settings to track agent status. You can uninstall later from the menu bar icon."
             confirm.addButton(withTitle: "Continue")
             confirm.addButton(withTitle: "Quit")
@@ -406,7 +406,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openDebugLog() {
-        let logPath = NSHomeDirectory() + "/Library/Logs/Claudblobs/debug.log"
+        let logPath = NSHomeDirectory() + "/Library/Logs/ClaudeBlobs/debug.log"
         if FileManager.default.fileExists(atPath: logPath) {
             NSWorkspace.shared.open(URL(fileURLWithPath: logPath))
         } else {
@@ -437,7 +437,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func uninstallAndQuit() {
         let alert = NSAlert()
-        alert.messageText = "Uninstall Claudblobs?"
+        alert.messageText = "Uninstall ClaudeBlobs?"
         alert.informativeText = "This will remove hooks from Claude Code settings and delete status files."
         alert.addButton(withTitle: "Uninstall & Quit")
         alert.addButton(withTitle: "Cancel")

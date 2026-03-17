@@ -1,5 +1,5 @@
 import AppKit
-import ClaudblobsLib
+import ClaudeBlobsLib
 
 let app = NSApplication.shared
 let delegate = AppDelegate()

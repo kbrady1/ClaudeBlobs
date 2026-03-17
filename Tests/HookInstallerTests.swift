@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import ClaudblobsLib
+@testable import ClaudeBlobsLib
 
 @Suite("HookInstaller")
 struct HookInstallerTests {
@@ -72,7 +72,7 @@ struct HookInstallerTests {
         let path = settingsPath()
         try "{}".write(to: path, atomically: true, encoding: .utf8)
 
-        let installer = HookInstaller(settingsPath: path, hooksDir: "/fake/Claudblobs/hooks")
+        let installer = HookInstaller(settingsPath: path, hooksDir: "/fake/ClaudeBlobs/hooks")
         try installer.install()
         try installer.install()
 
@@ -93,7 +93,7 @@ struct HookInstallerTests {
             "hooks": [
                 "UserPromptSubmit": [
                     ["matcher": "", "hooks": [["type": "command", "command": "echo existing-hook"]]],
-                    ["matcher": "", "hooks": [["type": "command", "command": "/path/to/Claudblobs.app/hooks/hook-user-prompt.sh"]]]
+                    ["matcher": "", "hooks": [["type": "command", "command": "/path/to/ClaudeBlobs.app/hooks/hook-user-prompt.sh"]]]
                 ]
             ]
         ]

@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import ClaudblobsLib
+@testable import ClaudeBlobsLib
 
 @Suite("AgentStatus")
 struct AgentStatusTests {

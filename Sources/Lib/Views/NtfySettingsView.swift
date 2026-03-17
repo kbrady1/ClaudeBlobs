@@ -41,7 +41,7 @@ struct NtfySettingsView: View {
                 NtfyClient.send(
                     endpoint: config.endpoint,
                     topic: config.topic,
-                    message: "Test notification from Claudblobs",
+                    message: "Test notification from ClaudeBlobs",
                     title: "Test",
                     priority: config.defaultPriority,
                     tags: config.tags

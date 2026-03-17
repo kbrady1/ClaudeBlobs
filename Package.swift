@@ -2,23 +2,23 @@
 import PackageDescription
 
 let package = Package(
-    name: "Claudblobs",
+    name: "ClaudeBlobs",
     platforms: [.macOS(.v13)],
     targets: [
         // Library target: all app logic, testable
         .target(
-            name: "ClaudblobsLib",
+            name: "ClaudeBlobsLib",
             path: "Sources/Lib"
         ),
         // Executable target: just the entry point
         .executableTarget(
-            name: "Claudblobs",
-            dependencies: ["ClaudblobsLib"],
+            name: "ClaudeBlobs",
+            dependencies: ["ClaudeBlobsLib"],
             path: "Sources/App"
         ),
         .testTarget(
-            name: "ClaudblobsTests",
-            dependencies: ["ClaudblobsLib"],
+            name: "ClaudeBlobsTests",
+            dependencies: ["ClaudeBlobsLib"],
             path: "Tests"
         ),
     ]

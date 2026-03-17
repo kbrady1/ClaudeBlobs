@@ -3,7 +3,7 @@ import Foundation
 final class DebugLog {
     static let shared = DebugLog()
     private let logPath: String = {
-        let dir = NSHomeDirectory() + "/Library/Logs/Claudblobs"
+        let dir = NSHomeDirectory() + "/Library/Logs/ClaudeBlobs"
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         return dir + "/debug.log"
     }()

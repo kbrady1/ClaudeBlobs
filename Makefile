@@ -1,5 +1,5 @@
-APP_NAME = Claudblobs
-BUNDLE_NAME = Claudblobs.app
+APP_NAME = ClaudeBlobs
+BUNDLE_NAME = ClaudeBlobs.app
 BUILD_DIR = .build/release
 BUNDLE_DIR = $(BUILD_DIR)/$(BUNDLE_NAME)
 
@@ -12,7 +12,7 @@ bundle: build
 	rm -rf "$(BUNDLE_DIR)"
 	mkdir -p "$(BUNDLE_DIR)/Contents/MacOS"
 	mkdir -p "$(BUNDLE_DIR)/Contents/Resources/hooks"
-	cp "$(BUILD_DIR)/Claudblobs" "$(BUNDLE_DIR)/Contents/MacOS/"
+	cp "$(BUILD_DIR)/ClaudeBlobs" "$(BUNDLE_DIR)/Contents/MacOS/"
 	cp Resources/Info.plist "$(BUNDLE_DIR)/Contents/"
 	cp Resources/hooks/*.sh "$(BUNDLE_DIR)/Contents/Resources/hooks/"
 	chmod +x "$(BUNDLE_DIR)/Contents/Resources/hooks/"*.sh
@@ -30,7 +30,7 @@ run: bundle
 	open "$(BUNDLE_DIR)"
 
 stop:
-	@pkill -x Claudblobs 2>/dev/null && echo "Stopped Claudblobs" || echo "Claudblobs not running"
+	@pkill -x ClaudeBlobs 2>/dev/null && echo "Stopped ClaudeBlobs" || echo "ClaudeBlobs not running"
 
 restart: bundle stop
 	@sleep 0.5
