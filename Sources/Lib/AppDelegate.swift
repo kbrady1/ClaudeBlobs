@@ -47,6 +47,14 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         panel.contentView = NSHostingView(rootView: contentView)
         panel.positionAtTop()
 
+        // Reposition when monitor arrangement changes (e.g. switching displays)
+        NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.panel.positionAtTop()
+            }
+            .store(in: &cancellables)
+
         // Show/hide based on agent count (respecting hidden state)
         store.$agents
             .receive(on: DispatchQueue.main)

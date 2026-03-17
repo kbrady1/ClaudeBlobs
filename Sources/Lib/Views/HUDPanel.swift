@@ -30,11 +30,12 @@ final class HUDPanel: NSPanel {
         NSScreen.screens.first
     }
 
-    /// Position the panel centered horizontally, top edge at the top of the screen.
+    /// Position the panel centered horizontally at the top of the screen,
+    /// nudging down only on notched displays to avoid the camera housing.
     func positionAtTop() {
         guard let screen = primaryScreen else { return }
         let x = screen.frame.midX - frame.width / 2
-        let y = screen.frame.maxY - frame.height
+        let y = screen.frame.maxY - frame.height - screen.safeAreaInsets.top
         setFrameOrigin(NSPoint(x: x, y: y))
     }
 
