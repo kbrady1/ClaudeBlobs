@@ -12,6 +12,8 @@ ClaudeBlobs watches for active Claude Code agent sessions and displays them as a
 
 <img width="384" height="116" alt="Screenshot 2026-03-16 at 9 31 51 PM" src="https://github.com/user-attachments/assets/e2e3ced6-de39-497f-a2db-079e3a6b5e99" />
 
+![ClaudBlobsDemo](https://github.com/user-attachments/assets/cfd74efd-567f-4617-ad24-3f4d99013d0d)
+
 Click a face or use the keyboard picker to deep-link straight back to the terminal, cmux workspace, or Claude Desktop session that spawned it.
 
 ## Features
