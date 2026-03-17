@@ -23,4 +23,4 @@ atomic_update "$STATUS_FILE" \
   --arg status "working" \
   --arg toolUse "$TOOL_USE_STR" \
   --argjson ts "$TS" \
-  '.status = $status | .lastToolUse = $toolUse | .updatedAt = $ts'
+  '.status = $status | .lastToolUse = $toolUse | .waitReason = null | .updatedAt = $ts'
