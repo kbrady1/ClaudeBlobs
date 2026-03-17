@@ -1,6 +1,7 @@
 .build/
 .swiftpm/
 .superpowers/
+docs/superpowers/
 *.xcodeproj/xcuserdata/
 DerivedData/
 .DS_Store
