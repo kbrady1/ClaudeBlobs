@@ -2,10 +2,14 @@ import AppKit
 import SwiftUI
 
 /// Non-activating floating panel that sits just below the menu bar.
+/// Fixed size — SwiftUI handles all visual transitions internally.
 final class HUDPanel: NSPanel {
+    static let panelWidth: CGFloat = 960
+    static let panelHeight: CGFloat = 160
+
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 200, height: 22),
+            contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -20,27 +24,20 @@ final class HUDPanel: NSPanel {
         hidesOnDeactivate = false
     }
 
-    /// Position the panel top-center of the main screen, just below the menu bar.
-    func positionBelowMenuBar() {
-        guard let screen = NSScreen.main else { return }
-        let visibleFrame = screen.visibleFrame
+    /// The primary screen (the one with the menu bar). NSScreen.screens.first is
+    /// always the primary display, unlike NSScreen.main which follows keyboard focus.
+    private var primaryScreen: NSScreen? {
+        NSScreen.screens.first
+    }
+
+    /// Position the panel centered horizontally, top edge at the top of the screen.
+    func positionAtTop() {
+        guard let screen = primaryScreen else { return }
         let x = screen.frame.midX - frame.width / 2
-        let y = visibleFrame.maxY - frame.height
+        let y = screen.frame.maxY - frame.height
         setFrameOrigin(NSPoint(x: x, y: y))
     }
 
-    /// Update panel size and reposition.
-    func updateSize(width: CGFloat, height: CGFloat) {
-        let menuBarBottom = NSScreen.main?.visibleFrame.maxY ?? frame.origin.y
-        let newX = (NSScreen.main?.frame.midX ?? frame.origin.x) - width / 2
-        let newY = menuBarBottom - height
-        setFrame(
-            NSRect(x: newX, y: newY, width: width, height: height),
-            display: true,
-            animate: true
-        )
-    }
-
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }

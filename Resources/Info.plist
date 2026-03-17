@@ -16,5 +16,7 @@
     <string>APPL</string>
     <key>CFBundleExecutable</key>
     <string>ClaudeAgentHUD</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
 </dict>
 </plist>

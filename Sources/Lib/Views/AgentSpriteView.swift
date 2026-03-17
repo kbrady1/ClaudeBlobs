@@ -1,49 +1,127 @@
 import SwiftUI
+import Combine
 
 struct AgentSpriteView: View {
     let status: AgentStatus
     let size: CGFloat
+    var isSnoozed: Bool = false
+    var isCoding: Bool = false
+    var isDone: Bool = false
+    var hasNotified: Bool = false
+
     @State private var animationPhase: CGFloat = 0
+    @State private var expressionFrame: Int = 0
+    @State private var timer: AnyCancellable?
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.2)
-                .fill(status.color)
+                .fill(backgroundColor)
                 .frame(width: size, height: size)
             faceView
                 .frame(width: size * 0.7, height: size * 0.5)
+
+            // Icon overlay for working sub-type
+            if !isSnoozed && status == .working {
+                workingIconOverlay
+            }
+
+            // Purple notification badge
+            if hasNotified {
+                Circle()
+                    .fill(Color.purple)
+                    .frame(width: size * 0.25, height: size * 0.25)
+                    .offset(x: size * 0.35, y: -size * 0.35)
+            }
         }
         .offset(y: animationOffset)
-        .onAppear { startAnimation() }
+        .onAppear {
+            startAnimation()
+            startExpressionTimer()
+        }
+        .onDisappear { timer?.cancel() }
+        .onChange(of: isSnoozed) { _ in
+            expressionFrame = 0
+            startExpressionTimer()
+        }
+    }
+
+    private var backgroundColor: Color {
+        if isSnoozed { return .gray }
+        if status == .waiting && isDone {
+            return Color(red: 0.204, green: 0.780, blue: 0.349) // green like starting
+        }
+        return status.color
     }
 
     @ViewBuilder
     private var faceView: some View {
-        switch status {
-        case .waiting:    WaitingFace()
-        case .permission: PermissionFace()
-        case .working:    WorkingFace()
-        case .starting:   StartingFace()
+        if isSnoozed {
+            SnoozeFace(phase: animationPhase)
+        } else {
+            switch status {
+            case .waiting:
+                if isDone {
+                    DoneFace(frame: expressionFrame)
+                } else {
+                    WaitingFace(frame: expressionFrame)
+                }
+            case .permission: PermissionFace(frame: expressionFrame)
+            case .working:    WorkingFace(frame: expressionFrame)
+            case .starting:   StartingFace(frame: expressionFrame)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var workingIconOverlay: some View {
+        let iconFont = size * 0.32
+        let offset = size * 0.35
+        if isCoding {
+            Image(systemName: "pencil")
+                .font(.system(size: iconFont, weight: .heavy))
+                .foregroundColor(.white)
+                .shadow(color: .black, radius: 2)
+                .offset(x: offset, y: offset)
+        } else {
+            Image(systemName: "bubble.left.fill")
+                .font(.system(size: iconFont * 0.85, weight: .heavy))
+                .foregroundColor(.white)
+                .shadow(color: .black, radius: 2)
+                .offset(x: offset, y: offset)
         }
     }
 
     private var animationOffset: CGFloat {
+        if isSnoozed { return 0 }
         switch status {
         case .permission: return -animationPhase * size * 0.15
-        case .waiting:    return -animationPhase * size * 0.08
+        case .waiting where !isDone: return -animationPhase * size * 0.08
         default:          return 0
         }
     }
 
     private func startAnimation() {
+        if isSnoozed {
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                animationPhase = 1
+            }
+            return
+        }
         switch status {
         case .permission:
             withAnimation(.easeInOut(duration: 0.3).repeatForever(autoreverses: true)) {
                 animationPhase = 1
             }
         case .waiting:
-            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                animationPhase = 1
+            if isDone {
+                withAnimation(.easeOut(duration: 0.5)) {
+                    animationPhase = 1
+                }
+            } else {
+                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                    animationPhase = 1
+                }
             }
         case .working:
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
@@ -55,147 +133,171 @@ struct AgentSpriteView: View {
             }
         }
     }
-}
 
-// MARK: - Waiting Face (°□°): wide circle eyes + open square mouth
-
-private struct WaitingFace: View {
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            let eyeR = w * 0.14
-            let eyeY = h * 0.25
-
-            ZStack {
-                // Left eye
-                Circle()
-                    .fill(.black)
-                    .frame(width: eyeR * 2, height: eyeR * 2)
-                    .position(x: w * 0.28, y: eyeY)
-
-                // Right eye
-                Circle()
-                    .fill(.black)
-                    .frame(width: eyeR * 2, height: eyeR * 2)
-                    .position(x: w * 0.72, y: eyeY)
-
-                // Open square mouth
-                RoundedRectangle(cornerRadius: w * 0.04)
-                    .fill(.black)
-                    .frame(width: w * 0.38, height: h * 0.34)
-                    .position(x: w * 0.5, y: h * 0.73)
+    private func startExpressionTimer() {
+        timer?.cancel()
+        let interval: TimeInterval
+        if isSnoozed {
+            interval = 1.0
+        } else {
+            switch status {
+            case .starting:   interval = 1.8
+            case .waiting:    interval = isDone ? 2.5 : 1.5
+            case .permission: interval = 1.8
+            case .working:    interval = 1.2
             }
+        }
+        timer = Timer.publish(every: interval, on: .main, in: .common)
+            .autoconnect()
+            .sink { _ in
+                var tx = Transaction()
+                tx.disablesAnimations = true
+                withTransaction(tx) {
+                    advanceExpression()
+                }
+            }
+    }
+
+    private func advanceExpression() {
+        if isSnoozed {
+            expressionFrame = (expressionFrame + 1) % 3
+            return
+        }
+        switch status {
+        case .starting:
+            // Mostly happy (0), occasionally wink (1) or tongue (2)
+            let roll = Int.random(in: 0..<10)
+            if roll < 6 { expressionFrame = 0 }
+            else if roll < 8 { expressionFrame = 1 }
+            else { expressionFrame = 2 }
+        case .waiting:
+            if isDone {
+                // Mostly content (0), occasionally wink (1)
+                let roll = Int.random(in: 0..<10)
+                expressionFrame = roll < 7 ? 0 : 1
+            } else {
+                // Cycle: open eyes + open mouth (0), blink (1), mouth shut (2)
+                expressionFrame = (expressionFrame + 1) % 3
+            }
+        case .permission:
+            // Alternate: tense mouth (0), yelling (1), extra angry (2)
+            expressionFrame = (expressionFrame + 1) % 3
+        case .working:
+            // Cycle: center (0), look left (1), look right (2), thinking mouth (3)
+            expressionFrame = (expressionFrame + 1) % 4
         }
     }
 }
 
-// MARK: - Permission Face (ò_ó): angled eyebrows + circle eyes + flat tense mouth
-
-private struct PermissionFace: View {
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            let eyeR = w * 0.11
-
-            ZStack {
-                // Left angled eyebrow (slopes down toward center)
-                Path { path in
-                    path.move(to: CGPoint(x: w * 0.12, y: h * 0.12))
-                    path.addLine(to: CGPoint(x: w * 0.40, y: h * 0.22))
-                }
-                .stroke(.black, style: StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round))
-
-                // Right angled eyebrow (slopes down toward center)
-                Path { path in
-                    path.move(to: CGPoint(x: w * 0.88, y: h * 0.12))
-                    path.addLine(to: CGPoint(x: w * 0.60, y: h * 0.22))
-                }
-                .stroke(.black, style: StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round))
-
-                // Left eye
-                Circle()
-                    .fill(.black)
-                    .frame(width: eyeR * 2, height: eyeR * 2)
-                    .position(x: w * 0.28, y: h * 0.44)
-
-                // Right eye
-                Circle()
-                    .fill(.black)
-                    .frame(width: eyeR * 2, height: eyeR * 2)
-                    .position(x: w * 0.72, y: h * 0.44)
-
-                // Flat tense mouth (short horizontal line)
-                Path { path in
-                    path.move(to: CGPoint(x: w * 0.30, y: h * 0.82))
-                    path.addLine(to: CGPoint(x: w * 0.70, y: h * 0.82))
-                }
-                .stroke(.black, style: StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round))
-            }
-        }
-    }
-}
-
-// MARK: - Working Face (•_•): small dot eyes + flat line mouth
-
-private struct WorkingFace: View {
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            let eyeR = w * 0.08
-
-            ZStack {
-                // Left dot eye
-                Circle()
-                    .fill(.black)
-                    .frame(width: eyeR * 2, height: eyeR * 2)
-                    .position(x: w * 0.28, y: h * 0.30)
-
-                // Right dot eye
-                Circle()
-                    .fill(.black)
-                    .frame(width: eyeR * 2, height: eyeR * 2)
-                    .position(x: w * 0.72, y: h * 0.30)
-
-                // Flat line mouth
-                Path { path in
-                    path.move(to: CGPoint(x: w * 0.28, y: h * 0.75))
-                    path.addLine(to: CGPoint(x: w * 0.72, y: h * 0.75))
-                }
-                .stroke(.black, style: StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round))
-            }
-        }
-    }
-}
-
-// MARK: - Starting Face (^‿^): chevron eyes + arc smile
+// MARK: - Starting Face (^‿^): happy, sometimes winks or sticks tongue out
 
 private struct StartingFace: View {
+    let frame: Int
+
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
+            let stroke = StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round, lineJoin: .round)
 
             ZStack {
-                // Left chevron eye (^)
-                Path { path in
-                    path.move(to: CGPoint(x: w * 0.14, y: h * 0.38))
-                    path.addLine(to: CGPoint(x: w * 0.28, y: h * 0.18))
-                    path.addLine(to: CGPoint(x: w * 0.42, y: h * 0.38))
+                // Left eye
+                if frame == 1 {
+                    // Wink: horizontal line for left eye
+                    Path { path in
+                        path.move(to: CGPoint(x: w * 0.14, y: h * 0.28))
+                        path.addLine(to: CGPoint(x: w * 0.42, y: h * 0.28))
+                    }
+                    .stroke(.black, style: stroke)
+                } else {
+                    // Normal chevron ^
+                    Path { path in
+                        path.move(to: CGPoint(x: w * 0.14, y: h * 0.38))
+                        path.addLine(to: CGPoint(x: w * 0.28, y: h * 0.18))
+                        path.addLine(to: CGPoint(x: w * 0.42, y: h * 0.38))
+                    }
+                    .stroke(.black, style: stroke)
                 }
-                .stroke(.black, style: StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round, lineJoin: .round))
 
-                // Right chevron eye (^)
+                // Right eye: always chevron
                 Path { path in
                     path.move(to: CGPoint(x: w * 0.58, y: h * 0.38))
                     path.addLine(to: CGPoint(x: w * 0.72, y: h * 0.18))
                     path.addLine(to: CGPoint(x: w * 0.86, y: h * 0.38))
                 }
-                .stroke(.black, style: StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round, lineJoin: .round))
+                .stroke(.black, style: stroke)
 
-                // Arc smile (‿)
+                // Mouth
+                if frame == 2 {
+                    // Tongue out: smile + tongue
+                    Path { path in
+                        path.move(to: CGPoint(x: w * 0.18, y: h * 0.65))
+                        path.addQuadCurve(
+                            to: CGPoint(x: w * 0.82, y: h * 0.65),
+                            control: CGPoint(x: w * 0.50, y: h * 1.05)
+                        )
+                    }
+                    .stroke(.black, style: StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round))
+
+                    // Tongue
+                    Ellipse()
+                        .fill(Color(red: 1.0, green: 0.4, blue: 0.5))
+                        .frame(width: w * 0.18, height: h * 0.18)
+                        .position(x: w * 0.55, y: h * 0.92)
+                } else {
+                    // Normal arc smile
+                    Path { path in
+                        path.move(to: CGPoint(x: w * 0.18, y: h * 0.65))
+                        path.addQuadCurve(
+                            to: CGPoint(x: w * 0.82, y: h * 0.65),
+                            control: CGPoint(x: w * 0.50, y: h * 1.05)
+                        )
+                    }
+                    .stroke(.black, style: StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round))
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Done Face (^‿^): content, occasionally winks — used when agent is finished
+
+private struct DoneFace: View {
+    let frame: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let stroke = StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round, lineJoin: .round)
+
+            ZStack {
+                // Left eye
+                if frame == 1 {
+                    // Wink
+                    Path { path in
+                        path.move(to: CGPoint(x: w * 0.14, y: h * 0.28))
+                        path.addLine(to: CGPoint(x: w * 0.42, y: h * 0.28))
+                    }
+                    .stroke(.black, style: stroke)
+                } else {
+                    Path { path in
+                        path.move(to: CGPoint(x: w * 0.14, y: h * 0.38))
+                        path.addLine(to: CGPoint(x: w * 0.28, y: h * 0.18))
+                        path.addLine(to: CGPoint(x: w * 0.42, y: h * 0.38))
+                    }
+                    .stroke(.black, style: stroke)
+                }
+
+                // Right eye: always chevron
+                Path { path in
+                    path.move(to: CGPoint(x: w * 0.58, y: h * 0.38))
+                    path.addLine(to: CGPoint(x: w * 0.72, y: h * 0.18))
+                    path.addLine(to: CGPoint(x: w * 0.86, y: h * 0.38))
+                }
+                .stroke(.black, style: stroke)
+
+                // Smile
                 Path { path in
                     path.move(to: CGPoint(x: w * 0.18, y: h * 0.65))
                     path.addQuadCurve(
@@ -205,6 +307,258 @@ private struct StartingFace: View {
                 }
                 .stroke(.black, style: StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round))
             }
+        }
+    }
+}
+
+// MARK: - Waiting Face (°□°): blinks, mouth opens and shuts
+
+private struct WaitingFace: View {
+    let frame: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let eyeR = w * 0.14
+            let eyeY = h * 0.25
+            let stroke = StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round)
+
+            ZStack {
+                if frame == 1 {
+                    // Blink: thin horizontal lines for eyes
+                    Path { path in
+                        path.move(to: CGPoint(x: w * 0.14, y: eyeY))
+                        path.addLine(to: CGPoint(x: w * 0.42, y: eyeY))
+                    }
+                    .stroke(.black, style: stroke)
+
+                    Path { path in
+                        path.move(to: CGPoint(x: w * 0.58, y: eyeY))
+                        path.addLine(to: CGPoint(x: w * 0.86, y: eyeY))
+                    }
+                    .stroke(.black, style: stroke)
+                } else {
+                    // Open circle eyes
+                    Circle()
+                        .fill(.black)
+                        .frame(width: eyeR * 2, height: eyeR * 2)
+                        .position(x: w * 0.28, y: eyeY)
+
+                    Circle()
+                        .fill(.black)
+                        .frame(width: eyeR * 2, height: eyeR * 2)
+                        .position(x: w * 0.72, y: eyeY)
+                }
+
+                if frame == 2 {
+                    // Mouth shut: flat line
+                    Path { path in
+                        path.move(to: CGPoint(x: w * 0.31, y: h * 0.73))
+                        path.addLine(to: CGPoint(x: w * 0.69, y: h * 0.73))
+                    }
+                    .stroke(.black, style: stroke)
+                } else {
+                    // Open square mouth
+                    RoundedRectangle(cornerRadius: w * 0.04)
+                        .fill(.black)
+                        .frame(width: w * 0.38, height: h * 0.34)
+                        .position(x: w * 0.5, y: h * 0.73)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Permission Face (ò_ó): yelling, raising eyebrows
+
+private struct PermissionFace: View {
+    let frame: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let eyeR = w * 0.11
+            let browStroke = StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round)
+
+            // Eyebrow raise amount: frame 1,2 raise higher
+            let browY: CGFloat = frame == 0 ? 0 : -h * 0.08
+
+            ZStack {
+                // Left angled eyebrow
+                Path { path in
+                    path.move(to: CGPoint(x: w * 0.12, y: h * 0.12 + browY))
+                    path.addLine(to: CGPoint(x: w * 0.40, y: h * 0.22 + browY))
+                }
+                .stroke(.black, style: browStroke)
+
+                // Right angled eyebrow
+                Path { path in
+                    path.move(to: CGPoint(x: w * 0.88, y: h * 0.12 + browY))
+                    path.addLine(to: CGPoint(x: w * 0.60, y: h * 0.22 + browY))
+                }
+                .stroke(.black, style: browStroke)
+
+                // Eyes
+                Circle()
+                    .fill(.black)
+                    .frame(width: eyeR * 2, height: eyeR * 2)
+                    .position(x: w * 0.28, y: h * 0.44)
+
+                Circle()
+                    .fill(.black)
+                    .frame(width: eyeR * 2, height: eyeR * 2)
+                    .position(x: w * 0.72, y: h * 0.44)
+
+                // Mouth — always an Ellipse to preserve view identity during bounce
+                Ellipse()
+                    .fill(.black)
+                    .frame(
+                        width: frame == 2 ? w * 0.40 : frame == 1 ? w * 0.32 : w * 0.40,
+                        height: frame == 2 ? h * 0.28 : frame == 1 ? h * 0.22 : h * 0.06
+                    )
+                    .position(x: w * 0.5, y: h * 0.82)
+            }
+        }
+    }
+}
+
+// MARK: - Working Face (•_•): looks around, thinks
+
+private struct WorkingFace: View {
+    let frame: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let eyeR = w * 0.08
+            let stroke = StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round)
+
+            // Eye horizontal offset based on frame
+            let eyeShift: CGFloat = {
+                switch frame {
+                case 1: return -w * 0.06  // look left
+                case 2: return  w * 0.06  // look right
+                default: return 0          // center
+                }
+            }()
+
+            ZStack {
+                // Left dot eye
+                Circle()
+                    .fill(.black)
+                    .frame(width: eyeR * 2, height: eyeR * 2)
+                    .position(x: w * 0.28 + eyeShift, y: h * 0.30)
+
+                // Right dot eye
+                Circle()
+                    .fill(.black)
+                    .frame(width: eyeR * 2, height: eyeR * 2)
+                    .position(x: w * 0.72 + eyeShift, y: h * 0.30)
+
+                if frame == 3 {
+                    // Thinking mouth: three dots
+                    let dotR = w * 0.04
+                    Circle().fill(.black)
+                        .frame(width: dotR * 2, height: dotR * 2)
+                        .position(x: w * 0.38, y: h * 0.75)
+                    Circle().fill(.black)
+                        .frame(width: dotR * 2, height: dotR * 2)
+                        .position(x: w * 0.50, y: h * 0.75)
+                    Circle().fill(.black)
+                        .frame(width: dotR * 2, height: dotR * 2)
+                        .position(x: w * 0.62, y: h * 0.75)
+                } else {
+                    // Flat line mouth
+                    Path { path in
+                        path.move(to: CGPoint(x: w * 0.28, y: h * 0.75))
+                        path.addLine(to: CGPoint(x: w * 0.72, y: h * 0.75))
+                    }
+                    .stroke(.black, style: stroke)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Snooze Face: sleeping with floating Zzz
+
+private struct SnoozeFace: View {
+    let phase: CGFloat  // 0→1 oscillating
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let stroke = StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round)
+
+            ZStack {
+                // Closed left eye (horizontal arc, like ‿)
+                Path { path in
+                    path.move(to: CGPoint(x: w * 0.12, y: h * 0.30))
+                    path.addQuadCurve(
+                        to: CGPoint(x: w * 0.42, y: h * 0.30),
+                        control: CGPoint(x: w * 0.27, y: h * 0.42)
+                    )
+                }
+                .stroke(.black, style: stroke)
+
+                // Closed right eye
+                Path { path in
+                    path.move(to: CGPoint(x: w * 0.58, y: h * 0.30))
+                    path.addQuadCurve(
+                        to: CGPoint(x: w * 0.88, y: h * 0.30),
+                        control: CGPoint(x: w * 0.73, y: h * 0.42)
+                    )
+                }
+                .stroke(.black, style: stroke)
+
+                // Small peaceful mouth
+                Path { path in
+                    path.move(to: CGPoint(x: w * 0.35, y: h * 0.72))
+                    path.addQuadCurve(
+                        to: CGPoint(x: w * 0.65, y: h * 0.72),
+                        control: CGPoint(x: w * 0.50, y: h * 0.82)
+                    )
+                }
+                .stroke(.black, style: stroke)
+
+                // Floating Zzz
+                ZzzOverlay(phase: phase, w: w, h: h)
+            }
+        }
+    }
+}
+
+private struct ZzzOverlay: View {
+    let phase: CGFloat
+    let w: CGFloat
+    let h: CGFloat
+
+    var body: some View {
+        let baseX = w * 0.78
+        let baseY = h * 0.05
+
+        ZStack {
+            Text("z")
+                .font(.system(size: max(4, w * 0.18), weight: .bold))
+                .foregroundColor(.black.opacity(0.7))
+                .position(x: baseX, y: baseY - phase * h * 0.1)
+                .opacity(1.0 - Double(phase) * 0.3)
+
+            Text("z")
+                .font(.system(size: max(3, w * 0.13), weight: .bold))
+                .foregroundColor(.black.opacity(0.5))
+                .position(x: baseX + w * 0.12, y: baseY - h * 0.15 - phase * h * 0.1)
+                .opacity(0.7 - Double(phase) * 0.2)
+
+            Text("z")
+                .font(.system(size: max(2, w * 0.09), weight: .bold))
+                .foregroundColor(.black.opacity(0.3))
+                .position(x: baseX + w * 0.20, y: baseY - h * 0.26 - phase * h * 0.1)
+                .opacity(0.5 - Double(phase) * 0.15)
         }
     }
 }

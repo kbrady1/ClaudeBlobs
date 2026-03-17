@@ -1,8 +1,15 @@
 import Foundation
 import Combine
+import SwiftUI
 
 final class AgentStore: ObservableObject {
     @Published var agents: [Agent] = []
+    @Published var snoozedSessionIds: Set<String> = []
+
+    /// Tracks the last-seen status per session so we can unsnooze on change.
+    private var lastSeenStatus: [String: AgentStatus] = [:]
+
+    var ntfyScheduler: NtfyScheduler?
 
     private let statusDirectory: URL
     private var watcher: StatusFileWatcher?
@@ -10,7 +17,32 @@ final class AgentStore: ObservableObject {
     private let isProcessAlive: (Int) -> Bool
 
     var collapsedAgents: [Agent] {
-        agents.filter { $0.status.visibleWhenCollapsed }
+        agents.filter {
+            (showAllAgents || $0.status.visibleWhenCollapsed) && !snoozedSessionIds.contains($0.sessionId)
+        }
+    }
+
+    func snooze(_ agent: Agent) {
+        snoozedSessionIds.insert(agent.sessionId)
+        ntfyScheduler?.cancelPending(for: agent.sessionId)
+    }
+
+    func dismiss(_ agent: Agent) {
+        ntfyScheduler?.reset(for: agent.sessionId)
+        try? fileManager.removeItem(
+            at: statusDirectory.appendingPathComponent("\(agent.sessionId).json")
+        )
+        reload()
+    }
+
+    func dismissAll() {
+        for agent in agents {
+            snoozedSessionIds.insert(agent.sessionId)
+        }
+    }
+
+    @Published var showAllAgents: Bool = UserDefaults.standard.bool(forKey: "showAllAgents") {
+        didSet { UserDefaults.standard.set(showAllAgents, forKey: "showAllAgents") }
     }
 
     var hasAgents: Bool { !agents.isEmpty }
@@ -60,6 +92,7 @@ final class AgentStore: ObservableObject {
         loaded = loaded.filter { agent in
             let alive = isProcessAlive(agent.pid)
             if !alive {
+                ntfyScheduler?.reset(for: agent.sessionId)
                 try? fileManager.removeItem(
                     at: statusDirectory.appendingPathComponent("\(agent.sessionId).json")
                 )
@@ -67,14 +100,61 @@ final class AgentStore: ObservableObject {
             return alive
         }
 
-        // Sort: permission > waiting > starting > working
-        let priority: [AgentStatus: Int] = [
-            .permission: 0, .waiting: 1, .starting: 2, .working: 3
-        ]
-        loaded.sort { (priority[$0.status] ?? 9) < (priority[$1.status] ?? 9) }
+        // Deduplicate by PID — resumed sessions create a new session ID
+        // for the same process. Keep the most recently updated entry and
+        // remove the stale status file.
+        var bestByPid: [Int: Agent] = [:]
+        for agent in loaded {
+            if let existing = bestByPid[agent.pid] {
+                if agent.updatedAt > existing.updatedAt {
+                    try? fileManager.removeItem(
+                        at: statusDirectory.appendingPathComponent("\(existing.sessionId).json")
+                    )
+                    bestByPid[agent.pid] = agent
+                } else {
+                    try? fileManager.removeItem(
+                        at: statusDirectory.appendingPathComponent("\(agent.sessionId).json")
+                    )
+                }
+            } else {
+                bestByPid[agent.pid] = agent
+            }
+        }
+        loaded = Array(bestByPid.values)
+
+        // Sort by age: oldest agents first (stable left-to-right order)
+        loaded.sort { ($0.createdAt ?? $0.updatedAt) < ($1.createdAt ?? $1.updatedAt) }
+
+        // Unsnooze agents whose status changed
+        for agent in loaded {
+            if let previous = lastSeenStatus[agent.sessionId], previous != agent.status {
+                snoozedSessionIds.remove(agent.sessionId)
+            }
+            lastSeenStatus[agent.sessionId] = agent.status
+        }
+
+        // Schedule or cancel notifications based on agent state
+        for agent in loaded {
+            let isSnoozed = snoozedSessionIds.contains(agent.sessionId)
+            let notifiable = agent.status == .permission
+                || (agent.status == .waiting && !agent.isDone)
+                || (agent.status == .waiting && agent.isDone)
+            if notifiable {
+                ntfyScheduler?.scheduleIfNeeded(for: agent, isSnoozed: isSnoozed)
+            } else {
+                ntfyScheduler?.cancelPending(for: agent.sessionId)
+            }
+        }
+
+        // Clean up snoozed/notification entries for sessions that no longer exist
+        let activeIds = Set(loaded.map(\.sessionId))
+        snoozedSessionIds = snoozedSessionIds.intersection(activeIds)
+        ntfyScheduler?.cleanupGone(activeIds: activeIds)
 
         if loaded != agents {
-            agents = loaded
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                agents = loaded
+            }
         }
     }
 

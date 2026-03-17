@@ -1,37 +1,46 @@
 import AppKit
 
 struct TerminalLinker {
+    private static let terminalBundleIds = [
+        "com.cmuxterm.app",
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "net.kovidgoyal.kitty",
+        "co.zeit.hyper",
+        "com.github.wez.wezterm",
+        "dev.warp.Warp-Stable",
+        "com.mitchellh.ghostty",
+    ]
+
     static func activate(_ agent: Agent) {
         let pid = Int32(agent.pid)
-        var currentPid = pid
-        for _ in 0..<10 {
-            let parentPid = parentProcess(of: currentPid)
-            if parentPid <= 1 { break }
-            if let app = NSWorkspace.shared.runningApplications.first(where: {
-                $0.processIdentifier == parentPid
-            }) {
+        DebugLog.shared.log("TerminalLinker: walking process tree from pid \(pid)")
+
+        // Strategy 1: Walk process tree looking for a GUI app ancestor
+        let guiPids = Set(NSWorkspace.shared.runningApplications.map(\.processIdentifier))
+        if let ancestorPid = ProcessTree.findAncestor(of: pid, where: { guiPids.contains($0) }),
+           let app = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == ancestorPid }) {
+            DebugLog.shared.log("  found GUI app: \(app.bundleIdentifier ?? "unknown") pid=\(ancestorPid)")
+            app.activate()
+            return
+        }
+
+        DebugLog.shared.log("TerminalLinker: no GUI ancestor found, trying fallback")
+
+        // Strategy 2: Find a running terminal app and activate it
+        let runningApps = NSWorkspace.shared.runningApplications
+        let runningBundleIds = runningApps.compactMap(\.bundleIdentifier)
+        DebugLog.shared.log("  running apps: \(runningBundleIds.joined(separator: ", "))")
+
+        for bundleId in terminalBundleIds {
+            if let app = runningApps.first(where: { $0.bundleIdentifier == bundleId }) {
+                DebugLog.shared.log("  activating terminal: \(bundleId)")
                 app.activate()
                 return
             }
-            currentPid = parentPid
         }
+
+        DebugLog.shared.log("TerminalLinker: no terminal app found")
     }
 
-    private static func parentProcess(of pid: Int32) -> Int32 {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-o", "ppid=", "-p", "\(pid)"]
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespaces) ?? ""
-            return Int32(output) ?? -1
-        } catch {
-            return -1
-        }
-    }
 }

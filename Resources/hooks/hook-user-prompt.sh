@@ -5,7 +5,9 @@ STATUS_DIR="$HOME/.claude/agent-status"
 mkdir -p "$STATUS_DIR"
 STATUS_FILE="$STATUS_DIR/$SESSION_ID.json"
 
-[ ! -f "$STATUS_FILE" ] && exit 0
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/hook-ensure-status.sh"
+ensure_status_file
 
 TS=$(date +%s000)
 

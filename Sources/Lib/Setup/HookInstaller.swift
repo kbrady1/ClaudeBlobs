@@ -37,12 +37,18 @@ struct HookInstaller {
             let command = "\(hooksDir)/\(fileName)"
             var eventHooks = hooks[event] as? [[String: Any]] ?? []
 
+            // Check if already installed (in correct matcher+hooks format)
             let alreadyInstalled = eventHooks.contains { entry in
-                (entry["command"] as? String) == command
+                guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
+                return innerHooks.contains { ($0["command"] as? String) == command }
             }
             if alreadyInstalled { continue }
 
-            eventHooks.append(["type": "command", "command": command])
+            // Claude Code hooks format: each entry needs matcher + hooks array
+            eventHooks.append([
+                "matcher": "",
+                "hooks": [["type": "command", "command": command]]
+            ])
             hooks[event] = eventHooks
         }
 
@@ -56,8 +62,17 @@ struct HookInstaller {
 
         for event in Self.hookEvents {
             guard var eventHooks = hooks[event] as? [[String: Any]] else { continue }
+            // Remove entries in correct matcher+hooks format
             eventHooks.removeAll { entry in
-                guard let cmd = entry["command"] as? String else { return false }
+                guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
+                return innerHooks.contains { cmd in
+                    guard let command = cmd["command"] as? String else { return false }
+                    return command.hasPrefix(hooksDir)
+                }
+            }
+            // Also clean up any old-format entries (bare command at top level)
+            eventHooks.removeAll { entry in
+                guard let cmd = entry["command"] as? String, entry["matcher"] == nil else { return false }
                 return cmd.hasPrefix(hooksDir)
             }
             if eventHooks.isEmpty {

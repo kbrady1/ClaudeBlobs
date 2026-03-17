@@ -22,7 +22,7 @@ final class StatusFileWatcher {
         if fileDescriptor >= 0 {
             let source = DispatchSource.makeFileSystemObjectSource(
                 fileDescriptor: fileDescriptor,
-                eventMask: .write,
+                eventMask: [.write, .attrib, .extend],
                 queue: .main
             )
             source.setEventHandler { [weak self] in
@@ -38,7 +38,7 @@ final class StatusFileWatcher {
             dispatchSource = source
         }
 
-        fallbackTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        fallbackTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.onChange()
         }
     }

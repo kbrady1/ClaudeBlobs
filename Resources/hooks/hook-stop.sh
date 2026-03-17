@@ -5,7 +5,9 @@ STATUS_DIR="$HOME/.claude/agent-status"
 mkdir -p "$STATUS_DIR"
 STATUS_FILE="$STATUS_DIR/$SESSION_ID.json"
 
-[ ! -f "$STATUS_FILE" ] && exit 0
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/hook-ensure-status.sh"
+ensure_status_file
 
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty')
 TS=$(date +%s000)
@@ -16,9 +18,17 @@ if [ -z "$FIRST_SENTENCE" ]; then
   FIRST_SENTENCE=$(echo "$LAST_MSG" | cut -c1-200)
 fi
 
+# Detect if the message contains a question
+if echo "$LAST_MSG" | grep -q '?'; then
+  WAIT_REASON="question"
+else
+  WAIT_REASON="done"
+fi
+
 jq \
   --arg status "waiting" \
   --arg lastMessage "$FIRST_SENTENCE" \
+  --arg waitReason "$WAIT_REASON" \
   --argjson ts "$TS" \
-  '.status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .updatedAt = $ts' \
+  '.status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .waitReason = $waitReason | .updatedAt = $ts' \
   "$STATUS_FILE" > "$STATUS_FILE.tmp" && mv "$STATUS_FILE.tmp" "$STATUS_FILE"

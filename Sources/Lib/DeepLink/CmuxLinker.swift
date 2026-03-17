@@ -1,22 +1,104 @@
+import AppKit
 import Foundation
 
 struct CmuxLinker {
+    private static let defaultSocketPath = "/tmp/cmux.sock"
+
     static func activate(_ agent: Agent) {
-        guard let workspace = agent.cmuxWorkspace,
-              let surface = agent.cmuxSurface else { return }
+        guard let workspace = agent.cmuxWorkspace else {
+            DebugLog.shared.log("CmuxLinker: no workspace ID, falling back to app activation")
+            activateApp()
+            return
+        }
 
-        let cmuxPath = "/Applications/cmux.app/Contents/Resources/bin/cmux"
+        let socketPath = agent.cmuxSocketPath ?? defaultSocketPath
 
-        let wsProcess = Process()
-        wsProcess.executableURL = URL(fileURLWithPath: cmuxPath)
-        wsProcess.arguments = ["select-workspace", "--workspace", workspace]
-        try? wsProcess.run()
-        wsProcess.waitUntilExit()
+        // Try to select workspace via JSON-RPC
+        DebugLog.shared.log("CmuxLinker: selecting workspace \(workspace) via socket \(socketPath)")
+        let wsResult = sendRPC(
+            socketPath: socketPath,
+            method: "workspace.select",
+            params: ["workspace_id": workspace]
+        )
+        DebugLog.shared.log("  workspace.select result: \(wsResult ?? "nil")")
 
-        let sfProcess = Process()
-        sfProcess.executableURL = URL(fileURLWithPath: cmuxPath)
-        sfProcess.arguments = ["select-surface", "--surface", surface, "--workspace", workspace]
-        try? sfProcess.run()
-        sfProcess.waitUntilExit()
+        // If socket access denied, fall back to just activating the app
+        if let result = wsResult, result.contains("Access denied") {
+            DebugLog.shared.log("  socket access denied — activate cmux app only. Set CMUX_SOCKET_MODE=allowAll for full deep-linking.")
+            activateApp()
+            return
+        }
+
+        // Focus surface if available
+        if let surface = agent.cmuxSurface {
+            DebugLog.shared.log("CmuxLinker: focusing surface \(surface)")
+            let sfResult = sendRPC(
+                socketPath: socketPath,
+                method: "surface.focus",
+                params: ["surface_id": surface]
+            )
+            DebugLog.shared.log("  surface.focus result: \(sfResult ?? "nil")")
+        }
+
+        activateApp()
+    }
+
+    private static func activateApp() {
+        if let app = NSWorkspace.shared.runningApplications.first(where: {
+            $0.bundleIdentifier == "com.cmuxterm.app"
+        }) {
+            app.activate()
+            DebugLog.shared.log("  activated cmux via NSWorkspace")
+        }
+    }
+
+    private static func sendRPC(socketPath: String, method: String, params: [String: String]) -> String? {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            DebugLog.shared.log("  socket() failed: \(errno)")
+            return nil
+        }
+        defer { close(fd) }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = socketPath.utf8CString
+        withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: Int(104)) { dest in
+                for (i, byte) in pathBytes.enumerated() where i < 104 {
+                    dest[i] = byte
+                }
+            }
+        }
+
+        let connectResult = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+                Darwin.connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+
+        guard connectResult == 0 else {
+            DebugLog.shared.log("  connect() failed: \(errno) (\(String(cString: strerror(errno))))")
+            return nil
+        }
+
+        let paramsJSON = params.map { "\"\($0.key)\":\"\($0.value)\"" }.joined(separator: ",")
+        let request = "{\"id\":\"hud\",\"method\":\"\(method)\",\"params\":{\(paramsJSON)}}\n"
+
+        guard let data = request.data(using: .utf8) else { return nil }
+
+        let written = data.withUnsafeBytes { buf in
+            write(fd, buf.baseAddress!, buf.count)
+        }
+        DebugLog.shared.log("  sent \(written) bytes: \(request.trimmingCharacters(in: .newlines))")
+
+        var responseData = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        let bytesRead = read(fd, &buffer, buffer.count)
+        if bytesRead > 0 {
+            responseData.append(contentsOf: buffer[0..<bytesRead])
+        }
+
+        return String(data: responseData, encoding: .utf8)
     }
 }
