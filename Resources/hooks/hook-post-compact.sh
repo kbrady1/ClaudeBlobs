@@ -14,4 +14,4 @@ TS=$(date +%s000)
 atomic_update "$STATUS_FILE" \
   --arg status "working" \
   --argjson ts "$TS" \
-  '.status = $status | .updatedAt = $ts'
+  '.status = $status | .updatedAt = $ts | .waitReason = null'

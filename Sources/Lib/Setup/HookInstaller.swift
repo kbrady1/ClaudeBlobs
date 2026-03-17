@@ -8,7 +8,7 @@ struct HookInstaller {
         "SessionStart", "UserPromptSubmit", "PreToolUse",
         "Stop", "PermissionRequest", "Notification", "SessionEnd",
         "SubagentStart", "SubagentStop", "PostToolUse",
-        "TaskCompleted", "PreCompact", "PostCompact"
+        "PostToolUseFailure", "TaskCompleted", "PreCompact", "PostCompact"
     ]
 
     static let hookFileNames: [String: String] = [
@@ -22,6 +22,7 @@ struct HookInstaller {
         "SubagentStart": "hook-subagent-start.sh",
         "SubagentStop": "hook-subagent-stop.sh",
         "PostToolUse": "hook-post-tool.sh",
+        "PostToolUseFailure": "hook-post-tool-failure.sh",
         "TaskCompleted": "hook-task-completed.sh",
         "PreCompact": "hook-pre-compact.sh",
         "PostCompact": "hook-post-compact.sh",

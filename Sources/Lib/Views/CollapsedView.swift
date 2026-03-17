@@ -26,7 +26,10 @@ struct CollapsedView: View {
                         staleness: agent.staleness,
                         isPlanApproval: agent.isPlanApproval,
                         isAskingQuestion: agent.isAskingQuestion,
-                        isTaskJustCompleted: agent.isTaskJustCompleted
+                        isTaskJustCompleted: agent.isTaskJustCompleted,
+                        isInterrupted: agent.isInterrupted,
+                        isToolFailure: agent.isToolFailure,
+                        isAPIError: agent.isAPIError
                     )
                 }
                 .opacity(isHidden ? 0 : 1)

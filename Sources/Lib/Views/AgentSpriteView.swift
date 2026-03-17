@@ -14,6 +14,9 @@ struct AgentSpriteView: View {
     var isPlanApproval: Bool = false
     var isAskingQuestion: Bool = false
     var isTaskJustCompleted: Bool = false
+    var isInterrupted: Bool = false
+    var isToolFailure: Bool = false
+    var isAPIError: Bool = false
 
     @State private var animationPhase: CGFloat = 0
     @State private var expressionFrame: Int = 0
@@ -21,6 +24,8 @@ struct AgentSpriteView: View {
     @State private var bounceTimer: AnyCancellable?
     @State private var isShowingCheckmark: Bool = false
     @State private var checkmarkTimer: AnyCancellable?
+    @State private var showingFailureIcon: String?
+    @State private var failureIconTimer: AnyCancellable?
 
     var body: some View {
         ZStack {
@@ -53,6 +58,22 @@ struct AgentSpriteView: View {
                     .offset(x: size * 0.35, y: size * 0.35)
             }
 
+            // Tool failure / interrupt accent
+            if let icon = showingFailureIcon {
+                Image(systemName: icon)
+                    .font(.system(size: accentFont, weight: .heavy))
+                    .foregroundColor(.white)
+                    .shadow(color: .black, radius: 2)
+                    .offset(x: size * 0.35, y: size * 0.35)
+                    .transition(.scale.combined(with: .opacity))
+            }
+
+            // API error fire on head
+            if isAPIError && !isSnoozed {
+                FireOverlay(size: size)
+                    .offset(y: -size * 0.55)
+            }
+
             // Purple notification badge
             if hasNotified {
                 Circle()
@@ -76,6 +97,7 @@ struct AgentSpriteView: View {
             expressionTimer?.cancel()
             bounceTimer?.cancel()
             checkmarkTimer?.cancel()
+            failureIconTimer?.cancel()
         }
         .onChange(of: isSnoozed) { _ in
             expressionFrame = 0
@@ -101,6 +123,16 @@ struct AgentSpriteView: View {
                     }
             }
         }
+        .onChange(of: isInterrupted) { interrupted in
+            if interrupted {
+                showFailureIcon("hand.raised.fill")
+            }
+        }
+        .onChange(of: isToolFailure) { failed in
+            if failed {
+                showFailureIcon("exclamationmark.triangle.fill")
+            }
+        }
     }
 
     private var backgroundColor: Color {
@@ -124,6 +156,8 @@ struct AgentSpriteView: View {
         if isShowingCheckmark {
             CheckmarkFace()
                 .transition(.opacity)
+        } else if isAPIError && !isSnoozed {
+            ScreamingFace(frame: expressionFrame)
         } else if isSnoozed {
             SnoozeFace(phase: animationPhase)
         } else {
@@ -250,6 +284,21 @@ struct AgentSpriteView: View {
                 tx.disablesAnimations = true
                 withTransaction(tx) {
                     advanceExpression()
+                }
+            }
+    }
+
+    private func showFailureIcon(_ icon: String) {
+        failureIconTimer?.cancel()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            showingFailureIcon = icon
+        }
+        failureIconTimer = Timer.publish(every: 3.0, on: .main, in: .common)
+            .autoconnect()
+            .first()
+            .sink { _ in
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showingFailureIcon = nil
                 }
             }
     }
@@ -683,6 +732,84 @@ private struct CheckmarkFace: View {
             }
             .stroke(.black, style: StrokeStyle(lineWidth: max(2, w * 0.10), lineCap: .round, lineJoin: .round))
         }
+    }
+}
+
+// MARK: - Screaming Face: API error / outage — wide eyes, open screaming mouth
+
+private struct ScreamingFace: View {
+    let frame: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+
+            // Slight horizontal shake based on frame
+            let shake: CGFloat = frame % 2 == 0 ? -w * 0.03 : w * 0.03
+
+            ZStack {
+                // Wide open eyes (circles with white highlight)
+                Circle()
+                    .fill(.black)
+                    .frame(width: w * 0.30, height: w * 0.30)
+                    .position(x: w * 0.28 + shake, y: h * 0.25)
+
+                Circle()
+                    .fill(.white)
+                    .frame(width: w * 0.10, height: w * 0.10)
+                    .position(x: w * 0.22 + shake, y: h * 0.20)
+
+                Circle()
+                    .fill(.black)
+                    .frame(width: w * 0.30, height: w * 0.30)
+                    .position(x: w * 0.72 + shake, y: h * 0.25)
+
+                Circle()
+                    .fill(.white)
+                    .frame(width: w * 0.10, height: w * 0.10)
+                    .position(x: w * 0.66 + shake, y: h * 0.20)
+
+                // Wide open screaming mouth
+                Ellipse()
+                    .fill(.black)
+                    .frame(width: w * 0.40, height: h * 0.35)
+                    .position(x: w * 0.50 + shake, y: h * 0.75)
+            }
+        }
+    }
+}
+
+// MARK: - Fire Overlay: three flames that fade in and out on staggered timers
+
+private struct FireOverlay: View {
+    let size: CGFloat
+
+    @State private var opacities: [Double] = [1.0, 0.4, 0.7]
+    @State private var timer: AnyCancellable?
+
+    var body: some View {
+        ZStack {
+            let fireSize = size * 0.28
+            let overlap = fireSize * 0.5
+            Text("🔥").opacity(opacities[0]).offset(x: -overlap)
+            Text("🔥").opacity(opacities[1])
+            Text("🔥").opacity(opacities[2]).offset(x: overlap)
+        }
+        .font(.system(size: size * 0.28))
+        .onAppear { startFlicker() }
+        .onDisappear { timer?.cancel() }
+    }
+
+    private func startFlicker() {
+        timer?.cancel()
+        timer = Timer.publish(every: 0.4, on: .main, in: .common)
+            .autoconnect()
+            .sink { _ in
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    opacities = (0..<3).map { _ in Double.random(in: 0.3...1.0) }
+                }
+            }
     }
 }
 

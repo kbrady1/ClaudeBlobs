@@ -26,6 +26,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var cmuxSocketPath: String?
     var parentSessionId: String?
     var waitReason: String?
+    var toolFailure: String?
     var taskCompletedAt: Int64?
     var createdAt: Int64?
     var updatedAt: Int64
@@ -87,6 +88,19 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         return ageMs >= 0 && ageMs < 3000
     }
 
+    /// Whether the agent was interrupted by the user.
+    var isInterrupted: Bool { toolFailure == "interrupt" }
+
+    /// Whether the agent hit a tool error (non-interrupt failure).
+    var isToolFailure: Bool { toolFailure == "error" }
+
+    /// Whether the agent's last message indicates an API error/outage.
+    var isAPIError: Bool {
+        guard let msg = lastMessage?.prefix(60).lowercased() else { return false }
+        return msg.contains("api error") || msg.contains("api_error")
+            || msg.contains("internal server error") || msg.contains("overloaded")
+    }
+
     /// Whether this is a plan approval permission (ExitPlanMode) vs a dangerous tool permission.
     var isPlanApproval: Bool {
         guard let tool = lastToolUse else { return false }
@@ -114,6 +128,7 @@ extension Agent {
         cmuxSocketPath: String? = nil,
         parentSessionId: String? = nil,
         waitReason: String? = nil,
+        toolFailure: String? = nil,
         taskCompletedAt: Int64? = nil,
         createdAt: Int64? = nil,
         updatedAt: Int64 = 1000
@@ -124,7 +139,8 @@ extension Agent {
             lastMessage: lastMessage, lastToolUse: lastToolUse,
             cmuxWorkspace: cmuxWorkspace, cmuxSurface: cmuxSurface,
             cmuxSocketPath: cmuxSocketPath, parentSessionId: parentSessionId,
-            waitReason: waitReason, taskCompletedAt: taskCompletedAt,
+            waitReason: waitReason, toolFailure: toolFailure,
+            taskCompletedAt: taskCompletedAt,
             createdAt: createdAt, updatedAt: updatedAt
         )
     }

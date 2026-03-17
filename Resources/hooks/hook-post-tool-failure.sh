@@ -9,9 +9,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/hook-ensure-status.sh"
 ensure_status_file
 
+IS_INTERRUPT=$(echo "$INPUT" | jq -r '.is_interrupt // false')
 TS=$(date +%s000)
 
+if [ "$IS_INTERRUPT" = "true" ]; then
+  FAILURE="interrupt"
+else
+  FAILURE="error"
+fi
+
 atomic_update "$STATUS_FILE" \
-  --arg status "working" \
+  --arg toolFailure "$FAILURE" \
   --argjson ts "$TS" \
-  '.status = $status | .lastMessage = null | .waitReason = null | .toolFailure = null | .updatedAt = $ts'
+  '.toolFailure = $toolFailure | .updatedAt = $ts'

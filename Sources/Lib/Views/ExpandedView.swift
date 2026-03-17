@@ -64,7 +64,10 @@ struct ExpandedView: View {
                         staleness: agent.staleness,
                         isPlanApproval: agent.isPlanApproval,
                         isAskingQuestion: agent.isAskingQuestion,
-                        isTaskJustCompleted: agent.isTaskJustCompleted
+                        isTaskJustCompleted: agent.isTaskJustCompleted,
+                        isInterrupted: agent.isInterrupted,
+                        isToolFailure: agent.isToolFailure,
+                        isAPIError: agent.isAPIError
                     )
                     .frame(width: 48, height: 44)
 
