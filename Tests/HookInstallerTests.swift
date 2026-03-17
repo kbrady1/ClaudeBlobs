@@ -31,8 +31,11 @@ struct HookInstallerTests {
         for event in HookInstaller.hookEvents {
             let eventHooks = hooks[event] as! [[String: Any]]
             #expect(eventHooks.count == 1)
-            #expect(eventHooks[0]["type"] as? String == "command")
-            #expect((eventHooks[0]["command"] as? String)?.hasPrefix("/fake/hooks/") == true)
+            #expect(eventHooks[0]["matcher"] as? String == "")
+            let innerHooks = eventHooks[0]["hooks"] as! [[String: Any]]
+            #expect(innerHooks.count == 1)
+            #expect(innerHooks[0]["type"] as? String == "command")
+            #expect((innerHooks[0]["command"] as? String)?.hasPrefix("/fake/hooks/") == true)
         }
     }
 
@@ -42,7 +45,7 @@ struct HookInstallerTests {
         let initial: [String: Any] = [
             "hooks": [
                 "UserPromptSubmit": [
-                    ["type": "command", "command": "echo existing-hook"]
+                    ["matcher": "", "hooks": [["type": "command", "command": "echo existing-hook"]]]
                 ]
             ]
         ]
@@ -58,8 +61,10 @@ struct HookInstallerTests {
         let submitHooks = hooks["UserPromptSubmit"] as! [[String: Any]]
 
         #expect(submitHooks.count == 2)
-        #expect(submitHooks[0]["command"] as? String == "echo existing-hook")
-        #expect(submitHooks[1]["command"] as? String == "/fake/hooks/hook-user-prompt.sh")
+        let firstInner = (submitHooks[0]["hooks"] as! [[String: Any]])[0]
+        #expect(firstInner["command"] as? String == "echo existing-hook")
+        let secondInner = (submitHooks[1]["hooks"] as! [[String: Any]])[0]
+        #expect(secondInner["command"] as? String == "/fake/hooks/hook-user-prompt.sh")
     }
 
     @Test("isIdempotent")
@@ -67,7 +72,7 @@ struct HookInstallerTests {
         let path = settingsPath()
         try "{}".write(to: path, atomically: true, encoding: .utf8)
 
-        let installer = HookInstaller(settingsPath: path, hooksDir: "/fake/hooks")
+        let installer = HookInstaller(settingsPath: path, hooksDir: "/fake/ClaudeAgentHUD/hooks")
         try installer.install()
         try installer.install()
 
@@ -87,8 +92,8 @@ struct HookInstallerTests {
         let initial: [String: Any] = [
             "hooks": [
                 "UserPromptSubmit": [
-                    ["type": "command", "command": "echo existing-hook"],
-                    ["type": "command", "command": "/fake/hooks/hook-user-prompt.sh"]
+                    ["matcher": "", "hooks": [["type": "command", "command": "echo existing-hook"]]],
+                    ["matcher": "", "hooks": [["type": "command", "command": "/path/to/ClaudeAgentHUD.app/hooks/hook-user-prompt.sh"]]]
                 ]
             ]
         ]
@@ -104,7 +109,8 @@ struct HookInstallerTests {
         let submitHooks = hooks["UserPromptSubmit"] as! [[String: Any]]
 
         #expect(submitHooks.count == 1)
-        #expect(submitHooks[0]["command"] as? String == "echo existing-hook")
+        let innerHooks = (submitHooks[0]["hooks"] as! [[String: Any]])[0]
+        #expect(innerHooks["command"] as? String == "echo existing-hook")
     }
 
     @Test("createsSettingsFileIfMissing")

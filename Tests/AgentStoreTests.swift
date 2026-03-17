@@ -24,9 +24,9 @@ struct AgentStoreTests {
     }
 
     @Test func filtersCollapsedAgents() throws {
-        let waiting = Agent.fixture(sessionId: "w", status: .waiting)
-        let working = Agent.fixture(sessionId: "k", status: .working)
-        let perm = Agent.fixture(sessionId: "p", status: .permission)
+        let waiting = Agent.fixture(sessionId: "w", pid: 100, status: .waiting)
+        let working = Agent.fixture(sessionId: "k", pid: 101, status: .working)
+        let perm = Agent.fixture(sessionId: "p", pid: 102, status: .permission)
 
         for agent in [waiting, working, perm] {
             let data = try JSONEncoder().encode(agent)
@@ -52,12 +52,12 @@ struct AgentStoreTests {
         #expect(store.agents.isEmpty)
     }
 
-    @Test func sortsByStatusPriority() throws {
-        let working = Agent.fixture(sessionId: "w", status: .working)
-        let waiting = Agent.fixture(sessionId: "a", status: .waiting)
-        let perm = Agent.fixture(sessionId: "p", status: .permission)
+    @Test func sortsByCreatedAt() throws {
+        let oldest = Agent.fixture(sessionId: "a", pid: 200, status: .working, createdAt: 1000, updatedAt: 3000)
+        let middle = Agent.fixture(sessionId: "b", pid: 201, status: .permission, createdAt: 2000, updatedAt: 2000)
+        let newest = Agent.fixture(sessionId: "c", pid: 202, status: .waiting, createdAt: 3000, updatedAt: 1000)
 
-        for agent in [working, waiting, perm] {
+        for agent in [newest, oldest, middle] {
             let data = try JSONEncoder().encode(agent)
             try data.write(to: tmpDir.appendingPathComponent("\(agent.sessionId).json"))
         }
@@ -65,8 +65,8 @@ struct AgentStoreTests {
         let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
         store.reload()
 
-        #expect(store.agents[0].status == .permission)
-        #expect(store.agents[1].status == .waiting)
-        #expect(store.agents[2].status == .working)
+        #expect(store.agents[0].sessionId == "a")
+        #expect(store.agents[1].sessionId == "b")
+        #expect(store.agents[2].sessionId == "c")
     }
 }
