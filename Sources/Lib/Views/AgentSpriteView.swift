@@ -11,7 +11,8 @@ struct AgentSpriteView: View {
 
     @State private var animationPhase: CGFloat = 0
     @State private var expressionFrame: Int = 0
-    @State private var timer: AnyCancellable?
+    @State private var expressionTimer: AnyCancellable?
+    @State private var bounceTimer: AnyCancellable?
 
     var body: some View {
         ZStack {
@@ -35,14 +36,22 @@ struct AgentSpriteView: View {
             }
         }
         .offset(y: animationOffset)
+        .animation(bounceAnimation, value: animationPhase)
         .onAppear {
-            startAnimation()
+            startBounceTimer()
             startExpressionTimer()
         }
-        .onDisappear { timer?.cancel() }
+        .onDisappear {
+            expressionTimer?.cancel()
+            bounceTimer?.cancel()
+        }
         .onChange(of: isSnoozed) { _ in
             expressionFrame = 0
+            startBounceTimer()
             startExpressionTimer()
+        }
+        .onChange(of: status) { _ in
+            startBounceTimer()
         }
     }
 
@@ -101,41 +110,41 @@ struct AgentSpriteView: View {
         }
     }
 
-    private func startAnimation() {
-        if isSnoozed {
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                animationPhase = 1
-            }
-            return
-        }
+    private var bounceDuration: TimeInterval {
+        if isSnoozed { return 1.5 }
         switch status {
-        case .permission:
-            withAnimation(.easeInOut(duration: 0.3).repeatForever(autoreverses: true)) {
-                animationPhase = 1
-            }
-        case .waiting:
-            if isDone {
-                withAnimation(.easeOut(duration: 0.5)) {
-                    animationPhase = 1
-                }
-            } else {
-                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                    animationPhase = 1
-                }
-            }
-        case .working:
-            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                animationPhase = 1
-            }
-        case .starting:
-            withAnimation(.easeOut(duration: 0.5)) {
-                animationPhase = 1
-            }
+        case .permission: return 0.3
+        case .waiting:    return isDone ? 0 : 0.8
+        case .working:    return 1.2
+        case .starting:   return 0
         }
     }
 
+    private var bounceAnimation: Animation? {
+        let duration = bounceDuration
+        guard duration > 0 else { return .easeOut(duration: 0.5) }
+        return .easeInOut(duration: duration)
+    }
+
+    private func startBounceTimer() {
+        bounceTimer?.cancel()
+        let duration = bounceDuration
+        guard duration > 0 else {
+            // One-shot: just set to 1 (starting, done)
+            animationPhase = 1
+            return
+        }
+        // Kick off immediately
+        animationPhase = animationPhase == 0 ? 1 : 0
+        bounceTimer = Timer.publish(every: duration, on: .main, in: .common)
+            .autoconnect()
+            .sink { [self] _ in
+                animationPhase = animationPhase == 0 ? 1 : 0
+            }
+    }
+
     private func startExpressionTimer() {
-        timer?.cancel()
+        expressionTimer?.cancel()
         let interval: TimeInterval
         if isSnoozed {
             interval = 1.0
@@ -147,7 +156,7 @@ struct AgentSpriteView: View {
             case .working:    interval = 1.2
             }
         }
-        timer = Timer.publish(every: interval, on: .main, in: .common)
+        expressionTimer = Timer.publish(every: interval, on: .main, in: .common)
             .autoconnect()
             .sink { _ in
                 var tx = Transaction()

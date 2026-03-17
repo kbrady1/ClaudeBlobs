@@ -12,6 +12,7 @@ ensure_status_file
 TS=$(date +%s000)
 
 jq \
+  --arg status "working" \
   --argjson ts "$TS" \
-  '.updatedAt = $ts' \
+  '.status = $status | .updatedAt = $ts' \
   "$STATUS_FILE" > "$STATUS_FILE.tmp" && mv "$STATUS_FILE.tmp" "$STATUS_FILE"

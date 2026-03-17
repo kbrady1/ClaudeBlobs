@@ -16,6 +16,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var showAllMenuItem: NSMenuItem!
     private var ntfyMenuItem: NSMenuItem!
     private var settingsWindow: NSWindow?
+    private var hotkeyWindow: NSWindow?
+    private var hotkeyConfig: HotkeyConfig!
+    private var hotkeyMenuItem: NSMenuItem!
+    private var eventHandlerInstalled = false
     private var cancellables = Set<AnyCancellable>()
     private var isHidden = false
     private var hotkeyRef: EventHotKeyRef?
@@ -105,6 +109,17 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        hotkeyConfig = HotkeyConfig.load()
+        hotkeyMenuItem = NSMenuItem(title: "Hotkey: \(hotkeyConfig.displayString)", action: nil, keyEquivalent: "")
+        hotkeyMenuItem.isEnabled = false
+        menu.addItem(hotkeyMenuItem)
+
+        let changeHotkeyItem = NSMenuItem(title: "Change Hotkey\u{2026}", action: #selector(openHotkeySettings), keyEquivalent: "")
+        changeHotkeyItem.target = self
+        menu.addItem(changeHotkeyItem)
+
+        menu.addItem(.separator())
+
         let reinstallItem = NSMenuItem(title: "Reinstall Hooks", action: #selector(reinstallHooks), keyEquivalent: "")
         reinstallItem.target = self
         menu.addItem(reinstallItem)
@@ -169,30 +184,38 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func registerGlobalHotkey() {
-        // Carbon hotkey: ⌃⌥A — does NOT require Accessibility permission
+        // Unregister previous hotkey if re-registering
+        if let existing = hotkeyRef {
+            UnregisterEventHotKey(existing)
+            hotkeyRef = nil
+        }
+
+        let config = hotkeyConfig ?? .default
+
+        // Install the Carbon event handler only once
+        if !eventHandlerInstalled {
+            var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+            let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+            InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
+                guard let userData else { return OSStatus(eventNotHandledErr) }
+                let delegate = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
+                DispatchQueue.main.async {
+                    delegate.togglePicker()
+                }
+                return noErr
+            }, 1, &eventType, selfPtr, nil)
+            eventHandlerInstalled = true
+        }
+
         var hotKeyID = EventHotKeyID()
         hotKeyID.signature = OSType(0x48554430) // "HUD0"
         hotKeyID.id = 1
 
-        // Install handler
-        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
-            guard let userData else { return OSStatus(eventNotHandledErr) }
-            let delegate = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
-            DispatchQueue.main.async {
-                delegate.togglePicker()
-            }
-            return noErr
-        }, 1, &eventType, selfPtr, nil)
-
-        // ⌃⌥A: keycode 0 = 'A', modifiers: controlKey | optionKey
-        let modifiers = UInt32(controlKey | optionKey)
         var ref: EventHotKeyRef?
-        let status = RegisterEventHotKey(UInt32(kVK_ANSI_A), modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        let status = RegisterEventHotKey(config.keyCode, config.modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
         if status == noErr {
             hotkeyRef = ref
-            DebugLog.shared.log("Registered global hotkey ⌃⌥A")
+            DebugLog.shared.log("Registered global hotkey \(config.displayString)")
         } else {
             DebugLog.shared.log("Failed to register global hotkey: \(status)")
         }
@@ -322,6 +345,36 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow = window
+    }
+
+    @objc private func openHotkeySettings() {
+        if let existing = hotkeyWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let view = HotkeyRecorderView(config: Binding(
+            get: { [weak self] in self?.hotkeyConfig ?? .default },
+            set: { [weak self] newValue in self?.hotkeyConfig = newValue }
+        )) { [weak self] in
+            guard let self else { return }
+            self.hotkeyMenuItem.title = "Hotkey: \(self.hotkeyConfig.displayString)"
+            self.registerGlobalHotkey()
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 60),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Change Hotkey"
+        window.contentView = NSHostingView(rootView: view.padding())
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        hotkeyWindow = window
     }
 
     @objc private func toggleHide() {
