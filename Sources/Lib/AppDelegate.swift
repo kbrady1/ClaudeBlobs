@@ -9,11 +9,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var store: AgentStore!
     private var expansionState: HUDExpansionState!
     private var ntfyConfig: NtfyConfig!
+    private var themeConfig: ThemeConfig!
     private var ntfyScheduler: NtfyScheduler!
     private var statusItem: NSStatusItem!
     private var debugMenuItem: NSMenuItem!
     private var ntfyMenuItem: NSMenuItem!
     private var settingsWindow: NSWindow?
+    private var themeWindow: NSWindow?
     private var hotkeyWindow: NSWindow?
     private var hotkeyConfig: HotkeyConfig!
     private var hotkeyMenuItem: NSMenuItem!
@@ -34,11 +36,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         store = AgentStore()
         expansionState = HUDExpansionState()
         ntfyConfig = NtfyConfig()
+        themeConfig = ThemeConfig()
         ntfyScheduler = NtfyScheduler(config: ntfyConfig)
         store.ntfyScheduler = ntfyScheduler
         panel = HUDPanel()
 
-        let contentView = HUDContentView(store: store, expansionState: expansionState, ntfyScheduler: ntfyScheduler) { agent in
+        let contentView = HUDContentView(store: store, expansionState: expansionState, ntfyScheduler: ntfyScheduler, themeConfig: themeConfig) { agent in
             DebugLog.shared.log("Agent clicked: \(agent.sessionId)")
             DeepLinker.open(agent)
         }
@@ -114,6 +117,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         let ntfySettingsItem = NSMenuItem(title: "Notification Settings\u{2026}", action: #selector(openNtfySettings), keyEquivalent: "")
         ntfySettingsItem.target = self
         menu.addItem(ntfySettingsItem)
+
+        menu.addItem(.separator())
+
+        let themeSettingsItem = NSMenuItem(title: "Theme Settings\u{2026}", action: #selector(openThemeSettings), keyEquivalent: "")
+        themeSettingsItem.target = self
+        menu.addItem(themeSettingsItem)
 
         menu.addItem(.separator())
 
@@ -353,6 +362,27 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow = window
+    }
+
+    @objc private func openThemeSettings() {
+        if let existing = themeWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 340),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Theme Settings"
+        window.contentView = NSHostingView(rootView: ThemeSettingsView(config: themeConfig))
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        themeWindow = window
     }
 
     @objc private func openHotkeySettings() {

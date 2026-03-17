@@ -8,6 +8,7 @@ struct CollapsedView: View {
     var childAgents: [String: [Agent]] = [:]
     var hideWhileCollapsed: Bool = false
     var peekingIds: Set<String> = []
+    var theme: ColorTheme = .trafficLight
 
     var body: some View {
         HStack(spacing: 8) {
@@ -17,6 +18,7 @@ struct CollapsedView: View {
                     AgentSpriteView(
                         status: agent.status,
                         size: 18,
+                        theme: theme,
                         isCoding: effectiveIsCoding(agent),
                         isSearching: effectiveIsSearching(agent),
                         isDone: agent.isDone,

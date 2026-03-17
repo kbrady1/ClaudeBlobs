@@ -37,6 +37,7 @@ struct HUDContentView: View {
     @ObservedObject var store: AgentStore
     @ObservedObject var expansionState: HUDExpansionState
     @ObservedObject var ntfyScheduler: NtfyScheduler
+    @ObservedObject var themeConfig: ThemeConfig
     @State private var isHoverExpanded = false
     @State private var isHovering = false
     @State private var knownAgentIds: Set<String> = []
@@ -63,8 +64,11 @@ struct HUDContentView: View {
                 .onHover { hovering in
                     isHovering = hovering
                     if hovering {
-                        withAnimation(.spring(duration: 0.35, bounce: 0.1)) {
-                            isHoverExpanded = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            if !isHovering { return }
+                            withAnimation(.spring(duration: 0.35, bounce: 0.1)) {
+                                isHoverExpanded = true
+                            }
                         }
                     } else {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -97,6 +101,7 @@ struct HUDContentView: View {
                 notifiedIds: ntfyScheduler.notifiedSessionIds,
                 childAgents: resolvedChildren,
                 selectedIndex: expansionState.isKeyboardExpanded ? expansionState.selectedIndex : nil,
+                theme: themeConfig.selectedTheme,
                 onAgentClick: { agent in
                     onAgentClick(agent)
                     expansionState.collapse()
@@ -112,7 +117,8 @@ struct HUDContentView: View {
                 notifiedIds: ntfyScheduler.notifiedSessionIds,
                 childAgents: resolvedChildren,
                 hideWhileCollapsed: store.hideWhileCollapsed,
-                peekingIds: store.peekingIds
+                peekingIds: store.peekingIds,
+                theme: themeConfig.selectedTheme
             )
             .transition(.opacity.combined(with: .scale(scale: 1.05, anchor: .top)))
         }

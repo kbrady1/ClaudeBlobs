@@ -6,6 +6,7 @@ struct ExpandedView: View {
     var notifiedIds: Set<String> = []
     var childAgents: [String: [Agent]] = [:]
     let selectedIndex: Int?
+    var theme: ColorTheme = .trafficLight
     let onAgentClick: (Agent) -> Void
     let onSnooze: (Agent) -> Void
     let onDismiss: (Agent) -> Void
@@ -55,6 +56,7 @@ struct ExpandedView: View {
                         status: agent.status,
                         size: 40,
                         isSnoozed: snoozedIds.contains(agent.sessionId),
+                        theme: theme,
                         isCoding: agent.isCoding,
                         isSearching: agent.isSearching,
                         isDone: agent.isDone,
@@ -70,7 +72,7 @@ struct ExpandedView: View {
                     if !kids.isEmpty {
                         HStack(spacing: 2) {
                             ForEach(kids.prefix(3)) { child in
-                                MiniAgentBlob(status: child.status, staleness: child.staleness)
+                                MiniAgentBlob(status: child.status, staleness: child.staleness, theme: theme)
                             }
                             if kids.count > 3 {
                                 Text("+\(kids.count - 3)")
@@ -138,11 +140,12 @@ struct ExpandedView: View {
 private struct MiniAgentBlob: View {
     let status: AgentStatus
     var staleness: AgentStaleness = .active
+    var theme: ColorTheme = .trafficLight
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 3)
-                .fill(status.color)
+                .fill(status.color(for: theme))
                 .frame(width: 14, height: 14)
             // Minimal face: two dots for eyes
             if staleness == .stale || staleness == .hung {

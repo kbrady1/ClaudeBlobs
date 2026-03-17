@@ -5,6 +5,7 @@ struct AgentSpriteView: View {
     let status: AgentStatus
     let size: CGFloat
     var isSnoozed: Bool = false
+    var theme: ColorTheme = .trafficLight
     var isCoding: Bool = false
     var isSearching: Bool = false
     var isDone: Bool = false
@@ -105,7 +106,7 @@ struct AgentSpriteView: View {
     private var backgroundColor: Color {
         if isSnoozed { return .gray }
         if status == .waiting && isDone {
-            return Color(red: 0.204, green: 0.780, blue: 0.349) // green like starting
+            return AgentStatus.starting.color(for: theme)
         }
         if status == .permission && isPlanApproval {
             return Color.orange
@@ -113,7 +114,7 @@ struct AgentSpriteView: View {
         if status == .permission && isAskingQuestion {
             return Color.orange
         }
-        return status.color
+        return status.color(for: theme)
     }
 
     private var isStale: Bool { staleness == .stale || staleness == .hung }
