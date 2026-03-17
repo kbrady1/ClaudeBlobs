@@ -8,6 +8,9 @@ struct AgentSpriteView: View {
     var theme: ColorTheme = .trafficLight
     var isCoding: Bool = false
     var isSearching: Bool = false
+    var isExploring: Bool = false
+    var isMcpTool: Bool = false
+    var isTesting: Bool = false
     var isDone: Bool = false
     var hasNotified: Bool = false
     var staleness: AgentStaleness = .active
@@ -26,6 +29,8 @@ struct AgentSpriteView: View {
     @State private var checkmarkTimer: AnyCancellable?
     @State private var showingFailureIcon: String?
     @State private var failureIconTimer: AnyCancellable?
+    @State private var showExploringAccent: Bool = false
+    @State private var exploringTimer: AnyCancellable?
 
     var body: some View {
         ZStack {
@@ -92,12 +97,23 @@ struct AgentSpriteView: View {
         .onAppear {
             startBounceTimer()
             startExpressionTimer()
+            if isExploring {
+                showExploringAccent = true
+                exploringTimer?.cancel()
+                exploringTimer = Timer.publish(every: 30.0, on: .main, in: .common)
+                    .autoconnect()
+                    .first()
+                    .sink { _ in
+                        showExploringAccent = false
+                    }
+            }
         }
         .onDisappear {
             expressionTimer?.cancel()
             bounceTimer?.cancel()
             checkmarkTimer?.cancel()
             failureIconTimer?.cancel()
+            exploringTimer?.cancel()
         }
         .onChange(of: isSnoozed) { _ in
             expressionFrame = 0
@@ -131,6 +147,21 @@ struct AgentSpriteView: View {
         .onChange(of: isToolFailure) { failed in
             if failed {
                 showFailureIcon("exclamationmark.triangle.fill")
+            }
+        }
+        .onChange(of: isExploring) { exploring in
+            if exploring {
+                showExploringAccent = true
+                exploringTimer?.cancel()
+                exploringTimer = Timer.publish(every: 30.0, on: .main, in: .common)
+                    .autoconnect()
+                    .first()
+                    .sink { _ in
+                        showExploringAccent = false
+                    }
+            } else {
+                exploringTimer?.cancel()
+                showExploringAccent = false
             }
         }
     }
@@ -187,7 +218,19 @@ struct AgentSpriteView: View {
     @ViewBuilder
     private var workingIconOverlay: some View {
         let offset = size * 0.35
-        if isCoding {
+        if isTesting {
+            Image(systemName: "checklist")
+                .font(.system(size: accentFont, weight: .heavy))
+                .foregroundColor(.white)
+                .shadow(color: .black, radius: 2)
+                .offset(x: offset, y: offset)
+        } else if isMcpTool {
+            Image(systemName: "puzzlepiece.fill")
+                .font(.system(size: accentFont, weight: .heavy))
+                .foregroundColor(.white)
+                .shadow(color: .black, radius: 2)
+                .offset(x: offset, y: offset)
+        } else if isCoding {
             Image(systemName: "pencil")
                 .font(.system(size: accentFont, weight: .heavy))
                 .foregroundColor(.white)
@@ -195,6 +238,12 @@ struct AgentSpriteView: View {
                 .offset(x: offset, y: offset)
         } else if isSearching {
             Image(systemName: "globe")
+                .font(.system(size: accentFont, weight: .heavy))
+                .foregroundColor(.white)
+                .shadow(color: .black, radius: 2)
+                .offset(x: offset, y: offset)
+        } else if isExploring && showExploringAccent {
+            Image(systemName: "magnifyingglass")
                 .font(.system(size: accentFont, weight: .heavy))
                 .foregroundColor(.white)
                 .shadow(color: .black, radius: 2)

@@ -50,6 +50,58 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         return webPrefixes.contains { tool.hasPrefix($0) }
     }
 
+    /// Whether the last tool use is reading or searching code (Read, Grep, Glob, LSP, Agent).
+    var isExploring: Bool {
+        guard let tool = lastToolUse else { return false }
+        let explorePrefixes = ["Read", "Grep", "Glob", "LSP", "Agent"]
+        return explorePrefixes.contains { tool.hasPrefix($0) }
+    }
+
+    /// Whether the last tool use is a Bash command that looks like running tests or verification.
+    var isTesting: Bool {
+        guard let tool = lastToolUse else { return false }
+        guard tool.hasPrefix("Bash: ") || tool.hasPrefix("Bash:") else { return false }
+        let cmd = tool.dropFirst(tool.hasPrefix("Bash: ") ? 6 : 5).lowercased()
+        let testPatterns = [
+            "test", "spec", "verify", "check", "xcodebuild", "pytest", "jest",
+            "mocha", "vitest", "cypress", "playwright", "cargo test", "go test",
+            "swift test", "make test", "make check", "lint", "tox", "nox"
+        ]
+        return testPatterns.contains { cmd.contains($0) }
+    }
+
+    /// Whether the last tool use was an MCP tool (mcp__server__tool).
+    var isMcpTool: Bool {
+        guard let tool = lastToolUse else { return false }
+        return tool.hasPrefix("mcp__")
+    }
+
+    /// Formats an MCP tool name for display: "mcp__github__create_pr: {...}" → "github: create_pr"
+    static func formatMcpToolName(_ raw: String) -> String {
+        // Split off the input portion after ": "
+        let toolPart: String
+        let inputPart: String?
+        if let colonRange = raw.range(of: ": ") {
+            toolPart = String(raw[raw.startIndex..<colonRange.lowerBound])
+            inputPart = String(raw[colonRange.upperBound...])
+        } else {
+            toolPart = raw
+            inputPart = nil
+        }
+        // Parse mcp__server__toolName
+        let segments = toolPart.split(separator: "_", omittingEmptySubsequences: false)
+        // Expected: ["mcp", "", "server", "", "tool"]
+        // Filter out empty segments from double underscores
+        let parts = segments.filter { !$0.isEmpty }
+        guard parts.count >= 3, parts[0] == "mcp" else { return raw }
+        let server = parts[1]
+        let tool = parts[2...].joined(separator: "_")
+        if let input = inputPart {
+            return "\(server): \(tool): \(input)"
+        }
+        return "\(server): \(tool)"
+    }
+
     var directoryLabel: String {
         if let agentType { return agentType }
         guard let cwd else { return "APP" }
@@ -61,12 +113,12 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         case .waiting:
             return lastMessage ?? ""
         case .working:
-            return lastToolUse ?? ""
+            guard let tool = lastToolUse else { return "" }
+            return tool.hasPrefix("mcp__") ? Agent.formatMcpToolName(tool) : tool
         case .permission:
-            if let tool = lastToolUse {
-                return "Wants to run: \(tool)"
-            }
-            return ""
+            guard let tool = lastToolUse else { return "" }
+            let display = tool.hasPrefix("mcp__") ? Agent.formatMcpToolName(tool) : tool
+            return "Wants to run: \(display)"
         case .starting:
             return "Starting up..."
         case .compacting:

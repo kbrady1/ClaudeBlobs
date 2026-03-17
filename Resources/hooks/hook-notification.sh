@@ -12,8 +12,8 @@ ensure_status_file
 CURRENT_STATUS=$(jq -r '.status // empty' "$STATUS_FILE" 2>/dev/null)
 TS=$(date +%s000)
 
-# Don't overwrite permission status — notifications often fire right after permission requests
-if [ "$CURRENT_STATUS" != "permission" ]; then
+# Don't overwrite permission or waiting status — notifications often fire right after these
+if [ "$CURRENT_STATUS" != "permission" ] && [ "$CURRENT_STATUS" != "waiting" ]; then
   atomic_update "$STATUS_FILE" \
     --arg status "working" \
     --argjson ts "$TS" \

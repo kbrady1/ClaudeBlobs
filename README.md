@@ -18,8 +18,46 @@ Click a face or use the keyboard picker to deep-link straight back to the termin
 - Animated sprite faces show agent state: **starting** (happy), **working** (focused), **waiting** (alert), **permission needed** (angry)
 - Faces blink, look around, and animate based on state
 - Purple badge when a push notification fires
-- Pencil/speech bubble overlay shows whether the agent is writing code or using tools
+- Accent icons show what the agent is doing (see table below)
 - Snooze agents to gray them out; dismiss to remove entirely
+
+### Accent Icons
+
+Each agent sprite shows a small overlay icon indicating what it's currently doing:
+
+#### Working State
+
+| Icon | SF Symbol | When |
+|------|-----------|------|
+| 🧩 Puzzle piece | `puzzlepiece.fill` | Calling an MCP tool (`mcp__*`) |
+| 📋 Checklist | `checklist` | Running tests or verification (test, lint, xcodebuild, etc.) |
+| ✏️ Pencil | `pencil` | Writing code (Edit, Write, Bash, NotebookEdit) |
+| 🌐 Globe | `globe` | Web search (WebSearch, WebFetch) |
+| 🔍 Magnifying glass | `magnifyingglass` | Reading/exploring code (Read, Grep, Glob, LSP, Agent) |
+| 💬 Speech bubble | `ellipsis.bubble.fill` | Default — thinking or using other tools |
+
+Priority: testing > MCP > coding > web search > exploring > default.
+
+#### Permission State
+
+| Icon | SF Symbol | When |
+|------|-----------|------|
+| ✅ Checkmark bubble | `checkmark.bubble.fill` | Plan approval (ExitPlanMode) |
+| ❓ Question bubble | `questionmark.bubble.fill` | Asking a question (AskUserQuestion) |
+
+#### Transient (flash for 3 seconds)
+
+| Icon | SF Symbol | When |
+|------|-----------|------|
+| ✋ Raised hand | `hand.raised.fill` | User interrupted a tool |
+| ⚠️ Warning triangle | `exclamationmark.triangle.fill` | Tool error |
+
+#### Other Overlays
+
+| Overlay | When |
+|---------|------|
+| 🟣 Purple badge (top-right) | Push notification sent |
+| 🔥 Fire (above head) | API error or outage |
 
 ### Deep Linking
 Clicking an agent routes you back to its source automatically:

@@ -21,6 +21,9 @@ struct CollapsedView: View {
                         theme: theme,
                         isCoding: effectiveIsCoding(agent),
                         isSearching: effectiveIsSearching(agent),
+                        isExploring: effectiveIsExploring(agent),
+                        isMcpTool: effectiveIsMcpTool(agent),
+                        isTesting: effectiveIsTesting(agent),
                         isDone: agent.isDone,
                         hasNotified: notifiedIds.contains(agent.id),
                         staleness: agent.staleness,
@@ -64,6 +67,27 @@ struct CollapsedView: View {
         if agent.isSearching { return true }
         guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
         return kids.contains { $0.isSearching }
+    }
+
+    /// Parent's own isExploring takes precedence; otherwise derive from children.
+    private func effectiveIsExploring(_ agent: Agent) -> Bool {
+        if agent.isExploring { return true }
+        guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
+        return kids.contains { $0.isExploring }
+    }
+
+    /// Parent's own isMcpTool takes precedence; otherwise derive from children.
+    private func effectiveIsMcpTool(_ agent: Agent) -> Bool {
+        if agent.isMcpTool { return true }
+        guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
+        return kids.contains { $0.isMcpTool }
+    }
+
+    /// Parent's own isTesting takes precedence; otherwise derive from children.
+    private func effectiveIsTesting(_ agent: Agent) -> Bool {
+        if agent.isTesting { return true }
+        guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
+        return kids.contains { $0.isTesting }
     }
 }
 
