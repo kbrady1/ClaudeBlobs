@@ -46,7 +46,7 @@ Optional push notifications via [ntfy.sh](https://ntfy.sh) when agents need atte
 Requires Xcode command-line tools (Swift 5.9+).
 
 ```sh
-git clone https://github.com/kbrady1/ClaudeAgentHUD.git
+git clone https://github.com/yourusername/ClaudeAgentHUD.git
 cd ClaudeAgentHUD
 make install
 ```

@@ -1,7 +1,7 @@
 {
   "session_id": "session-abc-001",
   "pid": 12345,
-  "cwd": "/Users/kent/projects/myapp",
+  "cwd": "/Users/demo/projects/myapp",
   "agent_type": null,
   "status": "working",
   "last_message": null,

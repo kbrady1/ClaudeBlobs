@@ -46,7 +46,7 @@ struct AgentTests {
     }
 
     @Test func directoryLabel() {
-        let agent = Agent.fixture(cwd: "/Users/kent/projects/myapp")
+        let agent = Agent.fixture(cwd: "/Users/demo/projects/myapp")
         #expect(agent.directoryLabel == "myapp")
     }
 
@@ -56,7 +56,7 @@ struct AgentTests {
     }
 
     @Test func directoryLabelPrefersAgentType() {
-        let agent = Agent.fixture(cwd: "/Users/kent/projects/myapp", agentType: "Reviewer")
+        let agent = Agent.fixture(cwd: "/Users/demo/projects/myapp", agentType: "Reviewer")
         #expect(agent.directoryLabel == "Reviewer")
     }
 
