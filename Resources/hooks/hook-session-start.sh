@@ -13,6 +13,8 @@ CMUX_WS="${CMUX_WORKSPACE_ID:-}"
 CMUX_SF="${CMUX_SURFACE_ID:-}"
 CMUX_SOCK="${CMUX_SOCKET_PATH:-}"
 
+TMP=$(mktemp "${STATUS_FILE}.XXXXXX") || exit 1
+
 jq -n \
   --arg sid "$SESSION_ID" \
   --argjson pid "$PID" \
@@ -36,4 +38,4 @@ jq -n \
     cmuxSocketPath: (if $cmuxSock == "" then null else $cmuxSock end),
     createdAt: $ts,
     updatedAt: $ts
-  }' > "$STATUS_FILE.tmp" && mv "$STATUS_FILE.tmp" "$STATUS_FILE"
+  }' > "$TMP" && mv "$TMP" "$STATUS_FILE" || rm -f "$TMP"

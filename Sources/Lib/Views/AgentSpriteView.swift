@@ -6,8 +6,11 @@ struct AgentSpriteView: View {
     let size: CGFloat
     var isSnoozed: Bool = false
     var isCoding: Bool = false
+    var isSearching: Bool = false
     var isDone: Bool = false
     var hasNotified: Bool = false
+    var staleness: AgentStaleness = .active
+    var isPlanApproval: Bool = false
 
     @State private var animationPhase: CGFloat = 0
     @State private var expressionFrame: Int = 0
@@ -27,6 +30,15 @@ struct AgentSpriteView: View {
                 workingIconOverlay
             }
 
+            // Plan acceptance accent
+            if !isSnoozed && status == .permission && isPlanApproval {
+                Image(systemName: "checkmark.bubble.fill")
+                    .font(.system(size: accentFont, weight: .heavy))
+                    .foregroundColor(.white)
+                    .shadow(color: .black, radius: 2)
+                    .offset(x: size * 0.35, y: size * 0.35)
+            }
+
             // Purple notification badge
             if hasNotified {
                 Circle()
@@ -35,6 +47,7 @@ struct AgentSpriteView: View {
                     .offset(x: size * 0.35, y: -size * 0.35)
             }
         }
+        .saturation(staleness == .hung ? 0 : 1)
         .offset(y: animationOffset)
         .animation(bounceAnimation, value: animationPhase)
         .onAppear {
@@ -60,8 +73,13 @@ struct AgentSpriteView: View {
         if status == .waiting && isDone {
             return Color(red: 0.204, green: 0.780, blue: 0.349) // green like starting
         }
+        if status == .permission && isPlanApproval {
+            return Color.orange
+        }
         return status.color
     }
+
+    private var isStale: Bool { staleness == .stale || staleness == .hung }
 
     @ViewBuilder
     private var faceView: some View {
@@ -71,30 +89,43 @@ struct AgentSpriteView: View {
             switch status {
             case .waiting:
                 if isDone {
-                    DoneFace(frame: expressionFrame)
+                    DoneFace(frame: expressionFrame, isStale: isStale)
                 } else {
-                    WaitingFace(frame: expressionFrame)
+                    WaitingFace(frame: expressionFrame, isStale: isStale)
                 }
-            case .permission: PermissionFace(frame: expressionFrame)
-            case .working:    WorkingFace(frame: expressionFrame)
-            case .starting:   StartingFace(frame: expressionFrame)
+            case .permission:
+                if isPlanApproval {
+                    WaitingFace(frame: expressionFrame, isStale: isStale)
+                } else {
+                    PermissionFace(frame: expressionFrame, isStale: isStale)
+                }
+            case .working:    WorkingFace(frame: expressionFrame, isStale: isStale)
+            case .starting:   StartingFace(frame: expressionFrame, isStale: isStale)
             }
         }
     }
 
+    /// Accent icons are proportionally larger in collapsed view (small sizes).
+    private var accentFont: CGFloat { size < 25 ? size * 0.50 : size * 0.32 }
+
     @ViewBuilder
     private var workingIconOverlay: some View {
-        let iconFont = size * 0.32
         let offset = size * 0.35
         if isCoding {
             Image(systemName: "pencil")
-                .font(.system(size: iconFont, weight: .heavy))
+                .font(.system(size: accentFont, weight: .heavy))
+                .foregroundColor(.white)
+                .shadow(color: .black, radius: 2)
+                .offset(x: offset, y: offset)
+        } else if isSearching {
+            Image(systemName: "globe")
+                .font(.system(size: accentFont, weight: .heavy))
                 .foregroundColor(.white)
                 .shadow(color: .black, radius: 2)
                 .offset(x: offset, y: offset)
         } else {
-            Image(systemName: "bubble.left.fill")
-                .font(.system(size: iconFont * 0.85, weight: .heavy))
+            Image(systemName: "ellipsis.bubble.fill")
+                .font(.system(size: accentFont, weight: .heavy))
                 .foregroundColor(.white)
                 .shadow(color: .black, radius: 2)
                 .offset(x: offset, y: offset)
@@ -104,8 +135,8 @@ struct AgentSpriteView: View {
     private var animationOffset: CGFloat {
         if isSnoozed { return 0 }
         switch status {
-        case .permission: return -animationPhase * size * 0.15
-        case .waiting where !isDone: return -animationPhase * size * 0.08
+        case .permission: return animationPhase * size * 0.15
+        case .waiting where !isDone: return animationPhase * size * 0.08
         default:          return 0
         }
     }
@@ -113,7 +144,7 @@ struct AgentSpriteView: View {
     private var bounceDuration: TimeInterval {
         if isSnoozed { return 1.5 }
         switch status {
-        case .permission: return 0.3
+        case .permission: return 0.35
         case .waiting:    return isDone ? 0 : 0.8
         case .working:    return 1.2
         case .starting:   return 0
@@ -123,6 +154,9 @@ struct AgentSpriteView: View {
     private var bounceAnimation: Animation? {
         let duration = bounceDuration
         guard duration > 0 else { return .easeOut(duration: 0.5) }
+        if status == .permission && !isSnoozed {
+            return .easeOut(duration: 0.25)
+        }
         return .easeInOut(duration: duration)
     }
 
@@ -130,21 +164,23 @@ struct AgentSpriteView: View {
         bounceTimer?.cancel()
         let duration = bounceDuration
         guard duration > 0 else {
-            // One-shot: just set to 1 (starting, done)
-            animationPhase = 1
+            // One-shot: just set to 0 (starting, done)
+            animationPhase = 0
             return
         }
-        // Kick off immediately
-        animationPhase = animationPhase == 0 ? 1 : 0
+        // Kick off immediately — oscillate between -1 and 1 to bob above and below center
+        animationPhase = animationPhase <= 0 ? 1 : -1
         bounceTimer = Timer.publish(every: duration, on: .main, in: .common)
             .autoconnect()
             .sink { [self] _ in
-                animationPhase = animationPhase == 0 ? 1 : 0
+                animationPhase = animationPhase <= 0 ? 1 : -1
             }
     }
 
     private func startExpressionTimer() {
         expressionTimer?.cancel()
+        // Hung agents don't cycle expressions — static x-eyes
+        if staleness == .hung { return }
         let interval: TimeInterval
         if isSnoozed {
             interval = 1.0
@@ -198,10 +234,40 @@ struct AgentSpriteView: View {
     }
 }
 
+// MARK: - Stale X-Eyes (shared)
+
+/// Draws two X marks where the eyes would be, used for stale/hung agents.
+private struct StaleXEyes: View {
+    let w: CGFloat
+    let h: CGFloat
+    let stroke: StrokeStyle
+
+    var body: some View {
+        // Left X
+        Path { path in
+            path.move(to: CGPoint(x: w * 0.16, y: h * 0.18))
+            path.addLine(to: CGPoint(x: w * 0.40, y: h * 0.42))
+            path.move(to: CGPoint(x: w * 0.40, y: h * 0.18))
+            path.addLine(to: CGPoint(x: w * 0.16, y: h * 0.42))
+        }
+        .stroke(.black, style: stroke)
+
+        // Right X
+        Path { path in
+            path.move(to: CGPoint(x: w * 0.60, y: h * 0.18))
+            path.addLine(to: CGPoint(x: w * 0.84, y: h * 0.42))
+            path.move(to: CGPoint(x: w * 0.84, y: h * 0.18))
+            path.addLine(to: CGPoint(x: w * 0.60, y: h * 0.42))
+        }
+        .stroke(.black, style: stroke)
+    }
+}
+
 // MARK: - Starting Face (^‿^): happy, sometimes winks or sticks tongue out
 
 private struct StartingFace: View {
     let frame: Int
+    var isStale: Bool = false
 
     var body: some View {
         GeometryReader { geo in
@@ -210,6 +276,9 @@ private struct StartingFace: View {
             let stroke = StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round, lineJoin: .round)
 
             ZStack {
+                if isStale {
+                    StaleXEyes(w: w, h: h, stroke: stroke)
+                } else {
                 // Left eye
                 if frame == 1 {
                     // Wink: horizontal line for left eye
@@ -235,6 +304,7 @@ private struct StartingFace: View {
                     path.addLine(to: CGPoint(x: w * 0.86, y: h * 0.38))
                 }
                 .stroke(.black, style: stroke)
+                } // end !isStale
 
                 // Mouth
                 if frame == 2 {
@@ -273,6 +343,7 @@ private struct StartingFace: View {
 
 private struct DoneFace: View {
     let frame: Int
+    var isStale: Bool = false
 
     var body: some View {
         GeometryReader { geo in
@@ -281,6 +352,9 @@ private struct DoneFace: View {
             let stroke = StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round, lineJoin: .round)
 
             ZStack {
+                if isStale {
+                    StaleXEyes(w: w, h: h, stroke: stroke)
+                } else {
                 // Left eye
                 if frame == 1 {
                     // Wink
@@ -305,6 +379,7 @@ private struct DoneFace: View {
                     path.addLine(to: CGPoint(x: w * 0.86, y: h * 0.38))
                 }
                 .stroke(.black, style: stroke)
+                } // end !isStale
 
                 // Smile
                 Path { path in
@@ -324,6 +399,7 @@ private struct DoneFace: View {
 
 private struct WaitingFace: View {
     let frame: Int
+    var isStale: Bool = false
 
     var body: some View {
         GeometryReader { geo in
@@ -334,7 +410,9 @@ private struct WaitingFace: View {
             let stroke = StrokeStyle(lineWidth: max(1, w * 0.055), lineCap: .round)
 
             ZStack {
-                if frame == 1 {
+                if isStale {
+                    StaleXEyes(w: w, h: h, stroke: stroke)
+                } else if frame == 1 {
                     // Blink: thin horizontal lines for eyes
                     Path { path in
                         path.move(to: CGPoint(x: w * 0.14, y: eyeY))
@@ -383,6 +461,7 @@ private struct WaitingFace: View {
 
 private struct PermissionFace: View {
     let frame: Int
+    var isStale: Bool = false
 
     var body: some View {
         GeometryReader { geo in
@@ -409,6 +488,9 @@ private struct PermissionFace: View {
                 }
                 .stroke(.black, style: browStroke)
 
+                if isStale {
+                    StaleXEyes(w: w, h: h, stroke: browStroke)
+                } else {
                 // Eyes
                 Circle()
                     .fill(.black)
@@ -419,6 +501,7 @@ private struct PermissionFace: View {
                     .fill(.black)
                     .frame(width: eyeR * 2, height: eyeR * 2)
                     .position(x: w * 0.72, y: h * 0.44)
+                } // end !isStale
 
                 // Mouth — always an Ellipse to preserve view identity during bounce
                 Ellipse()
@@ -437,6 +520,7 @@ private struct PermissionFace: View {
 
 private struct WorkingFace: View {
     let frame: Int
+    var isStale: Bool = false
 
     var body: some View {
         GeometryReader { geo in
@@ -455,6 +539,9 @@ private struct WorkingFace: View {
             }()
 
             ZStack {
+                if isStale {
+                    StaleXEyes(w: w, h: h, stroke: stroke)
+                } else {
                 // Left dot eye
                 Circle()
                     .fill(.black)
@@ -466,6 +553,7 @@ private struct WorkingFace: View {
                     .fill(.black)
                     .frame(width: eyeR * 2, height: eyeR * 2)
                     .position(x: w * 0.72 + eyeShift, y: h * 0.30)
+                } // end !isStale
 
                 if frame == 3 {
                     // Thinking mouth: three dots

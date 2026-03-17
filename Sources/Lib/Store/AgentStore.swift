@@ -5,6 +5,8 @@ import SwiftUI
 final class AgentStore: ObservableObject {
     @Published var agents: [Agent] = []
     @Published var snoozedSessionIds: Set<String> = []
+    /// Parent session ID → child session IDs (sub-agents linked by PID ancestry)
+    @Published var childSessionIds: [String: [String]] = [:]
 
     /// Tracks the last-seen status per session so we can unsnooze on change.
     private var lastSeenStatus: [String: AgentStatus] = [:]
@@ -16,10 +18,30 @@ final class AgentStore: ObservableObject {
     private let fileManager = FileManager.default
     private let isProcessAlive: (Int) -> Bool
 
+    /// All session IDs that are children of another agent.
+    private var subAgentIds: Set<String> {
+        Set(childSessionIds.values.flatMap { $0 })
+    }
+
     var collapsedAgents: [Agent] {
-        agents.filter {
-            (showAllAgents || $0.status.visibleWhenCollapsed) && !snoozedSessionIds.contains($0.sessionId)
+        let subs = subAgentIds
+        return agents.filter {
+            (showAllAgents || $0.status.visibleWhenCollapsed)
+                && !snoozedSessionIds.contains($0.sessionId)
+                && !subs.contains($0.sessionId)
         }
+    }
+
+    /// Top-level agents for expanded view (excludes sub-agents).
+    var topLevelAgents: [Agent] {
+        let subs = subAgentIds
+        return agents.filter { !subs.contains($0.sessionId) }
+    }
+
+    /// Returns child Agent objects for a given parent session ID.
+    func children(of sessionId: String) -> [Agent] {
+        guard let ids = childSessionIds[sessionId] else { return [] }
+        return ids.compactMap { id in agents.first { $0.sessionId == id } }
     }
 
     func snooze(_ agent: Agent) {
@@ -151,9 +173,24 @@ final class AgentStore: ObservableObject {
         snoozedSessionIds = snoozedSessionIds.intersection(activeIds)
         ntfyScheduler?.cleanupGone(activeIds: activeIds)
 
-        if loaded != agents {
+        // Build parent-child relationships via PID ancestry
+        var newChildren: [String: [String]] = [:]
+        let pidToSession = Dictionary(loaded.map { ($0.pid, $0.sessionId) }, uniquingKeysWith: { a, _ in a })
+        for agent in loaded where agent.agentType != nil {
+            if let parentPid = ProcessTree.findAncestor(of: Int32(agent.pid), where: { candidate in
+                let candidateId = pidToSession[Int(candidate)]
+                return candidateId != nil && candidateId != agent.sessionId
+            }) {
+                if let parentId = pidToSession[Int(parentPid)] {
+                    newChildren[parentId, default: []].append(agent.sessionId)
+                }
+            }
+        }
+
+        if loaded != agents || newChildren != childSessionIds {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                 agents = loaded
+                childSessionIds = newChildren
             }
         }
     }

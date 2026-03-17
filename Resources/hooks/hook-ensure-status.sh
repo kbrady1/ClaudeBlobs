@@ -1,6 +1,22 @@
 #!/bin/bash
 # Shared helper: recreates the status file if it was cleaned up.
 # Expects STATUS_FILE, SESSION_ID, and INPUT to be set by the caller.
+# Also provides atomic_update for safe concurrent writes.
+
+# Atomically update a JSON file using jq. Uses a unique temp file per
+# invocation to avoid races when multiple hooks fire simultaneously.
+# Usage: atomic_update "$STATUS_FILE" jq-args... filter
+atomic_update() {
+  local target="$1"; shift
+  local tmp
+  tmp=$(mktemp "${target}.XXXXXX") || return 1
+  if jq "$@" "$target" > "$tmp" 2>/dev/null; then
+    mv "$tmp" "$target"
+  else
+    rm -f "$tmp"
+    return 1
+  fi
+}
 
 # Find the claude process by walking up the process tree.
 find_claude_pid() {
@@ -28,6 +44,8 @@ ensure_status_file() {
   local CMUX_WS="${CMUX_WORKSPACE_ID:-}"
   local CMUX_SF="${CMUX_SURFACE_ID:-}"
   local CMUX_SOCK="${CMUX_SOCKET_PATH:-}"
+  local tmp
+  tmp=$(mktemp "${STATUS_FILE}.XXXXXX") || return 1
 
   jq -n \
     --arg sid "$SESSION_ID" \
@@ -51,5 +69,5 @@ ensure_status_file() {
       cmuxSocketPath: (if $cmuxSock == "" then null else $cmuxSock end),
       createdAt: $ts,
       updatedAt: $ts
-    }' > "$STATUS_FILE.tmp" && mv "$STATUS_FILE.tmp" "$STATUS_FILE"
+    }' > "$tmp" && mv "$tmp" "$STATUS_FILE" || rm -f "$tmp"
 }

@@ -25,10 +25,9 @@ else
   WAIT_REASON="done"
 fi
 
-jq \
+atomic_update "$STATUS_FILE" \
   --arg status "waiting" \
   --arg lastMessage "$FIRST_SENTENCE" \
   --arg waitReason "$WAIT_REASON" \
   --argjson ts "$TS" \
-  '.status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .waitReason = $waitReason | .updatedAt = $ts' \
-  "$STATUS_FILE" > "$STATUS_FILE.tmp" && mv "$STATUS_FILE.tmp" "$STATUS_FILE"
+  '.status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .waitReason = $waitReason | .updatedAt = $ts'

@@ -9,10 +9,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/hook-ensure-status.sh"
 ensure_status_file
 
+CURRENT_STATUS=$(jq -r '.status // empty' "$STATUS_FILE" 2>/dev/null)
 TS=$(date +%s000)
 
-jq \
-  --arg status "working" \
-  --argjson ts "$TS" \
-  '.status = $status | .updatedAt = $ts' \
-  "$STATUS_FILE" > "$STATUS_FILE.tmp" && mv "$STATUS_FILE.tmp" "$STATUS_FILE"
+# Don't overwrite permission status — notifications often fire right after permission requests
+if [ "$CURRENT_STATUS" != "permission" ]; then
+  atomic_update "$STATUS_FILE" \
+    --arg status "working" \
+    --argjson ts "$TS" \
+    '.status = $status | .updatedAt = $ts'
+fi

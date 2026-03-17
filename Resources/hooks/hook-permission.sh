@@ -19,9 +19,8 @@ else
   TOOL_USE_STR="$TOOL_NAME"
 fi
 
-jq \
+atomic_update "$STATUS_FILE" \
   --arg status "permission" \
   --arg toolUse "$TOOL_USE_STR" \
   --argjson ts "$TS" \
-  '.status = $status | .lastToolUse = $toolUse | .updatedAt = $ts' \
-  "$STATUS_FILE" > "$STATUS_FILE.tmp" && mv "$STATUS_FILE.tmp" "$STATUS_FILE"
+  '.status = $status | .lastToolUse = $toolUse | .updatedAt = $ts'

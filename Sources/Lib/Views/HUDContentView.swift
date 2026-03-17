@@ -47,6 +47,14 @@ struct HUDContentView: View {
         isHoverExpanded || expansionState.isKeyboardExpanded
     }
 
+    private var resolvedChildren: [String: [Agent]] {
+        var result: [String: [Agent]] = [:]
+        for (parentId, childIds) in store.childSessionIds {
+            result[parentId] = childIds.compactMap { id in store.agents.first { $0.sessionId == id } }
+        }
+        return result
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             content
@@ -82,9 +90,10 @@ struct HUDContentView: View {
     private var content: some View {
         if isExpanded {
             ExpandedView(
-                agents: store.agents,
+                agents: store.topLevelAgents,
                 snoozedIds: store.snoozedSessionIds,
                 notifiedIds: ntfyScheduler.notifiedSessionIds,
+                childAgents: resolvedChildren,
                 selectedIndex: expansionState.isKeyboardExpanded ? expansionState.selectedIndex : nil,
                 onAgentClick: { agent in
                     onAgentClick(agent)
@@ -95,8 +104,13 @@ struct HUDContentView: View {
             )
             .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
         } else {
-            CollapsedView(agents: store.collapsedAgents, newAgentIds: newAgentIds, notifiedIds: ntfyScheduler.notifiedSessionIds)
-                .transition(.opacity.combined(with: .scale(scale: 1.05, anchor: .top)))
+            CollapsedView(
+                agents: store.collapsedAgents,
+                newAgentIds: newAgentIds,
+                notifiedIds: ntfyScheduler.notifiedSessionIds,
+                childAgents: resolvedChildren
+            )
+            .transition(.opacity.combined(with: .scale(scale: 1.05, anchor: .top)))
         }
     }
 }

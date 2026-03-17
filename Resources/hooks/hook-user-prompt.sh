@@ -11,8 +11,7 @@ ensure_status_file
 
 TS=$(date +%s000)
 
-jq \
+atomic_update "$STATUS_FILE" \
   --arg status "working" \
   --argjson ts "$TS" \
-  '.status = $status | .lastMessage = null | .updatedAt = $ts' \
-  "$STATUS_FILE" > "$STATUS_FILE.tmp" && mv "$STATUS_FILE.tmp" "$STATUS_FILE"
+  '.status = $status | .lastMessage = null | .updatedAt = $ts'

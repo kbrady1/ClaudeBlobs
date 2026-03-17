@@ -4,12 +4,23 @@ struct CollapsedView: View {
     let agents: [Agent]
     let newAgentIds: Set<String>
     var notifiedIds: Set<String> = []
+    /// Resolved children per agent session ID, for deriving effective isCoding.
+    var childAgents: [String: [Agent]] = [:]
 
     var body: some View {
         HStack(spacing: 8) {
             ForEach(agents.prefix(10)) { agent in
                 WavingEntrance(shouldWave: newAgentIds.contains(agent.id)) {
-                    AgentSpriteView(status: agent.status, size: 18, isCoding: agent.isCoding, isDone: agent.isDone, hasNotified: notifiedIds.contains(agent.id))
+                    AgentSpriteView(
+                        status: agent.status,
+                        size: 18,
+                        isCoding: effectiveIsCoding(agent),
+                        isSearching: effectiveIsSearching(agent),
+                        isDone: agent.isDone,
+                        hasNotified: notifiedIds.contains(agent.id),
+                        staleness: agent.staleness,
+                        isPlanApproval: agent.isPlanApproval
+                    )
                 }
                 .transition(
                     .asymmetric(
@@ -27,6 +38,20 @@ struct CollapsedView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 2)
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: agents.map(\.id))
+    }
+
+    /// Parent's own isCoding takes precedence; otherwise derive from children.
+    private func effectiveIsCoding(_ agent: Agent) -> Bool {
+        if agent.isCoding { return true }
+        guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
+        return kids.contains { $0.isCoding }
+    }
+
+    /// Parent's own isSearching takes precedence; otherwise derive from children.
+    private func effectiveIsSearching(_ agent: Agent) -> Bool {
+        if agent.isSearching { return true }
+        guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
+        return kids.contains { $0.isSearching }
     }
 }
 

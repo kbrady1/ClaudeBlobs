@@ -1,5 +1,18 @@
 import Foundation
 
+enum AgentStaleness: Sendable, Equatable {
+    case active
+    case stale   // >20 min since last update
+    case hung    // >1 hr since last update
+
+    init(updatedAt: Int64) {
+        let ageSeconds = (Int64(Date().timeIntervalSince1970 * 1000) - updatedAt) / 1000
+        if ageSeconds > 3600 { self = .hung }
+        else if ageSeconds > 1200 { self = .stale }
+        else { self = .active }
+    }
+}
+
 struct Agent: Codable, Identifiable, Equatable, Sendable {
     let sessionId: String
     let pid: Int
@@ -27,6 +40,13 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         return codingPrefixes.contains { tool.hasPrefix($0) }
     }
 
+    /// Whether the last tool use was a web tool (WebSearch, WebFetch).
+    var isSearching: Bool {
+        guard let tool = lastToolUse else { return false }
+        let webPrefixes = ["WebSearch", "WebFetch"]
+        return webPrefixes.contains { tool.hasPrefix($0) }
+    }
+
     var directoryLabel: String {
         if let agentType { return agentType }
         guard let cwd else { return "APP" }
@@ -51,6 +71,16 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
 
     var isCmuxSession: Bool {
         cmuxWorkspace != nil && cmuxSurface != nil
+    }
+
+    var staleness: AgentStaleness {
+        AgentStaleness(updatedAt: updatedAt)
+    }
+
+    /// Whether this is a plan approval permission (ExitPlanMode) vs a dangerous tool permission.
+    var isPlanApproval: Bool {
+        guard let tool = lastToolUse else { return false }
+        return tool.hasPrefix("ExitPlanMode")
     }
 }
 

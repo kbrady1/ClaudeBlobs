@@ -37,14 +37,16 @@ struct HookInstaller {
             let command = "\(hooksDir)/\(fileName)"
             var eventHooks = hooks[event] as? [[String: Any]] ?? []
 
-            // Check if already installed (in correct matcher+hooks format)
-            let alreadyInstalled = eventHooks.contains { entry in
+            // Remove any existing ClaudeAgentHUD hooks for this event (from any build path)
+            eventHooks.removeAll { entry in
                 guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
-                return innerHooks.contains { ($0["command"] as? String) == command }
+                return innerHooks.contains { cmd in
+                    guard let c = cmd["command"] as? String else { return false }
+                    return c.hasSuffix("/\(fileName)") && c.contains("ClaudeAgentHUD")
+                }
             }
-            if alreadyInstalled { continue }
 
-            // Claude Code hooks format: each entry needs matcher + hooks array
+            // Add the hook with the current path
             eventHooks.append([
                 "matcher": "",
                 "hooks": [["type": "command", "command": command]]
@@ -62,18 +64,18 @@ struct HookInstaller {
 
         for event in Self.hookEvents {
             guard var eventHooks = hooks[event] as? [[String: Any]] else { continue }
-            // Remove entries in correct matcher+hooks format
+            // Remove entries from any ClaudeAgentHUD build path
             eventHooks.removeAll { entry in
                 guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
                 return innerHooks.contains { cmd in
                     guard let command = cmd["command"] as? String else { return false }
-                    return command.hasPrefix(hooksDir)
+                    return command.contains("ClaudeAgentHUD")
                 }
             }
             // Also clean up any old-format entries (bare command at top level)
             eventHooks.removeAll { entry in
                 guard let cmd = entry["command"] as? String, entry["matcher"] == nil else { return false }
-                return cmd.hasPrefix(hooksDir)
+                return cmd.contains("ClaudeAgentHUD")
             }
             if eventHooks.isEmpty {
                 hooks.removeValue(forKey: event)
