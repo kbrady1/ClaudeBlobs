@@ -8,6 +8,10 @@ A macOS menu bar app that monitors your running Claude Code agent sessions and l
 
 ClaudeBlobs watches for active Claude Code agent sessions and displays them as animated sprite faces floating at the top of your screen. Each face reflects what the agent is doing — working, waiting for input, or asking for permission — so you can keep tabs on multiple agents at a glance.
 
+<img width="437" height="45" alt="Screenshot 2026-03-16 at 9 31 42 PM" src="https://github.com/user-attachments/assets/1212d969-41b6-43d5-9562-87e0141ffd79" />
+
+<img width="384" height="116" alt="Screenshot 2026-03-16 at 9 31 51 PM" src="https://github.com/user-attachments/assets/e2e3ced6-de39-497f-a2db-079e3a6b5e99" />
+
 Click a face or use the keyboard picker to deep-link straight back to the terminal, cmux workspace, or Claude Desktop session that spawned it.
 
 ## Features
