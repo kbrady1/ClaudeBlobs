@@ -12,8 +12,6 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var ntfyScheduler: NtfyScheduler!
     private var statusItem: NSStatusItem!
     private var debugMenuItem: NSMenuItem!
-    private var hideMenuItem: NSMenuItem!
-    private var showAllMenuItem: NSMenuItem!
     private var ntfyMenuItem: NSMenuItem!
     private var settingsWindow: NSWindow?
     private var hotkeyWindow: NSWindow?
@@ -21,7 +19,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyMenuItem: NSMenuItem!
     private var eventHandlerInstalled = false
     private var cancellables = Set<AnyCancellable>()
-    private var isHidden = false
+    private var hideWhileCollapsedMenuItem: NSMenuItem!
+    private var hideWorkingMenuItem: NSMenuItem!
     private var hotkeyRef: EventHotKeyRef?
     private var globalHotkeyMonitor: Any?
     private var localKeyMonitor: Any?
@@ -55,12 +54,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        // Show/hide based on agent count (respecting hidden state)
+        // Show/hide based on agent count
         store.$agents
             .receive(on: DispatchQueue.main)
             .sink { [weak self] agents in
                 guard let self else { return }
-                if agents.isEmpty || self.isHidden {
+                if agents.isEmpty {
                     self.panel.orderOut(nil)
                 } else {
                     self.panel.orderFront(nil)
@@ -76,18 +75,19 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
 
-        hideMenuItem = NSMenuItem(title: "Hide Agents", action: #selector(toggleHide), keyEquivalent: "h")
-        hideMenuItem.target = self
-        menu.addItem(hideMenuItem)
+        hideWhileCollapsedMenuItem = NSMenuItem(title: "Hide While Collapsed", action: #selector(toggleHideWhileCollapsed), keyEquivalent: "h")
+        hideWhileCollapsedMenuItem.target = self
+        hideWhileCollapsedMenuItem.state = store.hideWhileCollapsed ? .on : .off
+        menu.addItem(hideWhileCollapsedMenuItem)
 
-        showAllMenuItem = NSMenuItem(title: "Show All Agents", action: #selector(toggleShowAll), keyEquivalent: "a")
-        showAllMenuItem.target = self
-        showAllMenuItem.state = store.showAllAgents ? .on : .off
-        menu.addItem(showAllMenuItem)
+        hideWorkingMenuItem = NSMenuItem(title: "Hide Working Agents", action: #selector(toggleHideWorking), keyEquivalent: "a")
+        hideWorkingMenuItem.target = self
+        hideWorkingMenuItem.state = store.hideWorkingAgents ? .on : .off
+        menu.addItem(hideWorkingMenuItem)
 
-        let dismissAllItem = NSMenuItem(title: "Dismiss All Agents", action: #selector(dismissAllAgents), keyEquivalent: "")
-        dismissAllItem.target = self
-        menu.addItem(dismissAllItem)
+        let clearAgentsItem = NSMenuItem(title: "Clear Agents", action: #selector(clearAgents), keyEquivalent: "")
+        clearAgentsItem.target = self
+        menu.addItem(clearAgentsItem)
 
         menu.addItem(.separator())
 
@@ -143,7 +143,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         // First launch: confirm and install hooks
         if !UserDefaults.standard.bool(forKey: "hooksInstalled") {
             let confirm = NSAlert()
-            confirm.messageText = "Set up Claude Agent HUD?"
+            confirm.messageText = "Set up Claudblobs?"
             confirm.informativeText = "This will install hooks into your Claude Code settings to track agent status. You can uninstall later from the menu bar icon."
             confirm.addButton(withTitle: "Continue")
             confirm.addButton(withTitle: "Quit")
@@ -233,7 +233,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         if expansionState.isKeyboardExpanded {
             closePicker()
         } else {
-            guard !store.agents.isEmpty, !isHidden else { return }
+            guard !store.agents.isEmpty else { return }
             // Remember the currently focused app so we can restore it
             previousApp = NSWorkspace.shared.frontmostApplication
             panel.orderFront(nil)
@@ -254,7 +254,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     @discardableResult
     private func handlePickerKeyEvent(_ event: NSEvent) -> Bool {
         guard expansionState.isKeyboardExpanded else { return false }
-        let agentCount = min(store.agents.count, 9)
+        let agentCount = min(store.sortedTopLevelAgents.count, 9)
 
         // Escape — close picker
         if event.keyCode == 53 {
@@ -293,7 +293,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         // Enter — open selected agent
         if event.keyCode == 36 {
             let index = expansionState.selectedIndex
-            let agents = store.agents
+            let agents = store.sortedTopLevelAgents
             if index < agents.count {
                 DispatchQueue.main.async {
                     DebugLog.shared.log("Hotkey select agent \(index): \(agents[index].sessionId)")
@@ -307,7 +307,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         // Delete/Backspace — snooze or dismiss selected agent
         if event.keyCode == 51 {
             let index = expansionState.selectedIndex
-            let agents = store.agents
+            let agents = store.sortedTopLevelAgents
             if index < agents.count {
                 let agent = agents[index]
                 DispatchQueue.main.async {
@@ -385,23 +385,18 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyWindow = window
     }
 
-    @objc private func toggleHide() {
-        isHidden.toggle()
-        hideMenuItem.title = isHidden ? "Show Agents" : "Hide Agents"
-        if isHidden {
-            panel.orderOut(nil)
-        } else if !store.agents.isEmpty {
-            panel.orderFront(nil)
-        }
+    @objc private func toggleHideWhileCollapsed() {
+        store.hideWhileCollapsed.toggle()
+        hideWhileCollapsedMenuItem.state = store.hideWhileCollapsed ? .on : .off
     }
 
-    @objc private func dismissAllAgents() {
+    @objc private func clearAgents() {
         store.dismissAll()
     }
 
-    @objc private func toggleShowAll() {
-        store.showAllAgents.toggle()
-        showAllMenuItem.state = store.showAllAgents ? .on : .off
+    @objc private func toggleHideWorking() {
+        store.hideWorkingAgents.toggle()
+        hideWorkingMenuItem.state = store.hideWorkingAgents ? .on : .off
     }
 
     @objc private func toggleDebug() {
@@ -411,7 +406,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openDebugLog() {
-        let logPath = "/tmp/claude-agent-hud-debug.log"
+        let logPath = NSHomeDirectory() + "/Library/Logs/Claudblobs/debug.log"
         if FileManager.default.fileExists(atPath: logPath) {
             NSWorkspace.shared.open(URL(fileURLWithPath: logPath))
         } else {
@@ -442,7 +437,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func uninstallAndQuit() {
         let alert = NSAlert()
-        alert.messageText = "Uninstall Claude Agent HUD?"
+        alert.messageText = "Uninstall Claudblobs?"
         alert.informativeText = "This will remove hooks from Claude Code settings and delete status files."
         alert.addButton(withTitle: "Uninstall & Quit")
         alert.addButton(withTitle: "Cancel")

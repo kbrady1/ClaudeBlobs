@@ -1,4 +1,4 @@
-# Claude Agent HUD
+# Claudblobs
 
 macOS menu bar app that monitors Claude agent sessions and provides deep-linking back to their source (cmux, terminal, or Claude Desktop).
 

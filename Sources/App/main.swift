@@ -1,5 +1,5 @@
 import AppKit
-import ClaudeAgentHUDLib
+import ClaudblobsLib
 
 let app = NSApplication.shared
 let delegate = AppDelegate()

@@ -55,6 +55,8 @@ struct HUDContentView: View {
         return result
     }
 
+
+
     var body: some View {
         VStack(spacing: 0) {
             content
@@ -90,7 +92,7 @@ struct HUDContentView: View {
     private var content: some View {
         if isExpanded {
             ExpandedView(
-                agents: store.topLevelAgents,
+                agents: store.sortedTopLevelAgents,
                 snoozedIds: store.snoozedSessionIds,
                 notifiedIds: ntfyScheduler.notifiedSessionIds,
                 childAgents: resolvedChildren,
@@ -108,7 +110,9 @@ struct HUDContentView: View {
                 agents: store.collapsedAgents,
                 newAgentIds: newAgentIds,
                 notifiedIds: ntfyScheduler.notifiedSessionIds,
-                childAgents: resolvedChildren
+                childAgents: resolvedChildren,
+                hideWhileCollapsed: store.hideWhileCollapsed,
+                peekingIds: store.peekingIds
             )
             .transition(.opacity.combined(with: .scale(scale: 1.05, anchor: .top)))
         }

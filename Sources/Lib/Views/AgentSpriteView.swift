@@ -11,6 +11,7 @@ struct AgentSpriteView: View {
     var hasNotified: Bool = false
     var staleness: AgentStaleness = .active
     var isPlanApproval: Bool = false
+    var isAskingQuestion: Bool = false
     var isTaskJustCompleted: Bool = false
 
     @State private var animationPhase: CGFloat = 0
@@ -42,6 +43,15 @@ struct AgentSpriteView: View {
                     .offset(x: size * 0.35, y: size * 0.35)
             }
 
+            // Question bubble accent
+            if !isSnoozed && status == .permission && isAskingQuestion {
+                Image(systemName: "questionmark.bubble.fill")
+                    .font(.system(size: accentFont, weight: .heavy))
+                    .foregroundColor(.white)
+                    .shadow(color: .black, radius: 2)
+                    .offset(x: size * 0.35, y: size * 0.35)
+            }
+
             // Purple notification badge
             if hasNotified {
                 Circle()
@@ -57,7 +67,6 @@ struct AgentSpriteView: View {
         )
         .animation(.spring(response: 0.4, dampingFraction: 0.5), value: status == .compacting)
         .offset(y: animationOffset)
-        .animation(bounceAnimation, value: animationPhase)
         .onAppear {
             startBounceTimer()
             startExpressionTimer()
@@ -101,6 +110,9 @@ struct AgentSpriteView: View {
         if status == .permission && isPlanApproval {
             return Color.orange
         }
+        if status == .permission && isAskingQuestion {
+            return Color.orange
+        }
         return status.color
     }
 
@@ -122,7 +134,7 @@ struct AgentSpriteView: View {
                     WaitingFace(frame: expressionFrame, isStale: isStale)
                 }
             case .permission:
-                if isPlanApproval {
+                if isPlanApproval || isAskingQuestion {
                     WaitingFace(frame: expressionFrame, isStale: isStale)
                 } else {
                     PermissionFace(frame: expressionFrame, isStale: isStale)
@@ -195,15 +207,22 @@ struct AgentSpriteView: View {
         let duration = bounceDuration
         guard duration > 0 else {
             // One-shot: just set to 0 (starting, done)
-            animationPhase = 0
+            withAnimation(.easeOut(duration: 0.5)) {
+                animationPhase = 0
+            }
             return
         }
+        let anim = bounceAnimation
         // Kick off immediately — oscillate between -1 and 1 to bob above and below center
-        animationPhase = animationPhase <= 0 ? 1 : -1
+        withAnimation(anim) {
+            animationPhase = animationPhase <= 0 ? 1 : -1
+        }
         bounceTimer = Timer.publish(every: duration, on: .main, in: .common)
             .autoconnect()
             .sink { [self] _ in
-                animationPhase = animationPhase <= 0 ? 1 : -1
+                withAnimation(anim) {
+                    animationPhase = animationPhase <= 0 ? 1 : -1
+                }
             }
     }
 

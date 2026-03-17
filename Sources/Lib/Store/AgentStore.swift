@@ -10,6 +10,7 @@ final class AgentStore: ObservableObject {
 
     /// Tracks the last-seen status per session so we can unsnooze on change.
     private var lastSeenStatus: [String: AgentStatus] = [:]
+    private var peekTimer: DispatchWorkItem?
 
     var ntfyScheduler: NtfyScheduler?
 
@@ -26,7 +27,7 @@ final class AgentStore: ObservableObject {
     var collapsedAgents: [Agent] {
         let subs = subAgentIds
         return agents.filter {
-            (showAllAgents || $0.status.visibleWhenCollapsed)
+            (!hideWorkingAgents || $0.status.visibleWhenCollapsed)
                 && !snoozedSessionIds.contains($0.sessionId)
                 && !subs.contains($0.sessionId)
         }
@@ -36,6 +37,17 @@ final class AgentStore: ObservableObject {
     var topLevelAgents: [Agent] {
         let subs = subAgentIds
         return agents.filter { !subs.contains($0.sessionId) }
+    }
+
+    /// Top-level agents sorted with snoozed ones at the end.
+    var sortedTopLevelAgents: [Agent] {
+        let snoozed = snoozedSessionIds
+        return topLevelAgents.sorted { a, b in
+            let aSnooze = snoozed.contains(a.sessionId)
+            let bSnooze = snoozed.contains(b.sessionId)
+            if aSnooze != bSnooze { return !aSnooze }
+            return false
+        }
     }
 
     /// Returns child Agent objects for a given parent session ID.
@@ -63,9 +75,16 @@ final class AgentStore: ObservableObject {
         }
     }
 
-    @Published var showAllAgents: Bool = UserDefaults.standard.bool(forKey: "showAllAgents") {
-        didSet { UserDefaults.standard.set(showAllAgents, forKey: "showAllAgents") }
+    @Published var hideWorkingAgents: Bool = UserDefaults.standard.bool(forKey: "hideWorkingAgents") {
+        didSet { UserDefaults.standard.set(hideWorkingAgents, forKey: "hideWorkingAgents") }
     }
+
+    @Published var hideWhileCollapsed: Bool = UserDefaults.standard.bool(forKey: "hideWhileCollapsed") {
+        didSet { UserDefaults.standard.set(hideWhileCollapsed, forKey: "hideWhileCollapsed") }
+    }
+
+    @Published var isPeeking: Bool = false
+    @Published var peekingIds: Set<String> = []
 
     var hasAgents: Bool { !agents.isEmpty }
     var hasActionableAgents: Bool { !collapsedAgents.isEmpty }
@@ -147,12 +166,19 @@ final class AgentStore: ObservableObject {
         // Sort by age: oldest agents first (stable left-to-right order)
         loaded.sort { ($0.createdAt ?? $0.updatedAt) < ($1.createdAt ?? $1.updatedAt) }
 
-        // Unsnooze agents whose status changed
+        // Unsnooze agents whose status changed and trigger peek
+        var changedIds: Set<String> = []
         for agent in loaded {
             if let previous = lastSeenStatus[agent.sessionId], previous != agent.status {
                 snoozedSessionIds.remove(agent.sessionId)
+                changedIds.insert(agent.sessionId)
             }
             lastSeenStatus[agent.sessionId] = agent.status
+        }
+
+        // Pop in briefly when status changes and hideWhileCollapsed is on
+        if !changedIds.isEmpty && hideWhileCollapsed {
+            triggerPeek(for: changedIds)
         }
 
         // Schedule or cancel notifications based on agent state
@@ -187,6 +213,20 @@ final class AgentStore: ObservableObject {
                 childSessionIds = newChildren
             }
         }
+    }
+
+    func triggerPeek(for ids: Set<String>? = nil) {
+        peekTimer?.cancel()
+        isPeeking = true
+        if let ids {
+            peekingIds.formUnion(ids)
+        }
+        let item = DispatchWorkItem { [weak self] in
+            self?.isPeeking = false
+            self?.peekingIds = []
+        }
+        peekTimer = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: item)
     }
 
     deinit { watcher?.stop() }

@@ -46,6 +46,7 @@ ensure_status_file() {
   local CMUX_SOCK="${CMUX_SOCKET_PATH:-}"
   local tmp
   tmp=$(mktemp "${STATUS_FILE}.XXXXXX") || return 1
+  chmod 600 "$tmp"
 
   jq -n \
     --arg sid "$SESSION_ID" \

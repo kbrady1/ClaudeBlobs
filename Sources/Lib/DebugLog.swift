@@ -2,7 +2,11 @@ import Foundation
 
 final class DebugLog {
     static let shared = DebugLog()
-    private let logPath = "/tmp/claude-agent-hud-debug.log"
+    private let logPath: String = {
+        let dir = NSHomeDirectory() + "/Library/Logs/Claudblobs"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        return dir + "/debug.log"
+    }()
 
     var isEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: "debugMode") }

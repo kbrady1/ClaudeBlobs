@@ -3,6 +3,7 @@ INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 STATUS_DIR="$HOME/.claude/agent-status"
 mkdir -p "$STATUS_DIR"
+chmod 700 "$STATUS_DIR"
 STATUS_FILE="$STATUS_DIR/$SESSION_ID.json"
 
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
@@ -14,6 +15,7 @@ CMUX_SF="${CMUX_SURFACE_ID:-}"
 CMUX_SOCK="${CMUX_SOCKET_PATH:-}"
 
 TMP=$(mktemp "${STATUS_FILE}.XXXXXX") || exit 1
+chmod 600 "$TMP"
 
 jq -n \
   --arg sid "$SESSION_ID" \

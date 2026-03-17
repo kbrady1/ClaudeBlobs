@@ -6,10 +6,13 @@ struct CollapsedView: View {
     var notifiedIds: Set<String> = []
     /// Resolved children per agent session ID, for deriving effective isCoding.
     var childAgents: [String: [Agent]] = [:]
+    var hideWhileCollapsed: Bool = false
+    var peekingIds: Set<String> = []
 
     var body: some View {
         HStack(spacing: 8) {
             ForEach(agents.prefix(10)) { agent in
+                let isHidden = hideWhileCollapsed && !peekingIds.contains(agent.id)
                 WavingEntrance(shouldWave: newAgentIds.contains(agent.id)) {
                     AgentSpriteView(
                         status: agent.status,
@@ -20,9 +23,12 @@ struct CollapsedView: View {
                         hasNotified: notifiedIds.contains(agent.id),
                         staleness: agent.staleness,
                         isPlanApproval: agent.isPlanApproval,
+                        isAskingQuestion: agent.isAskingQuestion,
                         isTaskJustCompleted: agent.isTaskJustCompleted
                     )
                 }
+                .opacity(isHidden ? 0 : 1)
+                .animation(.easeInOut(duration: 0.3), value: isHidden)
                 .transition(
                     .asymmetric(
                         insertion: .scale(scale: 0.01).combined(with: .opacity),

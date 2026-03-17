@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.local.ClaudeAgentHUD</string>
+    <string>com.local.Claudblobs</string>
     <key>CFBundleName</key>
-    <string>Claude Agent HUD</string>
+    <string>Claudblobs</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>CFBundleShortVersionString</key>
@@ -15,7 +15,7 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>ClaudeAgentHUD</string>
+    <string>Claudblobs</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
 </dict>

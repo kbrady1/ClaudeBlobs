@@ -52,13 +52,48 @@ struct CmuxLinker {
         }
     }
 
+    private static func validateSocketPath(_ path: String) -> Bool {
+        // Only allow paths that look like legitimate cmux sockets
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        let parent = (path as NSString).deletingLastPathComponent
+        guard fm.fileExists(atPath: parent, isDirectory: &isDir), isDir.boolValue else {
+            DebugLog.shared.log("  socket parent directory does not exist: \(parent)")
+            return false
+        }
+
+        // Verify the socket file is owned by the current user
+        if fm.fileExists(atPath: path) {
+            if let attrs = try? fm.attributesOfItem(atPath: path),
+               let ownerID = attrs[.ownerAccountID] as? NSNumber {
+                let currentUID = getuid()
+                if ownerID.uint32Value != currentUID {
+                    DebugLog.shared.log("  socket owned by uid \(ownerID), expected \(currentUID)")
+                    return false
+                }
+            }
+        }
+
+        return true
+    }
+
     private static func sendRPC(socketPath: String, method: String, params: [String: String]) -> String? {
+        guard validateSocketPath(socketPath) else {
+            DebugLog.shared.log("  rejected socket path: \(socketPath)")
+            return nil
+        }
+
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else {
             DebugLog.shared.log("  socket() failed: \(errno)")
             return nil
         }
         defer { close(fd) }
+
+        // Set a 5-second timeout on read/write to prevent hanging on unresponsive sockets
+        var timeout = timeval(tv_sec: 5, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)

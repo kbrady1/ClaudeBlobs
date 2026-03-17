@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import ClaudeAgentHUDLib
+@testable import ClaudblobsLib
 
 @Suite("AgentStore")
 struct AgentStoreTests {
@@ -34,10 +34,14 @@ struct AgentStoreTests {
         }
 
         let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.hideWorkingAgents = false
         store.reload()
 
-        #expect(store.collapsedAgents.count == 2) // waiting + permission
+        #expect(store.collapsedAgents.count == 3) // all agents visible by default
         #expect(store.agents.count == 3)
+
+        store.hideWorkingAgents = true
+        #expect(store.collapsedAgents.count == 2) // waiting + permission only
     }
 
     @Test func handlesCorruptedFiles() throws {

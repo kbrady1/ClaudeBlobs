@@ -92,6 +92,12 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         guard let tool = lastToolUse else { return false }
         return tool.hasPrefix("ExitPlanMode")
     }
+
+    /// Whether this is an AskUserQuestion permission (question bubble).
+    var isAskingQuestion: Bool {
+        guard let tool = lastToolUse else { return false }
+        return tool.hasPrefix("AskUserQuestion")
+    }
 }
 
 extension Agent {
