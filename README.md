@@ -61,9 +61,11 @@ Priority: testing > MCP > coding > web search > exploring > default.
 
 ### Deep Linking
 Clicking an agent routes you back to its source automatically:
-- **cmux** — sends RPC to select the workspace and surface
+- **cmux** — sends RPC to select the workspace and surface, then switches to the correct terminal tab
 - **Terminal apps** — activates the parent terminal (iTerm2, Kitty, Terminal, Warp, WezTerm, Ghostty, Hyper)
 - **Claude Desktop** — activates the desktop app
+
+**Tab-level switching** is supported for **cmux**, **iTerm2**, and **Terminal.app**. When an agent runs in one of these terminals, ClaudeBlobs uses the agent's TTY to find and select the exact tab via AppleScript. Other terminals fall back to activating the app window. On first use, macOS will prompt you to grant ClaudeBlobs Automation permission for the terminal app.
 
 ### Keyboard Navigation
 - **Ctrl+Option+A** — global hotkey to open the agent picker (customizable)
