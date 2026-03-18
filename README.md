@@ -95,11 +95,19 @@ make install
 
 This builds the app, bundles it, and copies it to `/Applications`.
 
-### First Launch
+### Setup
 
-On first launch the app will ask to install hooks into your Claude Code settings (`~/.claude/settings.json`). These hooks write status files to `~/.claude/agent-status/` so the HUD can track agent state.
+On first launch the app will ask to install hooks into your Claude Code settings (`~/.claude/settings.json`). These hooks write status files to `~/.claude/agent-status/` so the HUD can track agent state. The app registers itself as a login item so it starts automatically.
 
-The app registers itself as a login item so it starts automatically.
+**Hooks** — If you later modify your Claude Code settings and lose the hooks, use **Reinstall Hooks** from the menu bar.
+
+**Accessibility** — macOS will prompt for Accessibility permission the first time you use keyboard navigation in the agent picker (Tab, arrow keys, number keys). The global hotkey (Ctrl+Option+A) works without it.
+
+**Automation** — The first time you click an agent running in **iTerm2** or **Terminal.app**, macOS will prompt to grant ClaudeBlobs Automation permission for that terminal. This enables tab-level switching via AppleScript. Other terminals fall back to app-level activation.
+
+**cmux** — ClaudeBlobs deep-links to cmux workspaces via JSON-RPC over cmux's Unix socket. For this to work, go to cmux Settings and switch **Socket Control Mode** to **Automation**. Without this, ClaudeBlobs cannot navigate to the specific workspace and will fall back to activating the cmux window.
+
+**Push notifications** — ClaudeBlobs can send push notifications via [ntfy.sh](https://ntfy.sh) when agents need attention. Enable **Push Notifications** from the menu bar, then open **Notification Settings** to configure your ntfy topic, endpoint, delay, and priority levels. See [ntfy.sh](https://ntfy.sh) for details on setting up a topic and optional self-hosting.
 
 ## Build Targets
 
