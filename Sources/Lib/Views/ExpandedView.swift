@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ExpandedView: View {
     let agents: [Agent]
@@ -7,9 +8,11 @@ struct ExpandedView: View {
     var childAgents: [String: [Agent]] = [:]
     let selectedIndex: Int?
     var theme: ColorTheme = .trafficLight
+    var showAppIcons: Bool = true
     let onAgentClick: (Agent) -> Void
     let onSnooze: (Agent) -> Void
     let onDismiss: (Agent) -> Void
+    @Environment(\.notchInset) private var notchInset
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -36,14 +39,7 @@ struct ExpandedView: View {
                 topTrailingRadius: 0
             )
             .fill(Color.black)
-        )
-        .clipShape(
-            UnevenRoundedRectangle(
-                topLeadingRadius: 0,
-                bottomLeadingRadius: 12,
-                bottomTrailingRadius: 12,
-                topTrailingRadius: 0
-            )
+            .padding(.top, -notchInset)
         )
     }
 
@@ -73,6 +69,11 @@ struct ExpandedView: View {
                         isAPIError: agent.isAPIError
                     )
                     .frame(width: 48, height: 44)
+                    .overlay(alignment: .bottomLeading) {
+                        if showAppIcons {
+                            AppIconBadge(pid: agent.pid)
+                        }
+                    }
 
                     // Mini child blobs along the bottom
                     if !kids.isEmpty {
@@ -139,6 +140,26 @@ struct ExpandedView: View {
                 .strokeBorder(Color.white.opacity(isSelected ? 0.6 : 0), lineWidth: 1.5)
         )
         .animation(.easeInOut(duration: 0.15), value: isSelected)
+    }
+}
+
+/// Shows the host app icon (VS Code, Cursor, Claude Desktop) in the bottom-left corner.
+private struct AppIconBadge: View {
+    let icon: NSImage?
+
+    init(pid: Int) {
+        self.icon = HostAppResolver.resolve(pid: pid)?.icon
+    }
+
+    var body: some View {
+        if let icon {
+            Image(nsImage: icon)
+                .resizable()
+                .frame(width: 18, height: 18)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .shadow(color: .black.opacity(0.5), radius: 1)
+                .offset(x: -5, y: 5)
+        }
     }
 }
 

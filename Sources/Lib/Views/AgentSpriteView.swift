@@ -31,6 +31,7 @@ struct AgentSpriteView: View {
     @State private var failureIconTimer: AnyCancellable?
     @State private var showExploringAccent: Bool = false
     @State private var exploringTimer: AnyCancellable?
+    @State private var waveAngle: Double = 0
 
     var body: some View {
         ZStack {
@@ -87,6 +88,7 @@ struct AgentSpriteView: View {
                     .offset(x: size * 0.35, y: -size * 0.35)
             }
         }
+        .rotationEffect(.degrees(waveAngle))
         .saturation(staleness == .hung ? 0 : 1)
         .scaleEffect(
             x: status == .compacting ? 1.3 : 1.0,
@@ -120,8 +122,16 @@ struct AgentSpriteView: View {
             startBounceTimer()
             startExpressionTimer()
         }
-        .onChange(of: status) { _ in
+        .onChange(of: status) { newStatus in
             startBounceTimer()
+            if newStatus == .starting || (newStatus == .waiting && isDone) {
+                playWave()
+            }
+        }
+        .onChange(of: isDone) { done in
+            if done && status == .waiting {
+                playWave()
+            }
         }
         .onChange(of: isTaskJustCompleted) { completed in
             if completed {
@@ -335,6 +345,20 @@ struct AgentSpriteView: View {
                     advanceExpression()
                 }
             }
+    }
+
+    private func playWave() {
+        waveAngle = 0
+        withAnimation(.easeInOut(duration: 0.12)) { waveAngle = 15 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            withAnimation(.easeInOut(duration: 0.12)) { waveAngle = -12 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+            withAnimation(.easeInOut(duration: 0.12)) { waveAngle = 8 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
+            withAnimation(.easeInOut(duration: 0.15)) { waveAngle = 0 }
+        }
     }
 
     private func showFailureIcon(_ icon: String) {

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct CollapsedView: View {
     let agents: [Agent]
@@ -9,6 +10,7 @@ struct CollapsedView: View {
     var hideWhileCollapsed: Bool = false
     var peekingIds: Set<String> = []
     var theme: ColorTheme = .trafficLight
+    var showAppIcons: Bool = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -34,6 +36,11 @@ struct CollapsedView: View {
                         isToolFailure: agent.isToolFailure,
                         isAPIError: agent.isAPIError
                     )
+                    .overlay(alignment: .bottomLeading) {
+                        if showAppIcons {
+                            CollapsedAppIconBadge(pid: agent.pid)
+                        }
+                    }
                 }
                 .opacity(isHidden ? 0 : 1)
                 .animation(.easeInOut(duration: 0.3), value: isHidden)
@@ -114,5 +121,25 @@ private struct WavingEntrance<Content: View>: View {
                     withAnimation(.easeInOut(duration: 0.15)) { waveAngle = 0 }
                 }
             }
+    }
+}
+
+/// Smaller app icon badge for collapsed blobs (10px).
+private struct CollapsedAppIconBadge: View {
+    let icon: NSImage?
+
+    init(pid: Int) {
+        self.icon = HostAppResolver.resolve(pid: pid)?.icon
+    }
+
+    var body: some View {
+        if let icon {
+            Image(nsImage: icon)
+                .resizable()
+                .frame(width: 10, height: 10)
+                .clipShape(RoundedRectangle(cornerRadius: 2))
+                .shadow(color: .black.opacity(0.5), radius: 1)
+                .offset(x: -3, y: 3)
+        }
     }
 }

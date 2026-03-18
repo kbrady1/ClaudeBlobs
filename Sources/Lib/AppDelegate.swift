@@ -5,7 +5,7 @@ import Combine
 import ServiceManagement
 
 public class AppDelegate: NSObject, NSApplicationDelegate {
-    private var panel: HUDPanel!
+    private var panels: [HUDPanel] = []
     private var store: AgentStore!
     private var expansionState: HUDExpansionState!
     private var ntfyConfig: NtfyConfig!
@@ -39,22 +39,19 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         themeConfig = ThemeConfig()
         ntfyScheduler = NtfyScheduler(config: ntfyConfig)
         store.ntfyScheduler = ntfyScheduler
-        panel = HUDPanel()
+        rebuildPanels()
 
-        let contentView = HUDContentView(store: store, expansionState: expansionState, ntfyScheduler: ntfyScheduler, themeConfig: themeConfig) { agent in
-            DebugLog.shared.log("Agent clicked: \(agent.sessionId)")
-            DeepLinker.open(agent)
-        }
+        // Rebuild panels when screen placement preference changes
+        store.$screenPlacement
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.rebuildPanels() }
+            .store(in: &cancellables)
 
-        panel.contentView = NSHostingView(rootView: contentView)
-        panel.positionAtTop()
-
-        // Reposition when monitor arrangement changes (e.g. switching displays)
+        // Rebuild when monitor arrangement changes (e.g. plugging/unplugging displays)
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.panel.positionAtTop()
-            }
+            .sink { [weak self] _ in self?.rebuildPanels() }
             .store(in: &cancellables)
 
         // Show/hide based on agent count
@@ -62,10 +59,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] agents in
                 guard let self else { return }
-                if agents.isEmpty {
-                    self.panel.orderOut(nil)
-                } else {
-                    self.panel.orderFront(nil)
+                for panel in self.panels {
+                    if agents.isEmpty {
+                        panel.orderOut(nil)
+                    } else {
+                        panel.orderFront(nil)
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -88,9 +87,29 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         hideWorkingMenuItem.state = store.hideWorkingAgents ? .on : .off
         menu.addItem(hideWorkingMenuItem)
 
-        let clearAgentsItem = NSMenuItem(title: "Clear Agents", action: #selector(clearAgents), keyEquivalent: "")
-        clearAgentsItem.target = self
-        menu.addItem(clearAgentsItem)
+        let appIconMenu = NSMenu()
+        for option in AppIconVisibility.allCases {
+            let item = NSMenuItem(title: option.menuTitle, action: #selector(setAppIconVisibility(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = option.rawValue
+            item.state = store.appIconVisibility == option ? .on : .off
+            appIconMenu.addItem(item)
+        }
+        let appIconMenuItem = NSMenuItem(title: "Show App Icons", action: nil, keyEquivalent: "")
+        appIconMenuItem.submenu = appIconMenu
+        menu.addItem(appIconMenuItem)
+
+        let screenMenu = NSMenu()
+        for option in ScreenPlacement.allCases {
+            let item = NSMenuItem(title: option.menuTitle, action: #selector(setScreenPlacement(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = option.rawValue
+            item.state = store.screenPlacement == option ? .on : .off
+            screenMenu.addItem(item)
+        }
+        let screenMenuItem = NSMenuItem(title: "Display", action: nil, keyEquivalent: "")
+        screenMenuItem.submenu = screenMenu
+        menu.addItem(screenMenuItem)
 
         menu.addItem(.separator())
 
@@ -245,8 +264,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             guard !store.agents.isEmpty else { return }
             // Remember the currently focused app so we can restore it
             previousApp = NSWorkspace.shared.frontmostApplication
-            panel.orderFront(nil)
-            panel.makeKey()
+            if let keyPanel = panels.first {
+                keyPanel.orderFront(nil)
+                keyPanel.makeKey()
+            }
             NSApp.activate(ignoringOtherApps: true)
             expansionState.toggle(agentCount: store.agents.count)
         }
@@ -257,6 +278,40 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         // Restore focus to the previously active app
         previousApp?.activate()
         previousApp = nil
+    }
+
+    /// Tear down existing panels and create one per target screen.
+    private func rebuildPanels() {
+        for panel in panels { panel.orderOut(nil) }
+        panels.removeAll()
+
+        let contentView = HUDContentView(store: store, expansionState: expansionState, ntfyScheduler: ntfyScheduler, themeConfig: themeConfig) { agent in
+            DebugLog.shared.log("Agent clicked: \(agent.sessionId)")
+            DeepLinker.open(agent)
+        }
+
+        for screen in screensForPlacement() {
+            let panel = HUDPanel()
+            panel.positionAtTop(of: screen)
+            let view = contentView.environment(\.notchInset, panel.notchInset)
+            panel.contentView = NSHostingView(rootView: view)
+            if !store.agents.isEmpty {
+                panel.orderFront(nil)
+            }
+            panels.append(panel)
+        }
+    }
+
+    private func screensForPlacement() -> [NSScreen] {
+        let screens = NSScreen.screens
+        switch store.screenPlacement {
+        case .allDisplays:
+            return screens
+        case .primaryOnly:
+            return screens.first.map { [$0] } ?? []
+        case .allExceptPrimary:
+            return Array(screens.dropFirst())
+        }
     }
 
     /// Handle Tab, Shift+Tab, Enter, and Escape when picker is open. Returns true if handled.
@@ -427,6 +482,29 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleHideWorking() {
         store.hideWorkingAgents.toggle()
         hideWorkingMenuItem.state = store.hideWorkingAgents ? .on : .off
+    }
+
+    @objc private func setAppIconVisibility(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let option = AppIconVisibility(rawValue: raw) else { return }
+        store.appIconVisibility = option
+        // Update checkmarks in the submenu
+        if let submenu = sender.menu {
+            for item in submenu.items {
+                item.state = item.representedObject as? String == raw ? .on : .off
+            }
+        }
+    }
+
+    @objc private func setScreenPlacement(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let option = ScreenPlacement(rawValue: raw) else { return }
+        store.screenPlacement = option
+        if let submenu = sender.menu {
+            for item in submenu.items {
+                item.state = item.representedObject as? String == raw ? .on : .off
+            }
+        }
     }
 
     @objc private func toggleDebug() {

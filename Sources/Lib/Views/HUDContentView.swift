@@ -1,5 +1,16 @@
 import SwiftUI
 
+private struct NotchInsetKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    var notchInset: CGFloat {
+        get { self[NotchInsetKey.self] }
+        set { self[NotchInsetKey.self] = newValue }
+    }
+}
+
 /// Bridges keyboard-driven expand/collapse from AppDelegate into SwiftUI.
 final class HUDExpansionState: ObservableObject {
     @Published var isKeyboardExpanded = false
@@ -38,6 +49,7 @@ struct HUDContentView: View {
     @ObservedObject var expansionState: HUDExpansionState
     @ObservedObject var ntfyScheduler: NtfyScheduler
     @ObservedObject var themeConfig: ThemeConfig
+    @Environment(\.notchInset) private var notchInset
     @State private var isHoverExpanded = false
     @State private var isHovering = false
     @State private var knownAgentIds: Set<String> = []
@@ -61,6 +73,7 @@ struct HUDContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             content
+                .padding(.top, notchInset)
                 .onHover { hovering in
                     isHovering = hovering
                     if hovering {
@@ -102,6 +115,7 @@ struct HUDContentView: View {
                 childAgents: resolvedChildren,
                 selectedIndex: expansionState.isKeyboardExpanded ? expansionState.selectedIndex : nil,
                 theme: themeConfig.selectedTheme,
+                showAppIcons: store.appIconVisibility != .never,
                 onAgentClick: { agent in
                     onAgentClick(agent)
                     expansionState.collapse()
@@ -118,7 +132,8 @@ struct HUDContentView: View {
                 childAgents: resolvedChildren,
                 hideWhileCollapsed: store.hideWhileCollapsed,
                 peekingIds: store.peekingIds,
-                theme: themeConfig.selectedTheme
+                theme: themeConfig.selectedTheme,
+                showAppIcons: store.appIconVisibility == .always
             )
             .transition(.opacity.combined(with: .scale(scale: 1.05, anchor: .top)))
         }

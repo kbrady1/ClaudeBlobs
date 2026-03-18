@@ -10,6 +10,10 @@ struct TerminalLinker {
         "com.github.wez.wezterm",
         "dev.warp.Warp-Stable",
         "com.mitchellh.ghostty",
+        "com.microsoft.VSCode",
+        "com.microsoft.VSCodeInsiders",
+        "com.todesktop.230313mzl4w4u92",  // Cursor
+        "com.google.android.studio",
     ]
 
     static func activate(_ agent: Agent) {
@@ -21,6 +25,7 @@ struct TerminalLinker {
         if let ancestorPid = ProcessTree.findAncestor(of: pid, where: { guiPids.contains($0) }),
            let app = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == ancestorPid }) {
             DebugLog.shared.log("  found GUI app: \(app.bundleIdentifier ?? "unknown") pid=\(ancestorPid)")
+            app.unhide()
             app.activate()
             return
         }
@@ -35,6 +40,7 @@ struct TerminalLinker {
         for bundleId in terminalBundleIds {
             if let app = runningApps.first(where: { $0.bundleIdentifier == bundleId }) {
                 DebugLog.shared.log("  activating terminal: \(bundleId)")
+                app.unhide()
                 app.activate()
                 return
             }

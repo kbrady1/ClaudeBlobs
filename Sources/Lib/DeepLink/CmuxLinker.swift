@@ -47,6 +47,7 @@ struct CmuxLinker {
         if let app = NSWorkspace.shared.runningApplications.first(where: {
             $0.bundleIdentifier == "com.cmuxterm.app"
         }) {
+            app.unhide()
             app.activate()
             DebugLog.shared.log("  activated cmux via NSWorkspace")
         }

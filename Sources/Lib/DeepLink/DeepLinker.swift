@@ -2,6 +2,7 @@ import AppKit
 
 enum LinkType: Equatable {
     case cmux
+    case editor
     case terminal
     case desktop
 }
@@ -12,6 +13,7 @@ struct DeepLinker {
     static func linkType(for agent: Agent) -> LinkType {
         if agent.isCmuxSession { return .cmux }
         if isDesktopAgent(pid: Int32(agent.pid)) { return .desktop }
+        if EditorLinker.findEditorAncestor(pid: Int32(agent.pid)) != nil { return .editor }
         if agent.cwd != nil { return .terminal }
         return .desktop
     }
@@ -34,10 +36,15 @@ struct DeepLinker {
         switch type {
         case .cmux:
             CmuxLinker.activate(agent)
+        case .editor:
+            if let editor = EditorLinker.findEditorAncestor(pid: Int32(agent.pid)) {
+                EditorLinker.activate(agent, editor: editor)
+            }
         case .terminal:
             TerminalLinker.activate(agent)
         case .desktop:
             if let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == desktopBundleId }) {
+                app.unhide()
                 app.activate()
                 DebugLog.shared.log("DeepLinker: activated running Claude Desktop")
             } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: desktopBundleId) {

@@ -83,6 +83,18 @@ final class AgentStore: ObservableObject {
         didSet { UserDefaults.standard.set(hideWhileCollapsed, forKey: "hideWhileCollapsed") }
     }
 
+    @Published var appIconVisibility: AppIconVisibility = AppIconVisibility(
+        rawValue: UserDefaults.standard.string(forKey: "appIconVisibility") ?? ""
+    ) ?? .expanded {
+        didSet { UserDefaults.standard.set(appIconVisibility.rawValue, forKey: "appIconVisibility") }
+    }
+
+    @Published var screenPlacement: ScreenPlacement = ScreenPlacement(
+        rawValue: UserDefaults.standard.string(forKey: "screenPlacement") ?? ""
+    ) ?? .primaryOnly {
+        didSet { UserDefaults.standard.set(screenPlacement.rawValue, forKey: "screenPlacement") }
+    }
+
     @Published var isPeeking: Bool = false
     @Published var peekingIds: Set<String> = []
 
@@ -143,9 +155,15 @@ final class AgentStore: ObservableObject {
 
         // Deduplicate by PID — resumed sessions create a new session ID
         // for the same process. Keep the most recently updated entry and
-        // remove the stale status file.
+        // remove the stale status file. Skip sub-agents (pid 0) since
+        // multiple sub-agents legitimately share that sentinel value.
         var bestByPid: [Int: Agent] = [:]
+        var pidZeroAgents: [Agent] = []
         for agent in loaded {
+            if agent.pid == 0 {
+                pidZeroAgents.append(agent)
+                continue
+            }
             if let existing = bestByPid[agent.pid] {
                 if agent.updatedAt > existing.updatedAt {
                     try? fileManager.removeItem(
@@ -161,7 +179,7 @@ final class AgentStore: ObservableObject {
                 bestByPid[agent.pid] = agent
             }
         }
-        loaded = Array(bestByPid.values)
+        loaded = Array(bestByPid.values) + pidZeroAgents
 
         // Sort by age: oldest agents first (stable left-to-right order)
         loaded.sort { ($0.createdAt ?? $0.updatedAt) < ($1.createdAt ?? $1.updatedAt) }
