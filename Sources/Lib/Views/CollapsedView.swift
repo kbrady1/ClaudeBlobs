@@ -11,6 +11,7 @@ struct CollapsedView: View {
     var peekingIds: Set<String> = []
     var theme: ColorTheme = .trafficLight
     var showAppIcons: Bool = false
+    var backgroundStyle: BackgroundStyle?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -59,6 +60,30 @@ struct CollapsedView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 2)
+        .background(
+            Group {
+                if let backgroundStyle {
+                    switch backgroundStyle {
+                    case .color(let color):
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: 0,
+                            bottomLeadingRadius: 12,
+                            bottomTrailingRadius: 12,
+                            topTrailingRadius: 0
+                        )
+                        .fill(color)
+                    case .material:
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: 0,
+                            bottomLeadingRadius: 12,
+                            bottomTrailingRadius: 12,
+                            topTrailingRadius: 0
+                        )
+                        .fill(.ultraThinMaterial)
+                    }
+                }
+            }
+        )
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: agents.map(\.id))
     }
 

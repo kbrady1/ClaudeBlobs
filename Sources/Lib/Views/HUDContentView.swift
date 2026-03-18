@@ -105,6 +105,10 @@ struct HUDContentView: View {
         }
     }
 
+    private var resolvedBackgroundStyle: BackgroundStyle {
+        themeConfig.backgroundMaterial ? .material : .color(themeConfig.backgroundColor)
+    }
+
     @ViewBuilder
     private var content: some View {
         if isExpanded {
@@ -116,6 +120,7 @@ struct HUDContentView: View {
                 selectedIndex: expansionState.isKeyboardExpanded ? expansionState.selectedIndex : nil,
                 theme: themeConfig.selectedTheme,
                 showAppIcons: store.appIconVisibility != .never,
+                backgroundStyle: themeConfig.backgroundEnabled ? resolvedBackgroundStyle : .color(.black),
                 onAgentClick: { agent in
                     onAgentClick(agent)
                     expansionState.collapse()
@@ -133,7 +138,8 @@ struct HUDContentView: View {
                 hideWhileCollapsed: store.hideWhileCollapsed,
                 peekingIds: store.peekingIds,
                 theme: themeConfig.selectedTheme,
-                showAppIcons: store.appIconVisibility == .always
+                showAppIcons: store.appIconVisibility == .always,
+                backgroundStyle: themeConfig.backgroundEnabled ? resolvedBackgroundStyle : nil
             )
             .transition(.opacity.combined(with: .scale(scale: 1.05, anchor: .top)))
         }

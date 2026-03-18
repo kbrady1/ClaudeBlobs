@@ -37,6 +37,32 @@ struct ThemeSettingsView: View {
                     Divider().padding(.leading, 40)
                 }
             }
+
+            Divider().padding(.vertical, 8)
+
+            Toggle(isOn: $config.backgroundEnabled) {
+                Text("Background")
+            }
+            .padding(.horizontal, 12)
+
+            if config.backgroundEnabled {
+                Toggle(isOn: $config.backgroundMaterial) {
+                    Text("Material (blur)")
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+
+                if !config.backgroundMaterial {
+                    HStack {
+                        Text("Color")
+                            .foregroundColor(.secondary)
+                        ColorPicker("", selection: $config.backgroundColor, supportsOpacity: false)
+                            .labelsHidden()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 4)
+                }
+            }
         }
         .padding(.vertical, 8)
         .frame(width: 320)

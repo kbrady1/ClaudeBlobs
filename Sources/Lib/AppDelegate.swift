@@ -23,6 +23,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
     private var hideWhileCollapsedMenuItem: NSMenuItem!
     private var hideWorkingMenuItem: NSMenuItem!
+    private var viewLogMenuItem: NSMenuItem!
+    private var clearLogMenuItem: NSMenuItem!
     private var hotkeyRef: EventHotKeyRef?
     private var globalHotkeyMonitor: Any?
     private var localKeyMonitor: Any?
@@ -77,27 +79,41 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
 
+        let agentDisplayMenu = NSMenu()
+
         hideWhileCollapsedMenuItem = NSMenuItem(title: "Hide While Collapsed", action: #selector(toggleHideWhileCollapsed), keyEquivalent: "h")
         hideWhileCollapsedMenuItem.target = self
         hideWhileCollapsedMenuItem.state = store.hideWhileCollapsed ? .on : .off
-        menu.addItem(hideWhileCollapsedMenuItem)
+        agentDisplayMenu.addItem(hideWhileCollapsedMenuItem)
 
         hideWorkingMenuItem = NSMenuItem(title: "Hide Working Agents", action: #selector(toggleHideWorking), keyEquivalent: "a")
         hideWorkingMenuItem.target = self
         hideWorkingMenuItem.state = store.hideWorkingAgents ? .on : .off
-        menu.addItem(hideWorkingMenuItem)
+        agentDisplayMenu.addItem(hideWorkingMenuItem)
 
-        let appIconMenu = NSMenu()
+        agentDisplayMenu.addItem(.separator())
+
+        let appIconSubmenu = NSMenu()
         for option in AppIconVisibility.allCases {
             let item = NSMenuItem(title: option.menuTitle, action: #selector(setAppIconVisibility(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = option.rawValue
             item.state = store.appIconVisibility == option ? .on : .off
-            appIconMenu.addItem(item)
+            appIconSubmenu.addItem(item)
         }
         let appIconMenuItem = NSMenuItem(title: "Show App Icons", action: nil, keyEquivalent: "")
-        appIconMenuItem.submenu = appIconMenu
-        menu.addItem(appIconMenuItem)
+        appIconMenuItem.submenu = appIconSubmenu
+        agentDisplayMenu.addItem(appIconMenuItem)
+
+        agentDisplayMenu.addItem(.separator())
+
+        let themeSettingsItem = NSMenuItem(title: "Theme Settings\u{2026}", action: #selector(openThemeSettings), keyEquivalent: "")
+        themeSettingsItem.target = self
+        agentDisplayMenu.addItem(themeSettingsItem)
+
+        let agentDisplayMenuItem = NSMenuItem(title: "Agent Display", action: nil, keyEquivalent: "")
+        agentDisplayMenuItem.submenu = agentDisplayMenu
+        menu.addItem(agentDisplayMenuItem)
 
         let screenMenu = NSMenu()
         for option in ScreenPlacement.allCases {
@@ -113,21 +129,6 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        debugMenuItem = NSMenuItem(title: "Debug Mode", action: #selector(toggleDebug), keyEquivalent: "d")
-        debugMenuItem.target = self
-        debugMenuItem.state = DebugLog.shared.isEnabled ? .on : .off
-        menu.addItem(debugMenuItem)
-
-        let viewLogItem = NSMenuItem(title: "Open Debug Log", action: #selector(openDebugLog), keyEquivalent: "")
-        viewLogItem.target = self
-        menu.addItem(viewLogItem)
-
-        let clearLogItem = NSMenuItem(title: "Clear Debug Log", action: #selector(clearDebugLog), keyEquivalent: "")
-        clearLogItem.target = self
-        menu.addItem(clearLogItem)
-
-        menu.addItem(.separator())
-
         ntfyMenuItem = NSMenuItem(title: "Push Notifications", action: #selector(toggleNtfy), keyEquivalent: "n")
         ntfyMenuItem.target = self
         ntfyMenuItem.state = ntfyConfig.isEnabled ? .on : .off
@@ -136,12 +137,6 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         let ntfySettingsItem = NSMenuItem(title: "Notification Settings\u{2026}", action: #selector(openNtfySettings), keyEquivalent: "")
         ntfySettingsItem.target = self
         menu.addItem(ntfySettingsItem)
-
-        menu.addItem(.separator())
-
-        let themeSettingsItem = NSMenuItem(title: "Theme Settings\u{2026}", action: #selector(openThemeSettings), keyEquivalent: "")
-        themeSettingsItem.target = self
-        menu.addItem(themeSettingsItem)
 
         menu.addItem(.separator())
 
@@ -155,6 +150,21 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(changeHotkeyItem)
 
         menu.addItem(.separator())
+
+        debugMenuItem = NSMenuItem(title: "Debug Mode", action: #selector(toggleDebug), keyEquivalent: "d")
+        debugMenuItem.target = self
+        debugMenuItem.state = DebugLog.shared.isEnabled ? .on : .off
+        menu.addItem(debugMenuItem)
+
+        viewLogMenuItem = NSMenuItem(title: "Open Debug Log", action: #selector(openDebugLog), keyEquivalent: "")
+        viewLogMenuItem.target = self
+        viewLogMenuItem.isHidden = !DebugLog.shared.isEnabled
+        menu.addItem(viewLogMenuItem)
+
+        clearLogMenuItem = NSMenuItem(title: "Clear Debug Log", action: #selector(clearDebugLog), keyEquivalent: "")
+        clearLogMenuItem.target = self
+        clearLogMenuItem.isHidden = !DebugLog.shared.isEnabled
+        menu.addItem(clearLogMenuItem)
 
         let reinstallItem = NSMenuItem(title: "Reinstall Hooks", action: #selector(reinstallHooks), keyEquivalent: "")
         reinstallItem.target = self
@@ -510,6 +520,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleDebug() {
         DebugLog.shared.isEnabled.toggle()
         debugMenuItem.state = DebugLog.shared.isEnabled ? .on : .off
+        viewLogMenuItem.isHidden = !DebugLog.shared.isEnabled
+        clearLogMenuItem.isHidden = !DebugLog.shared.isEnabled
         DebugLog.shared.log("Debug mode toggled ON")
     }
 

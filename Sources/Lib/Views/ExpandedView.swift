@@ -9,6 +9,7 @@ struct ExpandedView: View {
     let selectedIndex: Int?
     var theme: ColorTheme = .trafficLight
     var showAppIcons: Bool = true
+    var backgroundStyle: BackgroundStyle = .color(.black)
     let onAgentClick: (Agent) -> Void
     let onSnooze: (Agent) -> Void
     let onDismiss: (Agent) -> Void
@@ -32,13 +33,26 @@ struct ExpandedView: View {
         }
         .padding(12)
         .background(
-            UnevenRoundedRectangle(
-                topLeadingRadius: 0,
-                bottomLeadingRadius: 12,
-                bottomTrailingRadius: 12,
-                topTrailingRadius: 0
-            )
-            .fill(Color.black)
+            Group {
+                switch backgroundStyle {
+                case .color(let color):
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 0,
+                        bottomLeadingRadius: 20,
+                        bottomTrailingRadius: 20,
+                        topTrailingRadius: 0
+                    )
+                    .fill(color)
+                case .material:
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 0,
+                        bottomLeadingRadius: 20,
+                        bottomTrailingRadius: 20,
+                        topTrailingRadius: 0
+                    )
+                    .fill(.ultraThinMaterial)
+                }
+            }
             .padding(.top, -notchInset)
         )
     }
