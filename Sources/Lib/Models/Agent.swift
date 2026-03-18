@@ -21,6 +21,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var status: AgentStatus
     var lastMessage: String?
     var lastToolUse: String?
+    var tty: String?
     var cmuxWorkspace: String?
     var cmuxSurface: String?
     var cmuxSocketPath: String?
@@ -175,6 +176,7 @@ extension Agent {
         status: AgentStatus = .working,
         lastMessage: String? = nil,
         lastToolUse: String? = nil,
+        tty: String? = nil,
         cmuxWorkspace: String? = nil,
         cmuxSurface: String? = nil,
         cmuxSocketPath: String? = nil,
@@ -189,6 +191,7 @@ extension Agent {
             sessionId: sessionId, pid: pid, cwd: cwd,
             agentType: agentType, status: status,
             lastMessage: lastMessage, lastToolUse: lastToolUse,
+            tty: tty,
             cmuxWorkspace: cmuxWorkspace, cmuxSurface: cmuxSurface,
             cmuxSocketPath: cmuxSocketPath, parentSessionId: parentSessionId,
             waitReason: waitReason, toolFailure: toolFailure,

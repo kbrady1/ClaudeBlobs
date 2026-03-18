@@ -7,7 +7,7 @@ struct CmuxLinker {
     static func activate(_ agent: Agent) {
         guard let workspace = agent.cmuxWorkspace else {
             DebugLog.shared.log("CmuxLinker: no workspace ID, falling back to app activation")
-            activateApp()
+            activateHost(agent)
             return
         }
 
@@ -24,8 +24,8 @@ struct CmuxLinker {
 
         // If socket access denied, fall back to just activating the app
         if let result = wsResult, result.contains("Access denied") {
-            DebugLog.shared.log("  socket access denied — activate cmux app only. Set CMUX_SOCKET_MODE=allowAll for full deep-linking.")
-            activateApp()
+            DebugLog.shared.log("  socket access denied — activate host app only. Set CMUX_SOCKET_MODE=allowAll for full deep-linking.")
+            activateHost(agent)
             return
         }
 
@@ -40,17 +40,23 @@ struct CmuxLinker {
             DebugLog.shared.log("  surface.focus result: \(sfResult ?? "nil")")
         }
 
-        activateApp()
+        activateHost(agent)
     }
 
-    private static func activateApp() {
+    private static func activateHost(_ agent: Agent) {
+        // Try the standalone cmux app first
         if let app = NSWorkspace.shared.runningApplications.first(where: {
             $0.bundleIdentifier == "com.cmuxterm.app"
         }) {
             app.unhide()
             app.activate()
-            DebugLog.shared.log("  activated cmux via NSWorkspace")
+            DebugLog.shared.log("  activated cmux app via NSWorkspace")
+            return
         }
+
+        // cmux is running inside another terminal — use TTY-based tab selection
+        DebugLog.shared.log("  cmux app not found, using TabSelector for host terminal")
+        TabSelector.activateTab(for: agent)
     }
 
     private static func validateSocketPath(_ path: String) -> Bool {

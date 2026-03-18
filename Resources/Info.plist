@@ -18,5 +18,7 @@
     <string>ClaudeBlobs</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>ClaudeBlobs needs to control terminal apps to switch to the correct tab when you click an agent.</string>
 </dict>
 </plist>

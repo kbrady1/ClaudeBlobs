@@ -22,11 +22,8 @@ struct TerminalLinker {
 
         // Strategy 1: Walk process tree looking for a GUI app ancestor
         let guiPids = Set(NSWorkspace.shared.runningApplications.map(\.processIdentifier))
-        if let ancestorPid = ProcessTree.findAncestor(of: pid, where: { guiPids.contains($0) }),
-           let app = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == ancestorPid }) {
-            DebugLog.shared.log("  found GUI app: \(app.bundleIdentifier ?? "unknown") pid=\(ancestorPid)")
-            app.unhide()
-            app.activate()
+        if ProcessTree.findAncestor(of: pid, where: { guiPids.contains($0) }) != nil {
+            TabSelector.activateTab(for: agent)
             return
         }
 
@@ -34,9 +31,6 @@ struct TerminalLinker {
 
         // Strategy 2: Find a running terminal app and activate it
         let runningApps = NSWorkspace.shared.runningApplications
-        let runningBundleIds = runningApps.compactMap(\.bundleIdentifier)
-        DebugLog.shared.log("  running apps: \(runningBundleIds.joined(separator: ", "))")
-
         for bundleId in terminalBundleIds {
             if let app = runningApps.first(where: { $0.bundleIdentifier == bundleId }) {
                 DebugLog.shared.log("  activating terminal: \(bundleId)")
@@ -48,5 +42,4 @@ struct TerminalLinker {
 
         DebugLog.shared.log("TerminalLinker: no terminal app found")
     }
-
 }

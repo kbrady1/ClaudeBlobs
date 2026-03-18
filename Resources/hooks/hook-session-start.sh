@@ -9,6 +9,8 @@ STATUS_FILE="$STATUS_DIR/$SESSION_ID.json"
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 PID=$PPID
+TTY_NAME=$(ps -o tty= -p "$PID" 2>/dev/null | tr -d ' ')
+TTY=$([ -n "$TTY_NAME" ] && [ "$TTY_NAME" != "??" ] && echo "/dev/$TTY_NAME" || echo "")
 TS=$(date +%s000)
 CMUX_WS="${CMUX_WORKSPACE_ID:-}"
 CMUX_SF="${CMUX_SURFACE_ID:-}"
@@ -23,6 +25,7 @@ jq -n \
   --arg cwd "$CWD" \
   --arg agentType "$AGENT_TYPE" \
   --arg status "starting" \
+  --arg tty "$TTY" \
   --arg cmuxWs "$CMUX_WS" \
   --arg cmuxSf "$CMUX_SF" \
   --arg cmuxSock "$CMUX_SOCK" \
@@ -35,6 +38,7 @@ jq -n \
     status: $status,
     lastMessage: null,
     lastToolUse: null,
+    tty: (if $tty == "" then null else $tty end),
     cmuxWorkspace: (if $cmuxWs == "" then null else $cmuxWs end),
     cmuxSurface: (if $cmuxSf == "" then null else $cmuxSf end),
     cmuxSocketPath: (if $cmuxSock == "" then null else $cmuxSock end),

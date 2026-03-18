@@ -40,6 +40,8 @@ ensure_status_file() {
   local CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
   local AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
   local PID=$(find_claude_pid)
+  local TTY_NAME=$(ps -o tty= -p "$PID" 2>/dev/null | tr -d ' ')
+  local TTY=$([ -n "$TTY_NAME" ] && [ "$TTY_NAME" != "??" ] && echo "/dev/$TTY_NAME" || echo "")
   local TS=$(date +%s000)
   local CMUX_WS="${CMUX_WORKSPACE_ID:-}"
   local CMUX_SF="${CMUX_SURFACE_ID:-}"
@@ -53,6 +55,7 @@ ensure_status_file() {
     --argjson pid "$PID" \
     --arg cwd "$CWD" \
     --arg agentType "$AGENT_TYPE" \
+    --arg tty "$TTY" \
     --arg cmuxWs "$CMUX_WS" \
     --arg cmuxSf "$CMUX_SF" \
     --arg cmuxSock "$CMUX_SOCK" \
@@ -65,6 +68,7 @@ ensure_status_file() {
       status: "working",
       lastMessage: null,
       lastToolUse: null,
+      tty: (if $tty == "" then null else $tty end),
       cmuxWorkspace: (if $cmuxWs == "" then null else $cmuxWs end),
       cmuxSurface: (if $cmuxSf == "" then null else $cmuxSf end),
       cmuxSocketPath: (if $cmuxSock == "" then null else $cmuxSock end),
