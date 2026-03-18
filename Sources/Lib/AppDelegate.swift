@@ -111,7 +111,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         themeSettingsItem.target = self
         agentDisplayMenu.addItem(themeSettingsItem)
 
-        let agentDisplayMenuItem = NSMenuItem(title: "Agent Display", action: nil, keyEquivalent: "")
+        let agentDisplayMenuItem = NSMenuItem(title: "Blob Settings", action: nil, keyEquivalent: "")
         agentDisplayMenuItem.submenu = agentDisplayMenu
         menu.addItem(agentDisplayMenuItem)
 
