@@ -14,15 +14,27 @@ Click a face or use the keyboard picker to deep-link straight back to the termin
 
 ## Install
 
-Requires macOS 13+, Claude Code CLI, and Xcode command-line tools (Swift 5.9+).
+Requires macOS 13+ and Claude Code CLI.
+
+### Homebrew
 
 ```sh
-git clone https://github.com/anthropics/ClaudeBlobs.git
+brew install kbrady1/tap/claude-blobs
+```
+
+### Download
+
+Grab the latest DMG from [Releases](https://github.com/kbrady1/ClaudeBlobs/releases), open it, and drag ClaudeBlobs to `/Applications`.
+
+### Build from Source
+
+Requires Xcode command-line tools (Swift 5.9+).
+
+```sh
+git clone https://github.com/kbrady1/ClaudeBlobs.git
 cd ClaudeBlobs
 make install
 ```
-
-This builds the app, bundles it, and copies it to `/Applications`.
 
 ## Setup
 
