@@ -2,23 +2,23 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleIdentifier</key>
-    <string>com.local.ClaudeBlobs</string>
-    <key>CFBundleName</key>
-    <string>ClaudeBlobs</string>
-    <key>CFBundleVersion</key>
-    <string>1.0.0</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleExecutable</key>
-    <string>ClaudeBlobs</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>ClaudeBlobs needs to control terminal apps to switch to the correct tab when you click an agent.</string>
+	<key>CFBundleExecutable</key>
+	<string>ClaudeBlobs</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.local.ClaudeBlobs</string>
+	<key>CFBundleName</key>
+	<string>ClaudeBlobs</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1.0.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>ClaudeBlobs needs to control terminal apps to switch to the correct tab when you click an agent.</string>
 </dict>
 </plist>
