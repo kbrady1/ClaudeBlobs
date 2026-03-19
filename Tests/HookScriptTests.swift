@@ -384,6 +384,26 @@ struct HookScriptTests {
             #expect(r.status?["status"] as? String == "working")
             #expect(r.status?["waitReason"] is NSNull)
         }
+
+        @Test("preserves recent permission status")
+        func preservesRecentPermission() throws {
+            let h = try HookTestHelper()
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            var existing = makeStatus(status: "permission")
+            existing["statusChangedAt"] = now
+            let r = try h.runHook("hook-post-tool.sh", input: [:], existingStatus: existing)
+            #expect(r.status?["status"] as? String == "permission")
+        }
+
+        @Test("overwrites stale permission status")
+        func overwritesStalePermission() throws {
+            let h = try HookTestHelper()
+            let staleTs = Int64(Date().timeIntervalSince1970 * 1000) - 5000
+            var existing = makeStatus(status: "permission")
+            existing["statusChangedAt"] = staleTs
+            let r = try h.runHook("hook-post-tool.sh", input: [:], existingStatus: existing)
+            #expect(r.status?["status"] as? String == "working")
+        }
     }
 
     @Suite("hook-pre-compact")

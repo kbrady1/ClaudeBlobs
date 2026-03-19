@@ -3,7 +3,7 @@ BUNDLE_NAME = ClaudeBlobs.app
 BUILD_DIR = .build/release
 BUNDLE_DIR = $(BUILD_DIR)/$(BUNDLE_NAME)
 
-.PHONY: build bundle clean run restart stop
+.PHONY: build bundle clean run restart stop release
 
 build:
 	swift build -c release
@@ -35,3 +35,6 @@ stop:
 restart: bundle stop
 	@sleep 0.5
 	open "$(BUNDLE_DIR)"
+
+release:
+	@scripts/release.sh $(BUMP)

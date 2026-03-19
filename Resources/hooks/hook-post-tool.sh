@@ -11,6 +11,17 @@ ensure_status_file
 
 TS=$(date +%s000)
 
+# Don't overwrite permission/waiting if it was set in the last 2 seconds —
+# PostToolUse for a previous tool can race with PermissionRequest for the next.
+# Beyond 2s, let it through to avoid stale permission state.
+CURRENT=$(jq -r '"\(.status // ""):\(.statusChangedAt // 0)"' "$STATUS_FILE" 2>/dev/null)
+CURRENT_STATUS="${CURRENT%%:*}"
+STATUS_AGE_MS=$(( TS - ${CURRENT#*:} ))
+
+if { [ "$CURRENT_STATUS" = "permission" ] || [ "$CURRENT_STATUS" = "waiting" ]; } && [ "$STATUS_AGE_MS" -lt 2000 ]; then
+  exit 0
+fi
+
 atomic_update "$STATUS_FILE" \
   --arg status "working" \
   --argjson ts "$TS" \
