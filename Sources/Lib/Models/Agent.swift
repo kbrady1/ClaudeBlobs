@@ -165,6 +165,32 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         guard let tool = lastToolUse else { return false }
         return tool.hasPrefix("AskUserQuestion")
     }
+
+    /// Whether the permission is for a Bash command.
+    var isBashPermission: Bool {
+        guard let tool = lastToolUse else { return false }
+        return tool.hasPrefix("Bash")
+    }
+
+    /// Whether the permission is for a file modification tool (Edit, Write, NotebookEdit).
+    var isFilePermission: Bool {
+        guard let tool = lastToolUse else { return false }
+        let prefixes = ["Edit", "Write", "NotebookEdit"]
+        return prefixes.contains { tool.hasPrefix($0) }
+    }
+
+    /// Whether the permission is for a web tool (WebSearch, WebFetch).
+    var isWebPermission: Bool {
+        guard let tool = lastToolUse else { return false }
+        let prefixes = ["WebSearch", "WebFetch"]
+        return prefixes.contains { tool.hasPrefix($0) }
+    }
+
+    /// Whether the permission is for an MCP tool.
+    var isMcpPermission: Bool {
+        guard let tool = lastToolUse else { return false }
+        return tool.hasPrefix("mcp__")
+    }
 }
 
 extension Agent {

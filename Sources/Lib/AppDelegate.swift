@@ -23,6 +23,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
     private var hideWhileCollapsedMenuItem: NSMenuItem!
     private var hideWorkingMenuItem: NSMenuItem!
+    private var sortByPriorityMenuItem: NSMenuItem!
     private var viewLogMenuItem: NSMenuItem!
     private var clearLogMenuItem: NSMenuItem!
     private var hotkeyRef: EventHotKeyRef?
@@ -90,6 +91,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         hideWorkingMenuItem.target = self
         hideWorkingMenuItem.state = store.hideWorkingAgents ? .on : .off
         agentDisplayMenu.addItem(hideWorkingMenuItem)
+
+        sortByPriorityMenuItem = NSMenuItem(title: "Sort by Priority", action: #selector(toggleSortByPriority), keyEquivalent: "")
+        sortByPriorityMenuItem.target = self
+        sortByPriorityMenuItem.state = store.sortByPriority ? .on : .off
+        agentDisplayMenu.addItem(sortByPriorityMenuItem)
 
         agentDisplayMenu.addItem(.separator())
 
@@ -492,6 +498,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleHideWorking() {
         store.hideWorkingAgents.toggle()
         hideWorkingMenuItem.state = store.hideWorkingAgents ? .on : .off
+    }
+
+    @objc private func toggleSortByPriority() {
+        store.sortByPriority.toggle()
+        sortByPriorityMenuItem.state = store.sortByPriority ? .on : .off
     }
 
     @objc private func setAppIconVisibility(_ sender: NSMenuItem) {

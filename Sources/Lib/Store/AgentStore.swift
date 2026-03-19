@@ -26,11 +26,21 @@ final class AgentStore: ObservableObject {
 
     var collapsedAgents: [Agent] {
         let subs = subAgentIds
-        return agents.filter {
+        var result = agents.filter {
             (!hideWorkingAgents || $0.status.visibleWhenCollapsed)
                 && !snoozedSessionIds.contains($0.sessionId)
                 && !subs.contains($0.sessionId)
         }
+        if sortByPriority {
+            result.sort {
+                if $0.status.sortPriority != $1.status.sortPriority {
+                    return $0.status.sortPriority < $1.status.sortPriority
+                }
+                // Within same priority: newer (higher updatedAt) first (leftmost)
+                return $0.updatedAt > $1.updatedAt
+            }
+        }
+        return result
     }
 
     /// Top-level agents for expanded view (excludes sub-agents).
@@ -42,10 +52,17 @@ final class AgentStore: ObservableObject {
     /// Top-level agents sorted with snoozed ones at the end.
     var sortedTopLevelAgents: [Agent] {
         let snoozed = snoozedSessionIds
+        let prioritySort = sortByPriority
         return topLevelAgents.sorted { a, b in
             let aSnooze = snoozed.contains(a.sessionId)
             let bSnooze = snoozed.contains(b.sessionId)
             if aSnooze != bSnooze { return !aSnooze }
+            if prioritySort {
+                if a.status.sortPriority != b.status.sortPriority {
+                    return a.status.sortPriority < b.status.sortPriority
+                }
+                return a.updatedAt > b.updatedAt
+            }
             return false
         }
     }
@@ -93,6 +110,10 @@ final class AgentStore: ObservableObject {
         rawValue: UserDefaults.standard.string(forKey: "screenPlacement") ?? ""
     ) ?? .primaryOnly {
         didSet { UserDefaults.standard.set(screenPlacement.rawValue, forKey: "screenPlacement") }
+    }
+
+    @Published var sortByPriority: Bool = UserDefaults.standard.bool(forKey: "sortByPriority") {
+        didSet { UserDefaults.standard.set(sortByPriority, forKey: "sortByPriority") }
     }
 
     @Published var isPeeking: Bool = false

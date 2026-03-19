@@ -74,6 +74,47 @@ struct AgentStoreTests {
         #expect(store.agents[2].sessionId == "c")
     }
 
+    @Test func sortByPriorityReordersCollapsedAgents() throws {
+        // Create agents: oldest=working(blue), middle=waiting(orange), newest=permission(red)
+        let oldest = Agent.fixture(sessionId: "a", pid: 300, status: .working, createdAt: 1000, updatedAt: 1000)
+        let middle = Agent.fixture(sessionId: "b", pid: 301, status: .waiting, createdAt: 2000, updatedAt: 2000)
+        let newest = Agent.fixture(sessionId: "c", pid: 302, status: .permission, createdAt: 3000, updatedAt: 3000)
+
+        for agent in [oldest, middle, newest] {
+            let data = try JSONEncoder().encode(agent)
+            try data.write(to: tmpDir.appendingPathComponent("\(agent.sessionId).json"))
+        }
+
+        let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.hideWorkingAgents = false
+        store.sortByPriority = false
+        store.reload()
+
+        // Default: sorted by age (oldest first)
+        #expect(store.collapsedAgents.map(\.sessionId) == ["a", "b", "c"])
+
+        // Priority sort: red(permission), orange(waiting), blue(working)
+        store.sortByPriority = true
+        #expect(store.collapsedAgents.map(\.sessionId) == ["c", "b", "a"])
+    }
+
+    @Test func sortByPriorityStableWithinSameStatus() throws {
+        let older = Agent.fixture(sessionId: "x", pid: 400, status: .waiting, createdAt: 1000, updatedAt: 1000)
+        let newer = Agent.fixture(sessionId: "y", pid: 401, status: .waiting, createdAt: 2000, updatedAt: 2000)
+
+        for agent in [older, newer] {
+            let data = try JSONEncoder().encode(agent)
+            try data.write(to: tmpDir.appendingPathComponent("\(agent.sessionId).json"))
+        }
+
+        let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.sortByPriority = true
+        store.reload()
+
+        // Same status: newer (more recently updated) agent first (leftmost)
+        #expect(store.collapsedAgents.map(\.sessionId) == ["y", "x"])
+    }
+
     @Test func buildsChildRelationshipsFromParentSessionId() throws {
         let parent = Agent.fixture(sessionId: "parent", pid: 200, status: .working, updatedAt: 1000)
         let child = Agent.fixture(sessionId: "child", pid: 201, status: .working, parentSessionId: "parent", updatedAt: 1000)

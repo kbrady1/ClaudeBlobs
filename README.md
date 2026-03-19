@@ -12,120 +12,89 @@ ClaudeBlobs watches for active Claude Code agent sessions and displays them as a
 
 Click a face or use the keyboard picker to deep-link straight back to the terminal, cmux workspace, or Claude Desktop session that spawned it.
 
-## Features
-
-### Live Agent Monitoring
-- Animated sprite faces show agent state: **starting** (happy), **working** (focused), **waiting** (alert), **permission needed** (angry)
-- Faces blink, look around, and animate based on state
-- Purple badge when a push notification fires
-- Accent icons show what the agent is doing (see table below)
-- Snooze agents to gray them out; dismiss to remove entirely
-
-### Accent Icons
-
-Each agent sprite shows a small overlay icon indicating what it's currently doing:
-
-#### Working State
-
-| Icon | SF Symbol | When |
-|------|-----------|------|
-| 🧩 Puzzle piece | `puzzlepiece.fill` | Calling an MCP tool (`mcp__*`) |
-| 📋 Checklist | `checklist` | Running tests or verification (test, lint, xcodebuild, etc.) |
-| ✏️ Pencil | `pencil` | Writing code (Edit, Write, Bash, NotebookEdit) |
-| 🌐 Globe | `globe` | Web search (WebSearch, WebFetch) |
-| 🔍 Magnifying glass | `magnifyingglass` | Reading/exploring code (Read, Grep, Glob, LSP, Agent) |
-| 💬 Speech bubble | `ellipsis.bubble.fill` | Default — thinking or using other tools |
-
-Priority: testing > MCP > coding > web search > exploring > default.
-
-#### Permission State
-
-| Icon | SF Symbol | When |
-|------|-----------|------|
-| ✅ Checkmark bubble | `checkmark.bubble.fill` | Plan approval (ExitPlanMode) |
-| ❓ Question bubble | `questionmark.bubble.fill` | Asking a question (AskUserQuestion) |
-
-#### Transient (flash for 3 seconds)
-
-| Icon | SF Symbol | When |
-|------|-----------|------|
-| ✋ Raised hand | `hand.raised.fill` | User interrupted a tool |
-| ⚠️ Warning triangle | `exclamationmark.triangle.fill` | Tool error |
-
-#### Other Overlays
-
-| Overlay | When |
-|---------|------|
-| 🟣 Purple badge (top-right) | Push notification sent |
-| 🔥 Fire (above head) | API error or outage |
-
-### Deep Linking
-Clicking an agent routes you back to its source automatically:
-- **cmux** — sends RPC to select the workspace and surface, then switches to the correct terminal tab
-- **Terminal apps** — activates the parent terminal (iTerm2, Kitty, Terminal, Warp, WezTerm, Ghostty, Hyper)
-- **Claude Desktop** — activates the desktop app
-
-**Tab-level switching** is supported for **cmux**, **iTerm2**, and **Terminal.app**. When an agent runs in one of these terminals, ClaudeBlobs uses the agent's TTY to find and select the exact tab via AppleScript. Other terminals fall back to activating the app window. On first use, macOS will prompt you to grant ClaudeBlobs Automation permission for the terminal app.
-
-### Keyboard Navigation
-- **Ctrl+Option+A** — global hotkey to open the agent picker (customizable)
-- **Tab / Shift+Tab / Arrow keys** — cycle through agents
-- **Enter** — jump to the selected agent
-- **Backspace** — snooze (first press) or dismiss (second press)
-- **Escape** — close the picker
-
-### Push Notifications (ntfy.sh)
-Optional push notifications via [ntfy.sh](https://ntfy.sh) when agents need attention:
-- Configurable delay to avoid noise from brief state changes
-- Per-state toggles (permission, waiting, done)
-- Separate priority levels for permission requests vs. other states
-- Works with self-hosted ntfy servers
-
 ## Install
 
-### From Source
-
-Requires Xcode command-line tools (Swift 5.9+).
+Requires macOS 13+, Claude Code CLI, and Xcode command-line tools (Swift 5.9+).
 
 ```sh
-git clone https://github.com/yourusername/ClaudeBlobs.git
+git clone https://github.com/anthropics/ClaudeBlobs.git
 cd ClaudeBlobs
 make install
 ```
 
 This builds the app, bundles it, and copies it to `/Applications`.
 
-### Setup
+## Setup
 
-On first launch the app will ask to install hooks into your Claude Code settings (`~/.claude/settings.json`). These hooks write status files to `~/.claude/agent-status/` so the HUD can track agent state. The app registers itself as a login item so it starts automatically.
+On first launch the app will ask to install hooks into your Claude Code settings (`~/.claude/settings.json`). These hooks write status files so the HUD can track agent state. The app registers itself as a login item so it starts automatically.
 
-**Hooks** — If you later modify your Claude Code settings and lose the hooks, use **Reinstall Hooks** from the menu bar.
+**Accessibility** — macOS will prompt for Accessibility permission the first time you use keyboard navigation in the agent picker (Tab, arrow keys, number keys). The global hotkey works without it.
 
-**Accessibility** — macOS will prompt for Accessibility permission the first time you use keyboard navigation in the agent picker (Tab, arrow keys, number keys). The global hotkey (Ctrl+Option+A) works without it.
+**Automation** — The first time you click an agent running in **iTerm2**, **Terminal.app**, or **Ghostty**, macOS will prompt to grant ClaudeBlobs Automation permission for that terminal. This enables tab-level switching via AppleScript.
 
-**Automation** — The first time you click an agent running in **iTerm2** or **Terminal.app**, macOS will prompt to grant ClaudeBlobs Automation permission for that terminal. This enables tab-level switching via AppleScript. Other terminals fall back to app-level activation.
+**cmux** — For deep linking to cmux workspaces, go to cmux Settings and switch **Socket Control Mode** to **Automation**. Without this, ClaudeBlobs will fall back to activating the cmux window without navigating to the specific workspace.
 
-**cmux** — ClaudeBlobs deep-links to cmux workspaces via JSON-RPC over cmux's Unix socket. For this to work, go to cmux Settings and switch **Socket Control Mode** to **Automation**. Without this, ClaudeBlobs cannot navigate to the specific workspace and will fall back to activating the cmux window.
+**Push notifications** — Enable **Push Notifications** from the menu bar, then open **Notification Settings** to configure your [ntfy.sh](https://ntfy.sh) topic, endpoint, delay, and priority levels. See [ntfy.sh](https://ntfy.sh) for setup and optional self-hosting.
 
-**Push notifications** — ClaudeBlobs can send push notifications via [ntfy.sh](https://ntfy.sh) when agents need attention. Enable **Push Notifications** from the menu bar, then open **Notification Settings** to configure your ntfy topic, endpoint, delay, and priority levels. See [ntfy.sh](https://ntfy.sh) for details on setting up a topic and optional self-hosting.
+## Usage
 
-## Build Targets
+### Agent Sprites
 
-| Command | Description |
-|---------|-------------|
-| `make build` | Release build only |
-| `make bundle` | Build + create .app bundle |
-| `make run` | Bundle + launch |
-| `make restart` | Build, kill running instance, relaunch |
-| `make stop` | Kill running instance |
-| `make install` | Copy bundle to /Applications |
+- Animated faces show agent state: **starting** (happy), **working** (focused), **waiting** (alert), **permission needed** (angry)
+- Faces blink, look around, and animate based on state
+- Snooze agents to gray them out; dismiss to remove entirely
 
-## Menu Bar Options
+Each sprite shows a small overlay icon indicating what the agent is doing:
+
+| Icon | When |
+|------|------|
+| Puzzle piece | Calling an MCP tool |
+| Checklist | Running tests or verification |
+| Pencil | Writing code |
+| Globe | Web search |
+| Magnifying glass | Reading/exploring code |
+| Speech bubble | Default — thinking or using other tools |
+| Checkmark bubble | Waiting for plan approval |
+| Question bubble | Asking a question |
+| Raised hand | User interrupted (flashes 3s) |
+| Warning triangle | Tool error (flashes 3s) |
+| Purple badge | Push notification sent |
+| Fire | API error or outage |
+
+### Keyboard Navigation
+
+- **Ctrl+Option+A** — global hotkey to open the agent picker (customizable)
+- **Tab / Shift+Tab / Arrow keys** — cycle through agents
+- **Enter** — jump to the selected agent
+- **Backspace** — snooze (first press) or dismiss (second press)
+- **Escape** — close the picker
+
+### Deep Linking
+
+Clicking an agent routes you back to its source. The level of support depends on the terminal:
+
+| Terminal | Activate app | Select tab | Select surface | Method |
+|----------|:---:|:---:|:---:|--------|
+| **cmux** | :white_check_mark: | :white_check_mark: | :white_check_mark: | JSON-RPC (workspace + surface) |
+| **iTerm2** | :white_check_mark: | :white_check_mark: | | AppleScript (by TTY) |
+| **Terminal.app** | :white_check_mark: | :white_check_mark: | | AppleScript (by TTY) |
+| **Ghostty** | :white_check_mark: | :white_check_mark: | | AppleScript (by working directory) |
+| **VS Code** | :white_check_mark: | | | URL scheme |
+| **Cursor** | :white_check_mark: | | | URL scheme |
+| **Kitty** | :white_check_mark: | | | |
+| **WezTerm** | :white_check_mark: | | | |
+| **Warp** | :white_check_mark: | | | |
+| **Hyper** | :white_check_mark: | | | |
+| **Claude Desktop** | :white_check_mark: | | | |
+
+cmux provides the deepest integration — it can navigate to the exact workspace, tab, and surface (split pane) where the agent is running. Any terminal not listed above still gets app-level activation via process tree detection.
+
+### Menu Bar
 
 Right-click (or click) the menu bar icon for:
 
 - **Hide/Show Agents** — toggle the floating panel
-- **Show All Agents** — include working agents in the collapsed view (off by default, only actionable states shown)
+- **Show All Agents** — include working agents in the collapsed view
 - **Dismiss All Agents** — snooze everything at once
 - **Debug Mode** — log to `~/Library/Logs/ClaudeBlobs/debug.log`
 - **Push Notifications** — toggle ntfy.sh integration
@@ -136,15 +105,20 @@ Right-click (or click) the menu bar icon for:
 
 ## How It Works
 
-Seven shell hooks are installed into Claude Code's hook system. Each agent lifecycle event (session start, tool use, permission request, prompt submit, stop, session end) writes or updates a JSON status file. The app watches that directory and renders the HUD accordingly.
+Shell hooks are installed into Claude Code's hook system. Each agent lifecycle event (session start, tool use, permission request, notification, stop, etc.) writes or updates a JSON status file in `~/.claude/agent-status/`. The app watches that directory and renders the HUD.
 
-Deep linking is determined by process ancestry — the app walks the process tree from the agent PID to find whether it belongs to a cmux session, a terminal emulator, or Claude Desktop.
+Deep linking is determined by process ancestry — the app walks the process tree from the agent PID to find whether it belongs to a cmux session, a terminal emulator, an editor, or Claude Desktop.
 
-## Requirements
+## Development
 
-- macOS 13+
-- Claude Code CLI
-- Accessibility permission (optional, for keyboard picker navigation beyond the global hotkey)
+| Command | Description |
+|---------|-------------|
+| `make build` | Release build only |
+| `make bundle` | Build + create .app bundle |
+| `make run` | Bundle + launch |
+| `make restart` | Build, kill running instance, relaunch |
+| `make stop` | Kill running instance |
+| `make install` | Copy bundle to /Applications |
 
 ## Uninstall
 

@@ -5,3 +5,5 @@ docs/superpowers/
 *.xcodeproj/xcuserdata/
 DerivedData/
 .DS_Store
+.claude/settings.local.json
+.claude/agent-memory/

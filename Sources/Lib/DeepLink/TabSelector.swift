@@ -19,6 +19,19 @@ enum TabSelector {
         let bundleId = app.bundleIdentifier ?? "unknown"
         DebugLog.shared.log("TabSelector: host app=\(bundleId) tty=\(tty ?? "nil") pid=\(pid)")
 
+        // Ghostty matches by cwd (no TTY in its scripting dictionary)
+        if bundleId == GhosttyLinker.bundleId, let cwd = agent.cwd {
+            Task {
+                let selected = await GhosttyLinker.selectTab(cwd: cwd)
+                if !selected {
+                    DebugLog.shared.log("TabSelector: Ghostty tab selection failed, falling back to activate")
+                    app.unhide()
+                    app.activate()
+                }
+            }
+            return
+        }
+
         if let tty {
             if bundleId == ITermLinker.bundleId {
                 Task {

@@ -26,9 +26,9 @@ WAIT_REASON="done"
 # If the first 2 lines contain a completion phrase, it's done regardless of trailing "?"
 if echo "$HEAD" | grep -qiE '\b(done|all done|all set|complete|completed|finished|everything.s (set|ready|updated|in place)|changes applied)\b'; then
   WAIT_REASON="done"
-elif echo "$TAIL" | grep -qE '\?\s*$'; then
+elif echo "$TAIL" | sed 's/[*`_~]//g' | grep -qE '\?\s*$'; then
   WAIT_REASON="question"
-elif echo "$TAIL" | grep -qiE '(shall I|should I|would you|do you want|want me to|ready to|like me to|proceed|go ahead|sound good|look right|make sense|let me know|what do you think)\b'; then
+elif echo "$TAIL" | grep -qiE '(shall I|should I|would you|do you want|want me to|ready to|like me to|proceed|go ahead|sound good|look right|make sense|let me know|what do you think|next question)\b'; then
   WAIT_REASON="question"
 fi
 

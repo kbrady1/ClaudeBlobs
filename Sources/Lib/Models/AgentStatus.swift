@@ -22,6 +22,18 @@ enum AgentStatus: String, Codable, CaseIterable {
         }
     }
 
+    /// Priority for display ordering: lower = more urgent (leftmost).
+    /// Order: red (permission), orange (waiting), green (starting), blue (working), purple (compacting).
+    var sortPriority: Int {
+        switch self {
+        case .permission: return 0
+        case .waiting:    return 1
+        case .starting:   return 2
+        case .working:    return 3
+        case .compacting: return 4
+        }
+    }
+
     var displayName: String {
         switch self {
         case .starting:   return "Starting"

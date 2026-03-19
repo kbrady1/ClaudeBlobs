@@ -16,6 +16,10 @@ struct AgentSpriteView: View {
     var staleness: AgentStaleness = .active
     var isPlanApproval: Bool = false
     var isAskingQuestion: Bool = false
+    var isBashPermission: Bool = false
+    var isFilePermission: Bool = false
+    var isWebPermission: Bool = false
+    var isMcpPermission: Bool = false
     var isTaskJustCompleted: Bool = false
     var isInterrupted: Bool = false
     var isToolFailure: Bool = false
@@ -31,7 +35,10 @@ struct AgentSpriteView: View {
     @State private var failureIconTimer: AnyCancellable?
     @State private var showExploringAccent: Bool = false
     @State private var exploringTimer: AnyCancellable?
+    @State private var winkResetTimer: AnyCancellable?
     @State private var waveAngle: Double = 0
+    @State private var compactSquished: Bool = false
+    @State private var compactTimer: AnyCancellable?
 
     var body: some View {
         ZStack {
@@ -46,22 +53,9 @@ struct AgentSpriteView: View {
                 workingIconOverlay
             }
 
-            // Plan acceptance accent
-            if !isSnoozed && status == .permission && isPlanApproval {
-                Image(systemName: "checkmark.bubble.fill")
-                    .font(.system(size: accentFont, weight: .heavy))
-                    .foregroundColor(.white)
-                    .shadow(color: .black, radius: 2)
-                    .offset(x: size * 0.35, y: size * 0.35)
-            }
-
-            // Question bubble accent
-            if !isSnoozed && status == .permission && isAskingQuestion {
-                Image(systemName: "questionmark.bubble.fill")
-                    .font(.system(size: accentFont, weight: .heavy))
-                    .foregroundColor(.white)
-                    .shadow(color: .black, radius: 2)
-                    .offset(x: size * 0.35, y: size * 0.35)
+            // Permission sub-type accent
+            if !isSnoozed && status == .permission {
+                permissionIconOverlay
             }
 
             // Tool failure / interrupt accent
@@ -91,14 +85,15 @@ struct AgentSpriteView: View {
         .rotationEffect(.degrees(waveAngle))
         .saturation(staleness == .hung ? 0 : 1)
         .scaleEffect(
-            x: status == .compacting ? 1.3 : 1.0,
-            y: status == .compacting ? 0.5 : 1.0
+            x: compactSquished ? 1.3 : 1.0,
+            y: compactSquished ? 0.5 : 1.0
         )
-        .animation(.spring(response: 0.4, dampingFraction: 0.5), value: status == .compacting)
+        .animation(.spring(response: 0.35, dampingFraction: 0.4), value: compactSquished)
         .offset(y: animationOffset)
         .onAppear {
             startBounceTimer()
             startExpressionTimer()
+            startCompactTimer()
             if isExploring {
                 showExploringAccent = true
                 exploringTimer?.cancel()
@@ -116,6 +111,7 @@ struct AgentSpriteView: View {
             checkmarkTimer?.cancel()
             failureIconTimer?.cancel()
             exploringTimer?.cancel()
+            compactTimer?.cancel()
         }
         .onChange(of: isSnoozed) { _ in
             expressionFrame = 0
@@ -124,6 +120,7 @@ struct AgentSpriteView: View {
         }
         .onChange(of: status) { newStatus in
             startBounceTimer()
+            startCompactTimer()
             if newStatus == .starting || (newStatus == .waiting && isDone) {
                 playWave()
             }
@@ -226,6 +223,25 @@ struct AgentSpriteView: View {
     private var accentFont: CGFloat { size < 25 ? size * 0.50 : size * 0.32 }
 
     @ViewBuilder
+    private var permissionIconOverlay: some View {
+        let offset = size * 0.35
+        let icon: String = {
+            if isPlanApproval { return "checkmark.bubble.fill" }
+            if isAskingQuestion { return "questionmark.bubble.fill" }
+            if isBashPermission { return "chevron.forward.square.fill" }
+            if isFilePermission { return "pencil" }
+            if isWebPermission { return "globe" }
+            if isMcpPermission { return "puzzlepiece.fill" }
+            return "exclamationmark.lock.fill"
+        }()
+        Image(systemName: icon)
+            .font(.system(size: accentFont, weight: .heavy))
+            .foregroundColor(.white)
+            .shadow(color: .black, radius: 2)
+            .offset(x: offset, y: offset)
+    }
+
+    @ViewBuilder
     private var workingIconOverlay: some View {
         let offset = size * 0.35
         if isTesting {
@@ -320,6 +336,21 @@ struct AgentSpriteView: View {
             }
     }
 
+    private func startCompactTimer() {
+        compactTimer?.cancel()
+        guard status == .compacting else {
+            compactSquished = false
+            return
+        }
+        // Squish immediately, then toggle on a loop
+        compactSquished = true
+        compactTimer = Timer.publish(every: 0.7, on: .main, in: .common)
+            .autoconnect()
+            .sink { _ in
+                compactSquished.toggle()
+            }
+    }
+
     private func startExpressionTimer() {
         expressionTimer?.cancel()
         // Hung agents don't cycle expressions — static x-eyes
@@ -376,7 +407,23 @@ struct AgentSpriteView: View {
             }
     }
 
+    /// Schedule a quick snap-back to the default face after a wink.
+    private func scheduleWinkReset() {
+        winkResetTimer?.cancel()
+        winkResetTimer = Timer.publish(every: 0.35, on: .main, in: .common)
+            .autoconnect()
+            .first()
+            .sink { _ in
+                var tx = Transaction()
+                tx.disablesAnimations = true
+                withTransaction(tx) {
+                    expressionFrame = 0
+                }
+            }
+    }
+
     private func advanceExpression() {
+        winkResetTimer?.cancel()
         if isSnoozed {
             expressionFrame = (expressionFrame + 1) % 3
             return
@@ -386,13 +433,14 @@ struct AgentSpriteView: View {
             // Mostly happy (0), occasionally wink (1) or tongue (2)
             let roll = Int.random(in: 0..<10)
             if roll < 6 { expressionFrame = 0 }
-            else if roll < 8 { expressionFrame = 1 }
-            else { expressionFrame = 2 }
+            else if roll < 8 { expressionFrame = 1; scheduleWinkReset() }
+            else { expressionFrame = 2; scheduleWinkReset() }
         case .waiting:
             if isDone {
                 // Mostly content (0), occasionally wink (1)
                 let roll = Int.random(in: 0..<10)
-                expressionFrame = roll < 7 ? 0 : 1
+                if roll < 7 { expressionFrame = 0 }
+                else { expressionFrame = 1; scheduleWinkReset() }
             } else {
                 // Cycle: open eyes + open mouth (0), blink (1), mouth shut (2)
                 expressionFrame = (expressionFrame + 1) % 3
