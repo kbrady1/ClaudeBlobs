@@ -1,7 +1,8 @@
 ---
 name: release
 description: Generate release notes and publish a new version of ClaudeBlobs
-user_invocable: true
+argument-hint: "[patch|minor|major]"
+allowed-tools: Bash, Read, Glob, Grep, AskUserQuestion
 ---
 
 # Release ClaudeBlobs
