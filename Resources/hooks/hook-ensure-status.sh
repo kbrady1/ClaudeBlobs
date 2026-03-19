@@ -73,6 +73,7 @@ ensure_status_file() {
       cmuxSurface: (if $cmuxSf == "" then null else $cmuxSf end),
       cmuxSocketPath: (if $cmuxSock == "" then null else $cmuxSock end),
       createdAt: $ts,
-      updatedAt: $ts
+      updatedAt: $ts,
+      statusChangedAt: $ts
     }' > "$tmp" && mv "$tmp" "$STATUS_FILE" || rm -f "$tmp"
 }

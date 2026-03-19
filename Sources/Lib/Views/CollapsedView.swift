@@ -36,6 +36,8 @@ struct CollapsedView: View {
                         isFilePermission: agent.isFilePermission,
                         isWebPermission: agent.isWebPermission,
                         isMcpPermission: agent.isMcpPermission,
+                        isGithubPermission: agent.isGithubPermission,
+                        isGithubTool: effectiveIsGithubTool(agent),
                         isTaskJustCompleted: agent.isTaskJustCompleted,
                         isInterrupted: agent.isInterrupted,
                         isToolFailure: agent.isToolFailure,
@@ -117,6 +119,13 @@ struct CollapsedView: View {
         if agent.isMcpTool { return true }
         guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
         return kids.contains { $0.isMcpTool }
+    }
+
+    /// Parent's own isGithubTool takes precedence; otherwise derive from children.
+    private func effectiveIsGithubTool(_ agent: Agent) -> Bool {
+        if agent.isGithubTool { return true }
+        guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
+        return kids.contains { $0.isGithubTool }
     }
 
     /// Parent's own isTesting takes precedence; otherwise derive from children.

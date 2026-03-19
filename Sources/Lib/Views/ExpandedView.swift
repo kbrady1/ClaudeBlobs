@@ -81,6 +81,8 @@ struct ExpandedView: View {
                         isFilePermission: agent.isFilePermission,
                         isWebPermission: agent.isWebPermission,
                         isMcpPermission: agent.isMcpPermission,
+                        isGithubPermission: agent.isGithubPermission,
+                        isGithubTool: agent.isGithubTool,
                         isTaskJustCompleted: agent.isTaskJustCompleted,
                         isInterrupted: agent.isInterrupted,
                         isToolFailure: agent.isToolFailure,

@@ -20,6 +20,8 @@ struct AgentSpriteView: View {
     var isFilePermission: Bool = false
     var isWebPermission: Bool = false
     var isMcpPermission: Bool = false
+    var isGithubPermission: Bool = false
+    var isGithubTool: Bool = false
     var isTaskJustCompleted: Bool = false
     var isInterrupted: Bool = false
     var isToolFailure: Bool = false
@@ -225,20 +227,35 @@ struct AgentSpriteView: View {
     @ViewBuilder
     private var permissionIconOverlay: some View {
         let offset = size * 0.35
-        let icon: String = {
-            if isPlanApproval { return "checkmark.bubble.fill" }
-            if isAskingQuestion { return "questionmark.bubble.fill" }
-            if isBashPermission { return "chevron.forward.square.fill" }
-            if isFilePermission { return "pencil" }
-            if isWebPermission { return "globe" }
-            if isMcpPermission { return "puzzlepiece.fill" }
-            return "exclamationmark.lock.fill"
-        }()
-        Image(systemName: icon)
-            .font(.system(size: accentFont, weight: .heavy))
-            .foregroundColor(.white)
+        if isGithubPermission {
+            githubAccentIcon
+                .offset(x: offset, y: offset)
+        } else {
+            let icon: String? = {
+                if isPlanApproval { return "checkmark.bubble.fill" }
+                if isAskingQuestion { return "questionmark.bubble.fill" }
+                if isBashPermission { return "chevron.forward.square.fill" }
+                if isFilePermission { return "pencil" }
+                if isWebPermission { return "globe" }
+                if isMcpPermission { return "point.3.filled.connected.trianglepath.dotted" }
+                return nil
+            }()
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: accentFont, weight: .heavy))
+                    .foregroundColor(.white)
+                    .shadow(color: .black, radius: 2)
+                    .offset(x: offset, y: offset)
+            }
+        }
+    }
+
+    private var githubAccentIcon: some View {
+        let iconSize = accentFont * 1.43
+        return GitLogoShape()
+            .fill(.white, style: FillStyle(eoFill: true))
             .shadow(color: .black, radius: 2)
-            .offset(x: offset, y: offset)
+            .frame(width: iconSize, height: iconSize)
     }
 
     @ViewBuilder
@@ -250,8 +267,11 @@ struct AgentSpriteView: View {
                 .foregroundColor(.white)
                 .shadow(color: .black, radius: 2)
                 .offset(x: offset, y: offset)
+        } else if isGithubTool {
+            githubAccentIcon
+                .offset(x: offset, y: offset)
         } else if isMcpTool {
-            Image(systemName: "puzzlepiece.fill")
+            Image(systemName: "point.3.filled.connected.trianglepath.dotted")
                 .font(.system(size: accentFont, weight: .heavy))
                 .foregroundColor(.white)
                 .shadow(color: .black, radius: 2)
@@ -452,6 +472,46 @@ struct AgentSpriteView: View {
             // Cycle: center (0), look left (1), look right (2), thinking mouth (3)
             expressionFrame = (expressionFrame + 1) % 4
         }
+    }
+}
+
+// MARK: - Git Logo Shape (from git-scm SVG, viewBox 0 0 24 24)
+
+private struct GitLogoShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        var path = Path()
+        path.move(to: CGPoint(x: w * 0.900941, y: h * 0.462881))
+        path.addLine(to: CGPoint(x: w * 0.537103, y: h * 0.099052))
+        path.addCurve(to: CGPoint(x: w * 0.461205, y: h * 0.099052), control1: CGPoint(x: w * 0.516154, y: h * 0.078094), control2: CGPoint(x: w * 0.482173, y: h * 0.078094))
+        path.addLine(to: CGPoint(x: w * 0.385661, y: h * 0.174615))
+        path.addLine(to: CGPoint(x: w * 0.481493, y: h * 0.270455))
+        path.addCurve(to: CGPoint(x: w * 0.547061, y: h * 0.285728), control1: CGPoint(x: w * 0.503766, y: h * 0.262928), control2: CGPoint(x: w * 0.529304, y: h * 0.267980))
+        path.addCurve(to: CGPoint(x: w * 0.562197, y: h * 0.351704), control1: CGPoint(x: w * 0.564909, y: h * 0.303593), control2: CGPoint(x: w * 0.569915, y: h * 0.329349))
+        path.addLine(to: CGPoint(x: w * 0.654574, y: h * 0.444072))
+        path.addCurve(to: CGPoint(x: w * 0.720550, y: h * 0.459226), control1: CGPoint(x: w * 0.676929, y: h * 0.436363), control2: CGPoint(x: w * 0.702703, y: h * 0.441342))
+        path.addCurve(to: CGPoint(x: w * 0.720550, y: h * 0.549526), control1: CGPoint(x: w * 0.745490, y: h * 0.484157), control2: CGPoint(x: w * 0.745490, y: h * 0.524577))
+        path.addCurve(to: CGPoint(x: w * 0.630214, y: h * 0.549526), control1: CGPoint(x: w * 0.695593, y: h * 0.574483), control2: CGPoint(x: w * 0.655181, y: h * 0.574483))
+        path.addCurve(to: CGPoint(x: w * 0.616330, y: h * 0.480075), control1: CGPoint(x: w * 0.611460, y: h * 0.530753), control2: CGPoint(x: w * 0.606817, y: h * 0.503183))
+        path.addLine(to: CGPoint(x: w * 0.530175, y: h * 0.393929))
+        path.addLine(to: CGPoint(x: w * 0.530175, y: h * 0.620626))
+        path.addCurve(to: CGPoint(x: w * 0.547061, y: h * 0.632697), control1: CGPoint(x: w * 0.536251, y: h * 0.623637), control2: CGPoint(x: w * 0.541992, y: h * 0.627646))
+        path.addCurve(to: CGPoint(x: w * 0.547061, y: h * 0.723024), control1: CGPoint(x: w * 0.572001, y: h * 0.657637), control2: CGPoint(x: w * 0.572001, y: h * 0.698048))
+        path.addCurve(to: CGPoint(x: w * 0.456752, y: h * 0.723024), control1: CGPoint(x: w * 0.522121, y: h * 0.747954), control2: CGPoint(x: w * 0.481683, y: h * 0.747954))
+        path.addCurve(to: CGPoint(x: w * 0.456752, y: h * 0.632697), control1: CGPoint(x: w * 0.431813, y: h * 0.698048), control2: CGPoint(x: w * 0.431813, y: h * 0.657637))
+        path.addCurve(to: CGPoint(x: w * 0.477674, y: h * 0.618758), control1: CGPoint(x: w * 0.462919, y: h * 0.626539), control2: CGPoint(x: w * 0.470057, y: h * 0.621878))
+        path.addLine(to: CGPoint(x: w * 0.477674, y: h * 0.389966))
+        path.addCurve(to: CGPoint(x: w * 0.456752, y: h * 0.376036), control1: CGPoint(x: w * 0.470057, y: h * 0.386856), control2: CGPoint(x: w * 0.462937, y: h * 0.382230))
+        path.addCurve(to: CGPoint(x: w * 0.443013, y: h * 0.306223), control1: CGPoint(x: w * 0.437862, y: h * 0.357155), control2: CGPoint(x: w * 0.433318, y: h * 0.329422))
+        path.addLine(to: CGPoint(x: w * 0.348532, y: h * 0.211734))
+        path.addLine(to: CGPoint(x: w * 0.099045, y: h * 0.461194))
+        path.addCurve(to: CGPoint(x: w * 0.099045, y: h * 0.537110), control1: CGPoint(x: w * 0.078096, y: h * 0.482170), control2: CGPoint(x: w * 0.078096, y: h * 0.516152))
+        path.addLine(to: CGPoint(x: w * 0.462901, y: h * 0.900939))
+        path.addCurve(to: CGPoint(x: w * 0.538799, y: h * 0.900939), control1: CGPoint(x: w * 0.483850, y: h * 0.921888), control2: CGPoint(x: w * 0.517823, y: h * 0.921888))
+        path.addLine(to: CGPoint(x: w * 0.900941, y: h * 0.538797))
+        path.addCurve(to: CGPoint(x: w * 0.900941, y: h * 0.462881), control1: CGPoint(x: w * 0.921909, y: h * 0.517839), control2: CGPoint(x: w * 0.921909, y: h * 0.483839))
+        return path
     }
 }
 

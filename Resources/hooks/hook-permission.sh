@@ -23,4 +23,4 @@ atomic_update "$STATUS_FILE" \
   --arg status "permission" \
   --arg toolUse "$TOOL_USE_STR" \
   --argjson ts "$TS" \
-  '.status = $status | .lastToolUse = $toolUse | .updatedAt = $ts'
+  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .updatedAt = $ts'

@@ -17,5 +17,5 @@ if [ "$CURRENT_STATUS" != "permission" ] && [ "$CURRENT_STATUS" != "waiting" ]; 
   atomic_update "$STATUS_FILE" \
     --arg status "working" \
     --argjson ts "$TS" \
-    '.status = $status | .updatedAt = $ts | .waitReason = null'
+    '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .updatedAt = $ts | .waitReason = null'
 fi

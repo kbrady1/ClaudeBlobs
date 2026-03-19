@@ -37,4 +37,4 @@ atomic_update "$STATUS_FILE" \
   --arg lastMessage "$FIRST_SENTENCE" \
   --arg waitReason "$WAIT_REASON" \
   --argjson ts "$TS" \
-  '.status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .waitReason = $waitReason | .updatedAt = $ts'
+  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .waitReason = $waitReason | .updatedAt = $ts'

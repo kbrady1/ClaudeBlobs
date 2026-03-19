@@ -17,6 +17,8 @@ Other targets:
 - `make stop` — kill running instance
 - `make install` — copy bundle to /Applications
 
+When working with superpowers, do not commit those files to the github repo. They are .gitignored
+
 ## Testing
 
 Run tests before considering any task complete:

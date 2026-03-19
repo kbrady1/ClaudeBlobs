@@ -43,5 +43,6 @@ jq -n \
     cmuxSurface: (if $cmuxSf == "" then null else $cmuxSf end),
     cmuxSocketPath: (if $cmuxSock == "" then null else $cmuxSock end),
     createdAt: $ts,
-    updatedAt: $ts
+    updatedAt: $ts,
+    statusChangedAt: $ts
   }' > "$TMP" && mv "$TMP" "$STATUS_FILE" || rm -f "$TMP"

@@ -36,8 +36,10 @@ final class AgentStore: ObservableObject {
                 if $0.status.sortPriority != $1.status.sortPriority {
                     return $0.status.sortPriority < $1.status.sortPriority
                 }
-                // Within same priority: newer (higher updatedAt) first (leftmost)
-                return $0.updatedAt > $1.updatedAt
+                // Within same priority: sort by when the agent entered this status
+                let a = $0.statusChangedAt ?? $0.updatedAt
+                let b = $1.statusChangedAt ?? $1.updatedAt
+                return a > b
             }
         }
         return result
@@ -61,7 +63,9 @@ final class AgentStore: ObservableObject {
                 if a.status.sortPriority != b.status.sortPriority {
                     return a.status.sortPriority < b.status.sortPriority
                 }
-                return a.updatedAt > b.updatedAt
+                let aT = a.statusChangedAt ?? a.updatedAt
+                let bT = b.statusChangedAt ?? b.updatedAt
+                return aT > bT
             }
             return false
         }

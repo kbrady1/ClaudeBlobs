@@ -31,6 +31,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var taskCompletedAt: Int64?
     var createdAt: Int64?
     var updatedAt: Int64
+    var statusChangedAt: Int64?
 
     var id: String { sessionId }
 
@@ -75,6 +76,16 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var isMcpTool: Bool {
         guard let tool = lastToolUse else { return false }
         return tool.hasPrefix("mcp__")
+    }
+
+    /// Whether the last tool use is a GitHub-related tool (GitHub MCP, git/gh bash commands).
+    var isGithubTool: Bool {
+        guard let tool = lastToolUse else { return false }
+        if tool.hasPrefix("mcp__github__") { return true }
+        guard tool.hasPrefix("Bash") else { return false }
+        let lower = tool.lowercased()
+        let gitPatterns = ["\"git ", "\"gh ", "\"git\t", "\"gh\t"]
+        return gitPatterns.contains { lower.contains($0) }
     }
 
     /// Formats an MCP tool name for display: "mcp__github__create_pr: {...}" → "github: create_pr"
@@ -191,6 +202,16 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         guard let tool = lastToolUse else { return false }
         return tool.hasPrefix("mcp__")
     }
+
+    /// Whether the permission is for a GitHub-related tool.
+    var isGithubPermission: Bool {
+        guard let tool = lastToolUse else { return false }
+        if tool.hasPrefix("mcp__github__") { return true }
+        guard tool.hasPrefix("Bash") else { return false }
+        let lower = tool.lowercased()
+        let gitPatterns = ["\"git ", "\"gh ", "\"git\t", "\"gh\t"]
+        return gitPatterns.contains { lower.contains($0) }
+    }
 }
 
 extension Agent {
@@ -211,7 +232,8 @@ extension Agent {
         toolFailure: String? = nil,
         taskCompletedAt: Int64? = nil,
         createdAt: Int64? = nil,
-        updatedAt: Int64 = 1000
+        updatedAt: Int64 = 1000,
+        statusChangedAt: Int64? = nil
     ) -> Agent {
         Agent(
             sessionId: sessionId, pid: pid, cwd: cwd,
@@ -222,7 +244,8 @@ extension Agent {
             cmuxSocketPath: cmuxSocketPath, parentSessionId: parentSessionId,
             waitReason: waitReason, toolFailure: toolFailure,
             taskCompletedAt: taskCompletedAt,
-            createdAt: createdAt, updatedAt: updatedAt
+            createdAt: createdAt, updatedAt: updatedAt,
+            statusChangedAt: statusChangedAt
         )
     }
 }
