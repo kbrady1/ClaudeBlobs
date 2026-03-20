@@ -43,6 +43,23 @@ struct AgentTests {
         #expect(agent.lastToolUse == nil)
         #expect(agent.cmuxWorkspace == nil)
         #expect(agent.cmuxSurface == nil)
+        #expect(agent.provider == .claudeCode)
+    }
+
+    @Test func decodesOpenCodeProvider() throws {
+        let json = """
+        {
+            "provider": "opencode",
+            "sessionId": "open-1",
+            "pid": 42,
+            "cwd": "/tmp",
+            "status": "working",
+            "updatedAt": 1000
+        }
+        """
+        let agent = try JSONDecoder().decode(Agent.self, from: Data(json.utf8))
+        #expect(agent.provider == .openCode)
+        #expect(agent.id == "opencode:open-1")
     }
 
     @Test func directoryLabel() {

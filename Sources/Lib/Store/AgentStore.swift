@@ -2,6 +2,11 @@ import Foundation
 import Combine
 import SwiftUI
 
+struct AgentStatusSource: Equatable {
+    let provider: AgentProvider
+    let directoryURL: URL
+}
+
 final class AgentStore: ObservableObject {
     @Published var agents: [Agent] = []
     @Published var snoozedSessionIds: Set<String> = []
@@ -14,8 +19,8 @@ final class AgentStore: ObservableObject {
 
     var ntfyScheduler: NtfyScheduler?
 
-    private let statusDirectory: URL
-    private var watcher: StatusFileWatcher?
+    private let statusSources: [AgentStatusSource]
+    private var watchers: [StatusFileWatcher] = []
     private let fileManager = FileManager.default
     private let isProcessAlive: (Int) -> Bool
 
@@ -28,8 +33,8 @@ final class AgentStore: ObservableObject {
         let subs = subAgentIds
         var result = agents.filter {
             (!hideWorkingAgents || $0.status.visibleWhenCollapsed)
-                && !snoozedSessionIds.contains($0.sessionId)
-                && !subs.contains($0.sessionId)
+                && !snoozedSessionIds.contains($0.id)
+                && !subs.contains($0.id)
         }
         if sortByPriority {
             result.sort {
@@ -48,7 +53,7 @@ final class AgentStore: ObservableObject {
     /// Top-level agents for expanded view (excludes sub-agents).
     var topLevelAgents: [Agent] {
         let subs = subAgentIds
-        return agents.filter { !subs.contains($0.sessionId) }
+        return agents.filter { !subs.contains($0.id) }
     }
 
     /// Top-level agents sorted with snoozed ones at the end.
@@ -56,8 +61,8 @@ final class AgentStore: ObservableObject {
         let snoozed = snoozedSessionIds
         let prioritySort = sortByPriority
         return topLevelAgents.sorted { a, b in
-            let aSnooze = snoozed.contains(a.sessionId)
-            let bSnooze = snoozed.contains(b.sessionId)
+            let aSnooze = snoozed.contains(a.id)
+            let bSnooze = snoozed.contains(b.id)
             if aSnooze != bSnooze { return !aSnooze }
             if prioritySort {
                 if a.status.sortPriority != b.status.sortPriority {
@@ -72,27 +77,29 @@ final class AgentStore: ObservableObject {
     }
 
     /// Returns child Agent objects for a given parent session ID.
-    func children(of sessionId: String) -> [Agent] {
-        guard let ids = childSessionIds[sessionId] else { return [] }
-        return ids.compactMap { id in agents.first { $0.sessionId == id } }
+    func children(of id: String) -> [Agent] {
+        guard let ids = childSessionIds[id] else { return [] }
+        return ids.compactMap { childId in agents.first { $0.id == childId } }
     }
 
     func snooze(_ agent: Agent) {
-        snoozedSessionIds.insert(agent.sessionId)
-        ntfyScheduler?.cancelPending(for: agent.sessionId)
+        snoozedSessionIds.insert(agent.id)
+        ntfyScheduler?.cancelPending(for: agent.id)
     }
 
     func dismiss(_ agent: Agent) {
-        ntfyScheduler?.reset(for: agent.sessionId)
-        try? fileManager.removeItem(
-            at: statusDirectory.appendingPathComponent("\(agent.sessionId).json")
-        )
+        ntfyScheduler?.reset(for: agent.id)
+        if let statusDirectory = statusDirectory(for: agent.provider) {
+            try? fileManager.removeItem(
+                at: statusDirectory.appendingPathComponent("\(agent.sessionId).json")
+            )
+        }
         reload()
     }
 
     func dismissAll() {
         for agent in agents {
-            snoozedSessionIds.insert(agent.sessionId)
+            snoozedSessionIds.insert(agent.id)
         }
     }
 
@@ -128,52 +135,72 @@ final class AgentStore: ObservableObject {
 
     init(
         statusDirectory: URL? = nil,
+        statusSources: [AgentStatusSource]? = nil,
         enableWatcher: Bool = true,
         isProcessAlive: @escaping (Int) -> Bool = { pid in kill(Int32(pid), 0) == 0 }
     ) {
-        self.statusDirectory = statusDirectory
-            ?? fileManager.homeDirectoryForCurrentUser
-                .appendingPathComponent(".claude/agent-status")
+        if let statusSources {
+            self.statusSources = statusSources
+        } else if let statusDirectory {
+            self.statusSources = [AgentStatusSource(provider: .claudeCode, directoryURL: statusDirectory)]
+        } else {
+            self.statusSources = AgentProvider.allCases.map {
+                AgentStatusSource(provider: $0, directoryURL: $0.statusDirectory)
+            }
+        }
         self.isProcessAlive = isProcessAlive
 
         if enableWatcher {
-            let watcher = StatusFileWatcher(directoryURL: self.statusDirectory) { [weak self] in
-                self?.reload()
+            for source in self.statusSources {
+                let watcher = StatusFileWatcher(directoryURL: source.directoryURL) { [weak self] in
+                    self?.reload()
+                }
+                watchers.append(watcher)
+                watcher.start()
             }
-            self.watcher = watcher
-            watcher.start()
         }
 
         reload()
     }
 
     func reload() {
-        guard let files = try? fileManager.contentsOfDirectory(
-            at: statusDirectory, includingPropertiesForKeys: nil
-        ) else {
-            agents = []
-            return
-        }
-
         let decoder = JSONDecoder()
         var loaded: [Agent] = []
+        var hadReadableSource = false
 
-        for file in files where file.pathExtension == "json" {
-            guard let data = try? Data(contentsOf: file),
-                  let agent = try? decoder.decode(Agent.self, from: data) else {
+        for source in statusSources {
+            guard let files = try? fileManager.contentsOfDirectory(
+                at: source.directoryURL, includingPropertiesForKeys: nil
+            ) else {
                 continue
             }
-            loaded.append(agent)
+            hadReadableSource = true
+
+            for file in files where file.pathExtension == "json" {
+                guard let data = try? Data(contentsOf: file),
+                      var agent = try? decoder.decode(Agent.self, from: data) else {
+                    continue
+                }
+                agent.provider = source.provider
+                loaded.append(agent)
+            }
+        }
+
+        guard hadReadableSource else {
+            agents = []
+            return
         }
 
         // Clean up stale PIDs
         loaded = loaded.filter { agent in
             let alive = isProcessAlive(agent.pid)
             if !alive {
-                ntfyScheduler?.reset(for: agent.sessionId)
-                try? fileManager.removeItem(
-                    at: statusDirectory.appendingPathComponent("\(agent.sessionId).json")
-                )
+                ntfyScheduler?.reset(for: agent.id)
+                if let statusDirectory = statusDirectory(for: agent.provider) {
+                    try? fileManager.removeItem(
+                        at: statusDirectory.appendingPathComponent("\(agent.sessionId).json")
+                    )
+                }
             }
             return alive
         }
@@ -182,26 +209,31 @@ final class AgentStore: ObservableObject {
         // for the same process. Keep the most recently updated entry and
         // remove the stale status file. Skip sub-agents (pid 0) since
         // multiple sub-agents legitimately share that sentinel value.
-        var bestByPid: [Int: Agent] = [:]
+        var bestByPid: [String: Agent] = [:]
         var pidZeroAgents: [Agent] = []
         for agent in loaded {
             if agent.pid == 0 {
                 pidZeroAgents.append(agent)
                 continue
             }
-            if let existing = bestByPid[agent.pid] {
+            let key = "\(agent.provider.rawValue):\(agent.pid)"
+            if let existing = bestByPid[key] {
                 if agent.updatedAt > existing.updatedAt {
-                    try? fileManager.removeItem(
-                        at: statusDirectory.appendingPathComponent("\(existing.sessionId).json")
-                    )
-                    bestByPid[agent.pid] = agent
+                    if let statusDirectory = statusDirectory(for: existing.provider) {
+                        try? fileManager.removeItem(
+                            at: statusDirectory.appendingPathComponent("\(existing.sessionId).json")
+                        )
+                    }
+                    bestByPid[key] = agent
                 } else {
-                    try? fileManager.removeItem(
-                        at: statusDirectory.appendingPathComponent("\(agent.sessionId).json")
-                    )
+                    if let statusDirectory = statusDirectory(for: agent.provider) {
+                        try? fileManager.removeItem(
+                            at: statusDirectory.appendingPathComponent("\(agent.sessionId).json")
+                        )
+                    }
                 }
             } else {
-                bestByPid[agent.pid] = agent
+                bestByPid[key] = agent
             }
         }
         loaded = Array(bestByPid.values) + pidZeroAgents
@@ -212,11 +244,11 @@ final class AgentStore: ObservableObject {
         // Unsnooze agents whose status changed and trigger peek
         var changedIds: Set<String> = []
         for agent in loaded {
-            if let previous = lastSeenStatus[agent.sessionId], previous != agent.status {
-                snoozedSessionIds.remove(agent.sessionId)
-                changedIds.insert(agent.sessionId)
+            if let previous = lastSeenStatus[agent.id], previous != agent.status {
+                snoozedSessionIds.remove(agent.id)
+                changedIds.insert(agent.id)
             }
-            lastSeenStatus[agent.sessionId] = agent.status
+            lastSeenStatus[agent.id] = agent.status
         }
 
         // Pop in briefly when status changes and hideWhileCollapsed is on
@@ -226,19 +258,19 @@ final class AgentStore: ObservableObject {
 
         // Schedule or cancel notifications based on agent state
         for agent in loaded {
-            let isSnoozed = snoozedSessionIds.contains(agent.sessionId)
+            let isSnoozed = snoozedSessionIds.contains(agent.id)
             let notifiable = agent.status == .permission
                 || (agent.status == .waiting && !agent.isDone)
                 || (agent.status == .waiting && agent.isDone)
             if notifiable {
                 ntfyScheduler?.scheduleIfNeeded(for: agent, isSnoozed: isSnoozed)
             } else {
-                ntfyScheduler?.cancelPending(for: agent.sessionId)
+                ntfyScheduler?.cancelPending(for: agent.id)
             }
         }
 
         // Clean up snoozed/notification entries for sessions that no longer exist
-        let activeIds = Set(loaded.map(\.sessionId))
+        let activeIds = Set(loaded.map(\.id))
         snoozedSessionIds = snoozedSessionIds.intersection(activeIds)
         ntfyScheduler?.cleanupGone(activeIds: activeIds)
 
@@ -246,7 +278,8 @@ final class AgentStore: ObservableObject {
         var newChildren: [String: [String]] = [:]
         for agent in loaded {
             if let parentId = agent.parentSessionId {
-                newChildren[parentId, default: []].append(agent.sessionId)
+                let parentKey = "\(agent.provider.rawValue):\(parentId)"
+                newChildren[parentKey, default: []].append(agent.id)
             }
         }
 
@@ -256,6 +289,10 @@ final class AgentStore: ObservableObject {
                 childSessionIds = newChildren
             }
         }
+    }
+
+    private func statusDirectory(for provider: AgentProvider) -> URL? {
+        statusSources.first(where: { $0.provider == provider })?.directoryURL
     }
 
     func triggerPeek(for ids: Set<String>? = nil) {
@@ -272,5 +309,9 @@ final class AgentStore: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: item)
     }
 
-    deinit { watcher?.stop() }
+    deinit {
+        for watcher in watchers {
+            watcher.stop()
+        }
+    }
 }

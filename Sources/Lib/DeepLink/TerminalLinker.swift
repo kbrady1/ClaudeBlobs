@@ -29,8 +29,25 @@ struct TerminalLinker {
 
         DebugLog.shared.log("TerminalLinker: no GUI ancestor found, trying fallback")
 
-        // Strategy 2: Find a running terminal app and activate it
         let runningApps = NSWorkspace.shared.runningApplications
+
+        // Strategy 2: Try bundle-specific selection without ancestry.
+        // OpenCode sessions can be detached from the terminal process tree,
+        // but Ghostty still lets us select tabs by working directory.
+        if let cwd = agent.cwd,
+           let ghostty = runningApps.first(where: { $0.bundleIdentifier == GhosttyLinker.bundleId }) {
+            Task {
+                let selected = await GhosttyLinker.selectTab(cwd: cwd, title: agent.sessionTitle)
+                if !selected {
+                    DebugLog.shared.log("TerminalLinker: Ghostty fallback tab selection failed")
+                    ghostty.unhide()
+                    ghostty.activate()
+                }
+            }
+            return
+        }
+
+        // Strategy 3: Find a running terminal app and activate it
         for bundleId in terminalBundleIds {
             if let app = runningApps.first(where: { $0.bundleIdentifier == bundleId }) {
                 DebugLog.shared.log("  activating terminal: \(bundleId)")
