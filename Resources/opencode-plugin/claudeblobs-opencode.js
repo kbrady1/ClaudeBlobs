@@ -144,8 +144,7 @@ export const ClaudeBlobsPlugin = async () => {
             updatedAt: now(),
             statusChangedAt: current.status === "working" ? current.statusChangedAt : now(),
           }))
-        }
-        if (status.type === "retry") {
+        } else if (status.type === "retry") {
           await updateStatus(sessionID, (current) => ({
             ...current,
             status: "waiting",
@@ -154,8 +153,7 @@ export const ClaudeBlobsPlugin = async () => {
             updatedAt: now(),
             statusChangedAt: current.status === "waiting" ? current.statusChangedAt : now(),
           }))
-        }
-        if (status.type === "idle") {
+        } else if (status.type === "idle") {
           const text = messageText.get(sessionID) ?? ""
           await updateStatus(sessionID, (current) => ({
             ...current,
@@ -263,7 +261,7 @@ export const ClaudeBlobsPlugin = async () => {
       await updateStatus(input.sessionID, (current) => ({
         ...current,
         status: "working",
-        lastToolUse: formatToolUse(input.tool, output.args),
+        lastToolUse: formatToolUse(input.tool, input.args),
         waitReason: null,
         toolFailure: null,
         updatedAt: now(),
