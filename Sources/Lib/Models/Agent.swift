@@ -34,6 +34,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     let pid: Int
     let cwd: String?
     var agentType: String?
+    var sessionTitle: String?
     var status: AgentStatus
     var lastMessage: String?
     var lastToolUse: String?
@@ -57,6 +58,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         pid: Int,
         cwd: String?,
         agentType: String? = nil,
+        sessionTitle: String? = nil,
         status: AgentStatus,
         lastMessage: String? = nil,
         lastToolUse: String? = nil,
@@ -77,6 +79,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         self.pid = pid
         self.cwd = cwd
         self.agentType = agentType
+        self.sessionTitle = sessionTitle
         self.status = status
         self.lastMessage = lastMessage
         self.lastToolUse = lastToolUse
@@ -99,6 +102,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         case pid
         case cwd
         case agentType
+        case sessionTitle
         case status
         case lastMessage
         case lastToolUse
@@ -122,6 +126,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         pid = try container.decode(Int.self, forKey: .pid)
         cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
         agentType = try container.decodeIfPresent(String.self, forKey: .agentType)
+        sessionTitle = try container.decodeIfPresent(String.self, forKey: .sessionTitle)
         status = try container.decode(AgentStatus.self, forKey: .status)
         lastMessage = try container.decodeIfPresent(String.self, forKey: .lastMessage)
         lastToolUse = try container.decodeIfPresent(String.self, forKey: .lastToolUse)
@@ -324,6 +329,7 @@ extension Agent {
         pid: Int = 99999,
         cwd: String? = "/tmp/test",
         agentType: String? = nil,
+        sessionTitle: String? = nil,
         status: AgentStatus = .working,
         lastMessage: String? = nil,
         lastToolUse: String? = nil,
@@ -342,7 +348,7 @@ extension Agent {
         Agent(
             provider: provider,
             sessionId: sessionId, pid: pid, cwd: cwd,
-            agentType: agentType, status: status,
+            agentType: agentType, sessionTitle: sessionTitle, status: status,
             lastMessage: lastMessage, lastToolUse: lastToolUse,
             tty: tty,
             cmuxWorkspace: cmuxWorkspace, cmuxSurface: cmuxSurface,

@@ -45,6 +45,7 @@ async function updateStatus(sessionID, update) {
     pid: process.pid,
     cwd: meta.cwd ?? null,
     agentType: meta.agentType ?? null,
+    sessionTitle: meta.sessionTitle ?? null,
     status: "working",
     lastMessage: null,
     lastToolUse: null,
@@ -115,12 +116,14 @@ export const ClaudeBlobsPlugin = async () => {
           createdAt: info.time.created,
           updatedAt: info.time.updated,
           agentType: null,
+          sessionTitle: info.title ?? null,
         })
         await updateStatus(info.id, (status) => ({
           ...status,
           provider: PROVIDER,
           cwd: info.directory,
           parentSessionId: info.parentID ?? null,
+          sessionTitle: info.title ?? status.sessionTitle ?? null,
           createdAt: status.createdAt ?? info.time.created,
           updatedAt: info.time.updated,
         }))
