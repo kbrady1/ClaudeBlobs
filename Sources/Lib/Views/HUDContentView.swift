@@ -63,7 +63,7 @@ struct HUDContentView: View {
     private var resolvedChildren: [String: [Agent]] {
         var result: [String: [Agent]] = [:]
         for (parentId, childIds) in store.childSessionIds {
-            result[parentId] = childIds.compactMap { id in store.agents.first { $0.sessionId == id } }
+            result[parentId] = childIds.compactMap { id in store.agents.first { $0.id == id } }
         }
         return result
     }

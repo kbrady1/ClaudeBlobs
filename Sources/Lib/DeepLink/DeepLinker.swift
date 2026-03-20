@@ -12,9 +12,9 @@ struct DeepLinker {
 
     static func linkType(for agent: Agent) -> LinkType {
         if agent.isCmuxSession { return .cmux }
-        if isDesktopAgent(pid: Int32(agent.pid)) { return .desktop }
+        if agent.provider == .claudeCode && isDesktopAgent(pid: Int32(agent.pid)) { return .desktop }
         if EditorLinker.findEditorAncestor(pid: Int32(agent.pid)) != nil { return .editor }
-        if agent.cwd != nil { return .terminal }
+        if agent.cwd != nil || agent.provider == .openCode { return .terminal }
         return .desktop
     }
 

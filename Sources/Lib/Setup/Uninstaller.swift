@@ -2,23 +2,28 @@ import Foundation
 import ServiceManagement
 
 struct Uninstaller {
-    let statusDir: URL
+    let statusDirs: [URL]
     let hookInstaller: HookInstaller
+    let openCodeInstaller: OpenCodeInstaller
 
     init(
         statusDir: URL? = nil,
-        hookInstaller: HookInstaller = HookInstaller()
+        hookInstaller: HookInstaller = HookInstaller(),
+        openCodeInstaller: OpenCodeInstaller = OpenCodeInstaller()
     ) {
-        self.statusDir = statusDir
-            ?? FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent(".claude/agent-status")
+        self.statusDirs = [
+            statusDir ?? AgentProvider.claudeCode.statusDirectory,
+            AgentProvider.openCode.statusDirectory,
+        ]
         self.hookInstaller = hookInstaller
+        self.openCodeInstaller = openCodeInstaller
     }
 
     func uninstall() throws {
         try hookInstaller.uninstall()
+        try? openCodeInstaller.uninstall()
 
-        if FileManager.default.fileExists(atPath: statusDir.path) {
+        for statusDir in statusDirs where FileManager.default.fileExists(atPath: statusDir.path) {
             try FileManager.default.removeItem(at: statusDir)
         }
 

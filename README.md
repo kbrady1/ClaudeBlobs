@@ -1,12 +1,12 @@
 # ClaudeBlobs
 
-A macOS menu bar app that monitors your running Claude Code agent sessions and lets you jump back to them with a keystroke.
+A macOS menu bar app that monitors your running Claude Code and OpenCode agent sessions and lets you jump back to them with a keystroke.
 
 ![macOS](https://img.shields.io/badge/macOS-13%2B-blue)
 
 ## What It Does
 
-ClaudeBlobs watches for active Claude Code agent sessions and displays them as animated sprite faces floating at the top of your screen. Each face reflects what the agent is doing — working, waiting for input, or asking for permission — so you can keep tabs on multiple agents at a glance.
+ClaudeBlobs watches for active Claude Code and OpenCode agent sessions and displays them as animated sprite faces floating at the top of your screen. Each face reflects what the agent is doing — working, waiting for input, or asking for permission — so you can keep tabs on multiple agents at a glance.
 
 ![ClaudBlobsDemo](https://github.com/user-attachments/assets/cfd74efd-567f-4617-ad24-3f4d99013d0d)
 
@@ -14,7 +14,7 @@ Click a face or use the keyboard picker to deep-link straight back to the termin
 
 ## Install
 
-Requires macOS 13+ and Claude Code CLI.
+Requires macOS 13+ and either Claude Code, OpenCode, or both.
 
 ### Homebrew
 
@@ -38,7 +38,7 @@ make install
 
 ## Setup
 
-On first launch the app will ask to install hooks into your Claude Code settings (`~/.claude/settings.json`). These hooks write status files so the HUD can track agent state. The app registers itself as a login item so it starts automatically.
+On first launch the app will ask to install hooks into your Claude Code settings (`~/.claude/settings.json`) and install the bundled OpenCode plugin into `~/.config/opencode/plugins/`. These integrations write status files so the HUD can track agent state. The app registers itself as a login item so it starts automatically.
 
 **Accessibility** — macOS will prompt for Accessibility permission the first time you use keyboard navigation in the agent picker (Tab, arrow keys, number keys). The global hotkey works without it.
 
@@ -112,12 +112,18 @@ Right-click (or click) the menu bar icon for:
 - **Push Notifications** — toggle ntfy.sh integration
 - **Notification Settings** — configure endpoint, topic, delay, and priorities
 - **Change Hotkey** — re-bind the global picker hotkey
-- **Reinstall Hooks** — re-install hooks if your Claude Code settings changed
+- **Reinstall Claude Code Hooks** — re-install hooks if your Claude Code settings changed
+- **Reinstall OpenCode Plugin** — copy the latest ClaudeBlobs plugin into `~/.config/opencode/plugins/`
 - **Uninstall Hooks & Quit** — clean removal of all hooks and status files
 
 ## How It Works
 
-Shell hooks are installed into Claude Code's hook system. Each agent lifecycle event (session start, tool use, permission request, notification, stop, etc.) writes or updates a JSON status file in `~/.claude/agent-status/`. The app watches that directory and renders the HUD.
+ClaudeBlobs collects agent state from two providers:
+
+- Claude Code shell hooks write JSON status files into `~/.claude/agent-status/`
+- The bundled OpenCode plugin writes matching JSON status files into `~/.opencode/agent-status/`
+
+The app watches both directories and renders a single combined HUD.
 
 Deep linking is determined by process ancestry — the app walks the process tree from the agent PID to find whether it belongs to a cmux session, a terminal emulator, an editor, or Claude Desktop.
 
@@ -139,6 +145,8 @@ Use **Uninstall Hooks & Quit** from the menu bar, then delete the app from `/App
 ```sh
 rm -rf /Applications/ClaudeBlobs.app
 rm -rf ~/.claude/agent-status
+rm -rf ~/.opencode/agent-status
+rm -f ~/.config/opencode/plugins/claudeblobs-opencode.js
 ```
 
 Then remove the hook entries from `~/.claude/settings.json`.

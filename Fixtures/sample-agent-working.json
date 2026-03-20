@@ -1,4 +1,5 @@
 {
+  "provider": "claude-code",
   "session_id": "session-abc-001",
   "pid": 12345,
   "cwd": "/Users/demo/projects/myapp",
