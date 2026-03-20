@@ -34,6 +34,67 @@ find_claude_pid() {
   echo "$PPID"
 }
 
+# Format tool input for human-readable display.
+# Usage: format_tool_input TOOL_NAME RAW_INPUT_JSON
+# Outputs "ToolName: summary" or just "ToolName" if extraction fails.
+format_tool_input() {
+  local tool_name="$1"
+  local raw_json="$2"
+
+  # If the input is a plain string (not a JSON object), use it directly
+  local input_type
+  input_type=$(echo "$raw_json" | jq -r 'type' 2>/dev/null)
+  if [ "$input_type" = "string" ]; then
+    local str_val
+    str_val=$(echo "$raw_json" | jq -r '.' 2>/dev/null | cut -c1-80)
+    if [ -n "$str_val" ] && [ "$str_val" != "null" ]; then
+      echo "${tool_name}: ${str_val}"
+    else
+      echo "$tool_name"
+    fi
+    return
+  fi
+
+  # Try to extract a human-readable summary based on tool type
+  local summary=""
+  case "$tool_name" in
+    Bash)
+      summary=$(echo "$raw_json" | jq -r '.command // empty' 2>/dev/null | cut -c1-80)
+      ;;
+    Edit|Write|Read)
+      summary=$(echo "$raw_json" | jq -r '.file_path // empty' 2>/dev/null | xargs basename 2>/dev/null)
+      ;;
+    Grep)
+      summary=$(echo "$raw_json" | jq -r '.pattern // empty' 2>/dev/null | cut -c1-80)
+      ;;
+    Glob)
+      summary=$(echo "$raw_json" | jq -r '.pattern // empty' 2>/dev/null | cut -c1-80)
+      ;;
+    Agent)
+      summary=$(echo "$raw_json" | jq -r '.description // empty' 2>/dev/null | cut -c1-80)
+      ;;
+    WebSearch)
+      summary=$(echo "$raw_json" | jq -r '.query // empty' 2>/dev/null | cut -c1-80)
+      ;;
+    WebFetch)
+      summary=$(echo "$raw_json" | jq -r '.url // empty' 2>/dev/null | cut -c1-80)
+      ;;
+    NotebookEdit)
+      summary=$(echo "$raw_json" | jq -r '.notebook // empty' 2>/dev/null | xargs basename 2>/dev/null)
+      ;;
+    *)
+      # Fallback: stringify and truncate
+      summary=$(echo "$raw_json" | jq -r 'if type == "object" then tostring else . end' 2>/dev/null | cut -c1-80)
+      ;;
+  esac
+
+  if [ -n "$summary" ] && [ "$summary" != "null" ] && [ "$summary" != "{}" ]; then
+    echo "${tool_name}: ${summary}"
+  else
+    echo "$tool_name"
+  fi
+}
+
 ensure_status_file() {
   [ -f "$STATUS_FILE" ] && return 0
 

@@ -75,6 +75,17 @@ struct HookScriptTests {
             "Let me know which you prefer.",
             "What do you think.",
             "Next question: what version should we use.",
+            "You can give it a try now.",
+            "Try running the tests to verify.",
+            "Try it and see if that fixes it.",
+            "Try again with the updated config.",
+            "Try that and let me know.",
+            "Take a look at the output.",
+            "You can test it by running make.",
+            "Run it to confirm the fix works.",
+            "Check if the build passes now.",
+            "Check whether the migration succeeded.",
+            "Check that the tests pass.",
         ])
         func conversationalPhrases(message: String) throws {
             let h = try HookTestHelper()
@@ -169,29 +180,29 @@ struct HookScriptTests {
 
     @Suite("hook-pre-tool")
     struct PreTool {
-        @Test("records lastToolUse with tool name and input")
+        @Test("records lastToolUse with tool name and extracted input")
         func toolNameAndInput() throws {
             let h = try HookTestHelper()
             let r = try h.runHook("hook-pre-tool.sh", input: [
                 "tool_name": "Read",
-                "tool_input": "some file content",
+                "tool_input": ["file_path": "/tmp/some_file.txt"],
             ], existingStatus: makeWorkingStatus())
-            #expect(r.status?["lastToolUse"] as? String == "Read: some file content")
+            #expect(r.status?["lastToolUse"] as? String == "Read: some_file.txt")
             #expect(r.status?["status"] as? String == "working")
             #expect(r.status?["waitReason"] is NSNull)
         }
 
-        @Test("truncates input at 80 chars")
+        @Test("truncates long bash command at 80 chars")
         func truncatesInput() throws {
             let h = try HookTestHelper()
-            let longInput = String(repeating: "z", count: 120)
+            let longCmd = String(repeating: "z", count: 120)
             let r = try h.runHook("hook-pre-tool.sh", input: [
-                "tool_name": "Write",
-                "tool_input": longInput,
+                "tool_name": "Bash",
+                "tool_input": ["command": longCmd],
             ], existingStatus: makeWorkingStatus())
             let toolUse = r.status?["lastToolUse"] as? String ?? ""
-            // "Write: " is 7 chars, input truncated to 80
-            #expect(toolUse.count <= 87)
+            // "Bash: " is 6 chars, command truncated to 80
+            #expect(toolUse.count <= 86)
         }
 
         @Test("empty input omits colon")
@@ -204,6 +215,103 @@ struct HookScriptTests {
         }
     }
 
+    // MARK: - hook-pre-tool.sh — JSON tool_input formatting
+
+    @Suite("hook-pre-tool: JSON tool_input")
+    struct PreToolJSON {
+        @Test("Bash with command field extracts command")
+        func bashCommand() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Bash",
+                "tool_input": ["command": "swift test"],
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["lastToolUse"] as? String == "Bash: swift test")
+        }
+
+        @Test("Edit with file_path extracts basename")
+        func editFilePath() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Edit",
+                "tool_input": ["file_path": "/Users/kent/project/Sources/Lib/Models/Agent.swift", "old_string": "foo", "new_string": "bar"],
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["lastToolUse"] as? String == "Edit: Agent.swift")
+        }
+
+        @Test("Read with file_path extracts basename")
+        func readFilePath() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Read",
+                "tool_input": ["file_path": "/tmp/foo/bar.txt"],
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["lastToolUse"] as? String == "Read: bar.txt")
+        }
+
+        @Test("Write with file_path extracts basename")
+        func writeFilePath() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Write",
+                "tool_input": ["file_path": "/tmp/output.json", "content": "{}"],
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["lastToolUse"] as? String == "Write: output.json")
+        }
+
+        @Test("Grep with pattern field extracts pattern")
+        func grepPattern() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Grep",
+                "tool_input": ["pattern": "formatMcpToolName", "path": "/tmp"],
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["lastToolUse"] as? String == "Grep: formatMcpToolName")
+        }
+
+        @Test("Glob with pattern field extracts pattern")
+        func globPattern() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Glob",
+                "tool_input": ["pattern": "**/*.swift"],
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["lastToolUse"] as? String == "Glob: **/*.swift")
+        }
+
+        @Test("Agent with description field extracts description")
+        func agentDescription() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Agent",
+                "tool_input": ["description": "Explore codebase", "prompt": "find all tests"],
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["lastToolUse"] as? String == "Agent: Explore codebase")
+        }
+
+        @Test("Unknown tool falls back to stringified JSON")
+        func unknownToolFallback() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "CustomTool",
+                "tool_input": ["key": "value"],
+            ], existingStatus: makeWorkingStatus())
+            let toolUse = r.status?["lastToolUse"] as? String ?? ""
+            #expect(toolUse.hasPrefix("CustomTool: "))
+            #expect(toolUse.contains("key"))
+        }
+
+        @Test("String tool_input still works (backward compat)")
+        func stringToolInput() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Read",
+                "tool_input": "some file content",
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["lastToolUse"] as? String == "Read: some file content")
+        }
+    }
+
     // MARK: - hook-permission.sh
 
     @Suite("hook-permission")
@@ -213,10 +321,20 @@ struct HookScriptTests {
             let h = try HookTestHelper()
             let r = try h.runHook("hook-permission.sh", input: [
                 "tool_name": "Bash",
-                "tool_input": "rm -rf /",
+                "tool_input": ["command": "rm -rf /"],
             ], existingStatus: makeWorkingStatus())
             #expect(r.status?["status"] as? String == "permission")
-            #expect((r.status?["lastToolUse"] as? String)?.hasPrefix("Bash: ") == true)
+            #expect(r.status?["lastToolUse"] as? String == "Bash: rm -rf /")
+        }
+
+        @Test("permission with Edit extracts basename")
+        func permissionEdit() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-permission.sh", input: [
+                "tool_name": "Edit",
+                "tool_input": ["file_path": "/Users/kent/project/main.swift"],
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["lastToolUse"] as? String == "Edit: main.swift")
         }
     }
 

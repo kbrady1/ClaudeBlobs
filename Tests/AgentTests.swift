@@ -113,6 +113,48 @@ struct AgentTests {
         #expect(agent.taskCompletedAt == 1710000000000)
     }
 
+    @Test func isGithubToolWithNewFormat() {
+        // New human-readable format: "Bash: git push"
+        let gitPush = Agent.fixture(lastToolUse: "Bash: git push origin main")
+        #expect(gitPush.isGithubTool == true)
+
+        let ghPr = Agent.fixture(lastToolUse: "Bash: gh pr create")
+        #expect(ghPr.isGithubTool == true)
+
+        let gitBare = Agent.fixture(lastToolUse: "Bash: git")
+        #expect(gitBare.isGithubTool == true)
+
+        let ghBare = Agent.fixture(lastToolUse: "Bash: gh")
+        #expect(ghBare.isGithubTool == true)
+
+        // Non-git bash commands
+        let swiftTest = Agent.fixture(lastToolUse: "Bash: swift test")
+        #expect(swiftTest.isGithubTool == false)
+
+        // MCP github tool
+        let mcp = Agent.fixture(lastToolUse: "mcp__github__create_pr")
+        #expect(mcp.isGithubTool == true)
+
+        // Non-Bash tool
+        let edit = Agent.fixture(lastToolUse: "Edit: Agent.swift")
+        #expect(edit.isGithubTool == false)
+
+        // Nil
+        let none = Agent.fixture(lastToolUse: nil)
+        #expect(none.isGithubTool == false)
+    }
+
+    @Test func isGithubPermissionWithNewFormat() {
+        let gitPush = Agent.fixture(lastToolUse: "Bash: git push --force")
+        #expect(gitPush.isGithubPermission == true)
+
+        let ghPr = Agent.fixture(lastToolUse: "Bash: gh pr merge")
+        #expect(ghPr.isGithubPermission == true)
+
+        let npmInstall = Agent.fixture(lastToolUse: "Bash: npm install")
+        #expect(npmInstall.isGithubPermission == false)
+    }
+
     @Test func isTaskJustCompleted() {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let recent = Agent.fixture(taskCompletedAt: now - 1000)

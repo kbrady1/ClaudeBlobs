@@ -24,6 +24,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var hideWhileCollapsedMenuItem: NSMenuItem!
     private var hideWorkingMenuItem: NSMenuItem!
     private var sortByPriorityMenuItem: NSMenuItem!
+    private var prominentStateChangesMenuItem: NSMenuItem!
     private var viewLogMenuItem: NSMenuItem!
     private var clearLogMenuItem: NSMenuItem!
     private var hotkeyRef: EventHotKeyRef?
@@ -82,12 +83,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         let agentDisplayMenu = NSMenu()
 
-        hideWhileCollapsedMenuItem = NSMenuItem(title: "Hide While Collapsed", action: #selector(toggleHideWhileCollapsed), keyEquivalent: "h")
+        hideWhileCollapsedMenuItem = NSMenuItem(title: "Hide When Collapsed", action: #selector(toggleHideWhileCollapsed), keyEquivalent: "")
         hideWhileCollapsedMenuItem.target = self
         hideWhileCollapsedMenuItem.state = store.hideWhileCollapsed ? .on : .off
         agentDisplayMenu.addItem(hideWhileCollapsedMenuItem)
 
-        hideWorkingMenuItem = NSMenuItem(title: "Hide Working Agents", action: #selector(toggleHideWorking), keyEquivalent: "a")
+        hideWorkingMenuItem = NSMenuItem(title: "Hide Working Agents", action: #selector(toggleHideWorking), keyEquivalent: "")
         hideWorkingMenuItem.target = self
         hideWorkingMenuItem.state = store.hideWorkingAgents ? .on : .off
         agentDisplayMenu.addItem(hideWorkingMenuItem)
@@ -96,6 +97,25 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         sortByPriorityMenuItem.target = self
         sortByPriorityMenuItem.state = store.sortByPriority ? .on : .off
         agentDisplayMenu.addItem(sortByPriorityMenuItem)
+
+        prominentStateChangesMenuItem = NSMenuItem(title: "Prominent State Changes", action: #selector(toggleProminentStateChanges), keyEquivalent: "")
+        prominentStateChangesMenuItem.target = self
+        prominentStateChangesMenuItem.state = themeConfig.prominentStateChangesDisabled ? .off : .on
+        agentDisplayMenu.addItem(prominentStateChangesMenuItem)
+
+        agentDisplayMenu.addItem(.separator())
+
+        let idleSubmenu = NSMenu()
+        for (title, seconds) in Self.idleOptions {
+            let item = NSMenuItem(title: title, action: #selector(setIdleThreshold(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = seconds
+            item.state = AgentStaleness.idleThreshold == Int64(seconds) ? .on : .off
+            idleSubmenu.addItem(item)
+        }
+        let idleMenuItem = NSMenuItem(title: "Idle After", action: nil, keyEquivalent: "")
+        idleMenuItem.submenu = idleSubmenu
+        agentDisplayMenu.addItem(idleMenuItem)
 
         agentDisplayMenu.addItem(.separator())
 
@@ -113,7 +133,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         agentDisplayMenu.addItem(.separator())
 
-        let themeSettingsItem = NSMenuItem(title: "Theme Settings\u{2026}", action: #selector(openThemeSettings), keyEquivalent: "")
+        let themeSettingsItem = NSMenuItem(title: "Color Themes\u{2026}", action: #selector(openThemeSettings), keyEquivalent: "")
         themeSettingsItem.target = self
         agentDisplayMenu.addItem(themeSettingsItem)
 
@@ -447,7 +467,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Theme Settings"
+        window.title = "Color Themes"
         window.contentView = NSHostingView(rootView: ThemeSettingsView(config: themeConfig))
         window.center()
         window.isReleasedWhenClosed = false
@@ -503,6 +523,29 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleSortByPriority() {
         store.sortByPriority.toggle()
         sortByPriorityMenuItem.state = store.sortByPriority ? .on : .off
+    }
+
+    @objc private func toggleProminentStateChanges() {
+        themeConfig.prominentStateChangesDisabled.toggle()
+        prominentStateChangesMenuItem.state = themeConfig.prominentStateChangesDisabled ? .off : .on
+    }
+
+    private static let idleOptions: [(String, Int)] = [
+        ("5 Minutes", 300),
+        ("10 Minutes", 600),
+        ("20 Minutes", 1200),
+        ("30 Minutes", 1800),
+        ("1 Hour", 3600),
+        ("2 Hours", 7200),
+    ]
+
+    @objc private func setIdleThreshold(_ sender: NSMenuItem) {
+        guard let seconds = sender.representedObject as? Int else { return }
+        UserDefaults.standard.set(seconds, forKey: "idleThresholdSeconds")
+        if let menu = sender.menu {
+            for item in menu.items { item.state = .off }
+        }
+        sender.state = .on
     }
 
     @objc private func setAppIconVisibility(_ sender: NSMenuItem) {

@@ -10,6 +10,7 @@ struct CollapsedView: View {
     var hideWhileCollapsed: Bool = false
     var peekingIds: Set<String> = []
     var theme: ColorTheme = .trafficLight
+    var prominentStateChangesEnabled: Bool = true
     var showAppIcons: Bool = false
     var backgroundStyle: BackgroundStyle?
 
@@ -22,6 +23,7 @@ struct CollapsedView: View {
                         status: agent.status,
                         size: 18,
                         theme: theme,
+                        prominentStateChangesEnabled: prominentStateChangesEnabled,
                         isCoding: effectiveIsCoding(agent),
                         isSearching: effectiveIsSearching(agent),
                         isExploring: effectiveIsExploring(agent),

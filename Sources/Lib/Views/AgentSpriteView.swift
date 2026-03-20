@@ -6,6 +6,7 @@ struct AgentSpriteView: View {
     let size: CGFloat
     var isSnoozed: Bool = false
     var theme: ColorTheme = .trafficLight
+    var prominentStateChangesEnabled: Bool = true
     var isCoding: Bool = false
     var isSearching: Bool = false
     var isExploring: Bool = false
@@ -41,6 +42,9 @@ struct AgentSpriteView: View {
     @State private var waveAngle: Double = 0
     @State private var compactSquished: Bool = false
     @State private var compactTimer: AnyCancellable?
+    @State private var prominentScale: CGFloat = 1.0
+    @State private var prominentWiggle: Double = 0
+    @State private var prominentOffsetY: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -84,7 +88,9 @@ struct AgentSpriteView: View {
                     .offset(x: size * 0.35, y: -size * 0.35)
             }
         }
-        .rotationEffect(.degrees(waveAngle))
+        .rotationEffect(.degrees(waveAngle + prominentWiggle))
+        .scaleEffect(prominentScale)
+        .offset(y: prominentOffsetY)
         .saturation(staleness == .hung ? 0 : 1)
         .scaleEffect(
             x: compactSquished ? 1.3 : 1.0,
@@ -125,6 +131,9 @@ struct AgentSpriteView: View {
             startCompactTimer()
             if newStatus == .starting || (newStatus == .waiting && isDone) {
                 playWave()
+            }
+            if prominentStateChangesEnabled && newStatus != .working && newStatus != .compacting {
+                playProminentPop()
             }
         }
         .onChange(of: isDone) { done in
@@ -409,6 +418,39 @@ struct AgentSpriteView: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
             withAnimation(.easeInOut(duration: 0.15)) { waveAngle = 0 }
+        }
+    }
+
+    private func playProminentPop() {
+        prominentScale = 1.0
+        prominentWiggle = 0
+        prominentOffsetY = 0
+        withAnimation(.spring(response: 0.15, dampingFraction: 0.5)) {
+            prominentScale = 1.5
+            prominentOffsetY = size * 0.25
+        }
+        // Wiggle sequence while scaled up
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.easeInOut(duration: 0.08)) { prominentWiggle = 12 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.23) {
+            withAnimation(.easeInOut(duration: 0.08)) { prominentWiggle = -10 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.31) {
+            withAnimation(.easeInOut(duration: 0.08)) { prominentWiggle = 8 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.39) {
+            withAnimation(.easeInOut(duration: 0.08)) { prominentWiggle = -6 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.47) {
+            withAnimation(.easeInOut(duration: 0.08)) { prominentWiggle = 0 }
+        }
+        // Scale back down and reset offset
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                prominentScale = 1.0
+                prominentOffsetY = 0
+            }
         }
     }
 

@@ -8,6 +8,7 @@ struct ExpandedView: View {
     var childAgents: [String: [Agent]] = [:]
     let selectedIndex: Int?
     var theme: ColorTheme = .trafficLight
+    var prominentStateChangesEnabled: Bool = true
     var showAppIcons: Bool = true
     var backgroundStyle: BackgroundStyle = .color(.black)
     let onAgentClick: (Agent) -> Void
@@ -67,6 +68,7 @@ struct ExpandedView: View {
                         size: 40,
                         isSnoozed: snoozedIds.contains(agent.sessionId),
                         theme: theme,
+                        prominentStateChangesEnabled: prominentStateChangesEnabled,
                         isCoding: agent.isCoding,
                         isSearching: agent.isSearching,
                         isExploring: agent.isExploring,

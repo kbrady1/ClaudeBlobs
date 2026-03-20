@@ -48,15 +48,15 @@ struct ScrollingSpeechBubble: View {
     }
 
     private var maxScroll: CGFloat {
-        // Scroll at most 60pt worth regardless of overflow, so speed stays consistent
-        min(overflow, 60)
+        // Scroll at most 96pt worth regardless of overflow, so speed stays consistent
+        min(overflow, 96)
     }
 
     private func beginScroll() {
         scrollOffset = 0
         guard overflow > 0 else { return }
         withAnimation(
-            .linear(duration: 5.0)
+            .linear(duration: 8.0)
             .delay(1.0)
             .repeatForever(autoreverses: false)
         ) {

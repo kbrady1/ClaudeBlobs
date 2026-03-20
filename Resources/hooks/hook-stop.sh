@@ -28,7 +28,7 @@ if echo "$HEAD" | grep -qiE '\b(done|all done|all set|complete|completed|finishe
   WAIT_REASON="done"
 elif echo "$TAIL" | sed 's/[*`_~]//g' | grep -qE '\?\s*$'; then
   WAIT_REASON="question"
-elif echo "$TAIL" | grep -qiE '(shall I|should I|would you|do you want|want me to|ready to|like me to|proceed|go ahead|sound good|look right|make sense|let me know|what do you think|next question)\b'; then
+elif echo "$TAIL" | grep -qiE '(shall I|should I|would you|do you want|want me to|ready to|like me to|proceed|go ahead|sound good|look right|make sense|let me know|what do you think|next question|give it a try|try (it|running|again|that)|take a look|test it|run it|check (if|whether|that))\b'; then
   WAIT_REASON="question"
 fi
 

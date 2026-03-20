@@ -23,11 +23,16 @@ final class ThemeConfig: ObservableObject {
         didSet { UserDefaults.standard.set(backgroundMaterial, forKey: "backgroundMaterial") }
     }
 
+    @Published var prominentStateChangesDisabled: Bool {
+        didSet { UserDefaults.standard.set(prominentStateChangesDisabled, forKey: "prominentStateChangesDisabled") }
+    }
+
     init() {
         let raw = UserDefaults.standard.string(forKey: "colorTheme") ?? ""
         self.selectedTheme = ColorTheme(rawValue: raw) ?? .trafficLight
         self.backgroundEnabled = UserDefaults.standard.bool(forKey: "collapsedBackgroundEnabled")
         self.backgroundMaterial = UserDefaults.standard.bool(forKey: "backgroundMaterial")
+        self.prominentStateChangesDisabled = UserDefaults.standard.bool(forKey: "prominentStateChangesDisabled")
         if let data = UserDefaults.standard.data(forKey: "collapsedBackgroundColor"),
            let nsColor = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data) {
             self.backgroundColor = Color(nsColor)

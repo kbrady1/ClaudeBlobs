@@ -119,6 +119,7 @@ struct HUDContentView: View {
                 childAgents: resolvedChildren,
                 selectedIndex: expansionState.isKeyboardExpanded ? expansionState.selectedIndex : nil,
                 theme: themeConfig.selectedTheme,
+                prominentStateChangesEnabled: !themeConfig.prominentStateChangesDisabled,
                 showAppIcons: store.appIconVisibility != .never,
                 backgroundStyle: themeConfig.backgroundEnabled ? resolvedBackgroundStyle : .color(.black),
                 onAgentClick: { agent in
@@ -138,6 +139,7 @@ struct HUDContentView: View {
                 hideWhileCollapsed: store.hideWhileCollapsed,
                 peekingIds: store.peekingIds,
                 theme: themeConfig.selectedTheme,
+                prominentStateChangesEnabled: !themeConfig.prominentStateChangesDisabled,
                 showAppIcons: store.appIconVisibility == .always,
                 backgroundStyle: themeConfig.backgroundEnabled ? resolvedBackgroundStyle : nil
             )

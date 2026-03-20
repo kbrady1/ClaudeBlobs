@@ -2,13 +2,24 @@ import Foundation
 
 enum AgentStaleness: Sendable, Equatable {
     case active
-    case stale   // >20 min since last update
-    case hung    // >1 hr since last update
+    case stale   // X-eyes
+    case hung    // X-eyes + desaturated
+
+    /// Idle threshold in seconds (gray/desaturated). Configurable via UserDefaults.
+    static var idleThreshold: Int64 {
+        let val = UserDefaults.standard.integer(forKey: "idleThresholdSeconds")
+        return val > 0 ? Int64(val) : 3600  // default 1 hr
+    }
+
+    /// X-eyes threshold: half the idle threshold, minimum 300s (5 min).
+    static var staleThreshold: Int64 {
+        max(300, idleThreshold / 2)
+    }
 
     init(updatedAt: Int64) {
         let ageSeconds = (Int64(Date().timeIntervalSince1970 * 1000) - updatedAt) / 1000
-        if ageSeconds > 3600 { self = .hung }
-        else if ageSeconds > 1200 { self = .stale }
+        if ageSeconds > Self.idleThreshold { self = .hung }
+        else if ageSeconds > Self.staleThreshold { self = .stale }
         else { self = .active }
     }
 }
@@ -82,10 +93,9 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var isGithubTool: Bool {
         guard let tool = lastToolUse else { return false }
         if tool.hasPrefix("mcp__github__") { return true }
-        guard tool.hasPrefix("Bash") else { return false }
-        let lower = tool.lowercased()
-        let gitPatterns = ["\"git ", "\"gh ", "\"git\t", "\"gh\t"]
-        return gitPatterns.contains { lower.contains($0) }
+        guard tool.hasPrefix("Bash: ") || tool.hasPrefix("Bash:") else { return false }
+        let cmd = tool.dropFirst(tool.hasPrefix("Bash: ") ? 6 : 5).lowercased()
+        return cmd.hasPrefix("git ") || cmd.hasPrefix("gh ") || cmd == "git" || cmd == "gh"
     }
 
     /// Formats an MCP tool name for display: "mcp__github__create_pr: {...}" → "github: create_pr"
@@ -207,10 +217,9 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var isGithubPermission: Bool {
         guard let tool = lastToolUse else { return false }
         if tool.hasPrefix("mcp__github__") { return true }
-        guard tool.hasPrefix("Bash") else { return false }
-        let lower = tool.lowercased()
-        let gitPatterns = ["\"git ", "\"gh ", "\"git\t", "\"gh\t"]
-        return gitPatterns.contains { lower.contains($0) }
+        guard tool.hasPrefix("Bash: ") || tool.hasPrefix("Bash:") else { return false }
+        let cmd = tool.dropFirst(tool.hasPrefix("Bash: ") ? 6 : 5).lowercased()
+        return cmd.hasPrefix("git ") || cmd.hasPrefix("gh ") || cmd == "git" || cmd == "gh"
     }
 }
 

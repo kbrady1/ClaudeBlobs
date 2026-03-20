@@ -10,14 +10,10 @@ source "$SCRIPT_DIR/hook-ensure-status.sh"
 ensure_status_file
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
-TOOL_INPUT=$(echo "$INPUT" | jq -r '.tool_input // empty | if type == "object" then tostring else . end' 2>/dev/null | cut -c1-80)
+RAW_INPUT=$(echo "$INPUT" | jq -c '.tool_input // empty' 2>/dev/null)
 TS=$(date +%s000)
 
-if [ -n "$TOOL_INPUT" ] && [ "$TOOL_INPUT" != "null" ] && [ "$TOOL_INPUT" != "{}" ]; then
-  TOOL_USE_STR="${TOOL_NAME}: ${TOOL_INPUT}"
-else
-  TOOL_USE_STR="$TOOL_NAME"
-fi
+TOOL_USE_STR=$(format_tool_input "$TOOL_NAME" "$RAW_INPUT")
 
 atomic_update "$STATUS_FILE" \
   --arg status "working" \
