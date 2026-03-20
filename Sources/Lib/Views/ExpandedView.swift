@@ -10,6 +10,7 @@ struct ExpandedView: View {
     var theme: ColorTheme = .trafficLight
     var prominentStateChangesEnabled: Bool = true
     var showAppIcons: Bool = true
+    var hostAppIcons: [Int: NSImage] = [:]
     var backgroundStyle: BackgroundStyle = .color(.black)
     let onAgentClick: (Agent) -> Void
     let onSnooze: (Agent) -> Void
@@ -93,7 +94,7 @@ struct ExpandedView: View {
                     .frame(width: 48, height: 44)
                     .overlay(alignment: .bottomLeading) {
                         if showAppIcons {
-                            AppIconBadge(pid: agent.pid)
+                            AppIconBadge(icon: hostAppIcons[agent.pid])
                         }
                     }
 
@@ -168,10 +169,6 @@ struct ExpandedView: View {
 /// Shows the host app icon (VS Code, Cursor, Claude Desktop) in the bottom-left corner.
 private struct AppIconBadge: View {
     let icon: NSImage?
-
-    init(pid: Int) {
-        self.icon = HostAppResolver.resolve(pid: pid)?.icon
-    }
 
     var body: some View {
         if let icon {

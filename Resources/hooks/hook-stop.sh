@@ -10,6 +10,7 @@ source "$SCRIPT_DIR/hook-ensure-status.sh"
 ensure_status_file
 
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty')
+RAW_MSG=$(echo "$LAST_MSG" | head -c 2000)
 TS=$(date +%s000)
 
 # Extract first sentence: up to first period, question mark, or newline, max 200 chars
@@ -36,5 +37,6 @@ atomic_update "$STATUS_FILE" \
   --arg status "waiting" \
   --arg lastMessage "$FIRST_SENTENCE" \
   --arg waitReason "$WAIT_REASON" \
+  --arg rawLastMessage "$RAW_MSG" \
   --argjson ts "$TS" \
-  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .waitReason = $waitReason | .updatedAt = $ts'
+  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .waitReason = $waitReason | .rawLastMessage = (if $rawLastMessage == "" then null else $rawLastMessage end) | .updatedAt = $ts'

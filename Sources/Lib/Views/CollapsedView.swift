@@ -12,6 +12,7 @@ struct CollapsedView: View {
     var theme: ColorTheme = .trafficLight
     var prominentStateChangesEnabled: Bool = true
     var showAppIcons: Bool = false
+    var hostAppIcons: [Int: NSImage] = [:]
     var backgroundStyle: BackgroundStyle?
 
     var body: some View {
@@ -47,7 +48,7 @@ struct CollapsedView: View {
                     )
                     .overlay(alignment: .bottomLeading) {
                         if showAppIcons {
-                            CollapsedAppIconBadge(pid: agent.pid)
+                            CollapsedAppIconBadge(icon: hostAppIcons[agent.pid])
                         }
                     }
                 }
@@ -167,10 +168,6 @@ private struct WavingEntrance<Content: View>: View {
 /// Smaller app icon badge for collapsed blobs (10px).
 private struct CollapsedAppIconBadge: View {
     let icon: NSImage?
-
-    init(pid: Int) {
-        self.icon = HostAppResolver.resolve(pid: pid)?.icon
-    }
 
     var body: some View {
         if let icon {

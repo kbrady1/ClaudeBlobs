@@ -7,12 +7,19 @@ final class AgentStore: ObservableObject {
     @Published var snoozedSessionIds: Set<String> = []
     /// Parent session ID → child session IDs (sub-agents linked by PID ancestry)
     @Published var childSessionIds: [String: [String]] = [:]
+    /// Cached host app icons per PID (resolved once per agent).
+    @Published var hostAppIcons: [Int: NSImage] = [:]
 
     /// Tracks the last-seen status per session so we can unsnooze on change.
     private var lastSeenStatus: [String: AgentStatus] = [:]
     private var peekTimer: DispatchWorkItem?
 
     var ntfyScheduler: NtfyScheduler?
+    var doneClassifierConfig: DoneClassifierConfig?
+
+    private let doneClassifier = DoneClassifier()
+    private var classifiedSessionIds: Set<String> = []
+    private var aiWaitReasonOverrides: [String: String] = [:]
 
     private let statusDirectory: URL
     private var watcher: StatusFileWatcher?
@@ -241,6 +248,60 @@ final class AgentStore: ObservableObject {
         let activeIds = Set(loaded.map(\.sessionId))
         snoozedSessionIds = snoozedSessionIds.intersection(activeIds)
         ntfyScheduler?.cleanupGone(activeIds: activeIds)
+
+        // Clear AI classification state for agents that left waiting
+        for agent in loaded {
+            if agent.status != .waiting {
+                classifiedSessionIds.remove(agent.sessionId)
+                aiWaitReasonOverrides.removeValue(forKey: agent.sessionId)
+            }
+        }
+
+        // Apply any AI overrides to waitReason
+        for i in loaded.indices {
+            if let override = aiWaitReasonOverrides[loaded[i].sessionId] {
+                loaded[i].waitReason = override
+            }
+        }
+
+        // Launch AI classification for waiting agents with rawLastMessage
+        if doneClassifierConfig?.appleIntelligenceEnabled == true {
+            for agent in loaded where agent.status == .waiting
+                && agent.rawLastMessage != nil
+                && !classifiedSessionIds.contains(agent.sessionId) {
+                classifiedSessionIds.insert(agent.sessionId)
+                let sessionId = agent.sessionId
+                let message = agent.rawLastMessage!
+                let regexResult = agent.waitReason
+                DebugLog.shared.log("DoneClassifier: queuing classification for \(sessionId) (regex=\(regexResult ?? "nil"))")
+                Task { [weak self] in
+                    guard let result = await self?.doneClassifier.classify(message: message) else {
+                        DebugLog.shared.log("DoneClassifier: no result for \(sessionId), keeping regex=\(regexResult ?? "nil")")
+                        return
+                    }
+                    await MainActor.run {
+                        guard let self else { return }
+                        let changed = result != regexResult
+                        DebugLog.shared.log("DoneClassifier: \(sessionId) ai=\(result) regex=\(regexResult ?? "nil") changed=\(changed)")
+                        self.aiWaitReasonOverrides[sessionId] = result
+                        if let idx = self.agents.firstIndex(where: { $0.sessionId == sessionId }) {
+                            self.agents[idx].waitReason = result
+                        }
+                        self.objectWillChange.send()
+                    }
+                }
+            }
+        }
+
+        // Resolve host app icons for new PIDs
+        let activePids = Set(loaded.map(\.pid))
+        for pid in activePids where pid != 0 && hostAppIcons[pid] == nil {
+            hostAppIcons[pid] = HostAppResolver.resolve(pid: pid)?.icon
+        }
+        // Clean up icons for PIDs no longer present
+        for pid in hostAppIcons.keys where !activePids.contains(pid) {
+            hostAppIcons.removeValue(forKey: pid)
+        }
 
         // Build parent-child relationships from parentSessionId
         var newChildren: [String: [String]] = [:]

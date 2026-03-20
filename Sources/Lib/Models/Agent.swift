@@ -38,6 +38,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var cmuxSocketPath: String?
     var parentSessionId: String?
     var waitReason: String?
+    var rawLastMessage: String?
     var toolFailure: String?
     var taskCompletedAt: Int64?
     var createdAt: Int64?
@@ -238,6 +239,7 @@ extension Agent {
         cmuxSocketPath: String? = nil,
         parentSessionId: String? = nil,
         waitReason: String? = nil,
+        rawLastMessage: String? = nil,
         toolFailure: String? = nil,
         taskCompletedAt: Int64? = nil,
         createdAt: Int64? = nil,
@@ -251,7 +253,8 @@ extension Agent {
             tty: tty,
             cmuxWorkspace: cmuxWorkspace, cmuxSurface: cmuxSurface,
             cmuxSocketPath: cmuxSocketPath, parentSessionId: parentSessionId,
-            waitReason: waitReason, toolFailure: toolFailure,
+            waitReason: waitReason, rawLastMessage: rawLastMessage,
+            toolFailure: toolFailure,
             taskCompletedAt: taskCompletedAt,
             createdAt: createdAt, updatedAt: updatedAt,
             statusChangedAt: statusChangedAt

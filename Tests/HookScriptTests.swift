@@ -113,6 +113,33 @@ struct HookScriptTests {
         }
     }
 
+    @Suite("hook-stop: rawLastMessage")
+    struct StopRawLastMessage {
+        @Test("rawLastMessage is present in hook-stop output")
+        func rawLastMessagePresent() throws {
+            let h = try HookTestHelper()
+            let msg = "I've finished implementing the feature. Everything is working now."
+            let r = try h.runHook("hook-stop.sh", input: ["last_assistant_message": msg])
+            #expect(r.status?["rawLastMessage"] as? String == msg)
+        }
+
+        @Test("rawLastMessage is null when message is empty")
+        func rawLastMessageNull() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-stop.sh", input: ["last_assistant_message": ""])
+            #expect(r.status?["rawLastMessage"] is NSNull)
+        }
+
+        @Test("rawLastMessage is truncated to 2000 chars")
+        func rawLastMessageTruncated() throws {
+            let h = try HookTestHelper()
+            let longMsg = String(repeating: "x", count: 3000)
+            let r = try h.runHook("hook-stop.sh", input: ["last_assistant_message": longMsg])
+            let raw = r.status?["rawLastMessage"] as? String ?? ""
+            #expect(raw.count <= 2000)
+        }
+    }
+
     @Suite("hook-stop: metadata")
     struct StopMetadata {
         @Test("sets status to waiting and updatedAt is recent")

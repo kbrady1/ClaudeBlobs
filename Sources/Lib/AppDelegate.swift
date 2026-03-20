@@ -12,12 +12,18 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var themeConfig: ThemeConfig!
     private var ntfyScheduler: NtfyScheduler!
     private var statusItem: NSStatusItem!
+    #if DEBUG
     private var debugMenuItem: NSMenuItem!
+    private var viewLogMenuItem: NSMenuItem!
+    private var clearLogMenuItem: NSMenuItem!
+    #endif
     private var ntfyMenuItem: NSMenuItem!
     private var settingsWindow: NSWindow?
     private var themeWindow: NSWindow?
     private var hotkeyWindow: NSWindow?
     private var hotkeyConfig: HotkeyConfig!
+    private var doneClassifierConfig: DoneClassifierConfig!
+    private var doneClassifierWindow: NSWindow?
     private var hotkeyMenuItem: NSMenuItem!
     private var eventHandlerInstalled = false
     private var cancellables = Set<AnyCancellable>()
@@ -25,8 +31,6 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var hideWorkingMenuItem: NSMenuItem!
     private var sortByPriorityMenuItem: NSMenuItem!
     private var prominentStateChangesMenuItem: NSMenuItem!
-    private var viewLogMenuItem: NSMenuItem!
-    private var clearLogMenuItem: NSMenuItem!
     private var hotkeyRef: EventHotKeyRef?
     private var globalHotkeyMonitor: Any?
     private var localKeyMonitor: Any?
@@ -41,8 +45,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         expansionState = HUDExpansionState()
         ntfyConfig = NtfyConfig()
         themeConfig = ThemeConfig()
+        doneClassifierConfig = DoneClassifierConfig()
         ntfyScheduler = NtfyScheduler(config: ntfyConfig)
         store.ntfyScheduler = ntfyScheduler
+        store.doneClassifierConfig = doneClassifierConfig
         rebuildPanels()
 
         // Rebuild panels when screen placement preference changes
@@ -164,6 +170,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         ntfySettingsItem.target = self
         menu.addItem(ntfySettingsItem)
 
+        let doneClassifierItem = NSMenuItem(title: "AI Done Detection\u{2026}", action: #selector(openDoneClassifierSettings), keyEquivalent: "")
+        doneClassifierItem.target = self
+        menu.addItem(doneClassifierItem)
+
         menu.addItem(.separator())
 
         hotkeyConfig = HotkeyConfig.load()
@@ -177,6 +187,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        #if DEBUG
         debugMenuItem = NSMenuItem(title: "Debug Mode", action: #selector(toggleDebug), keyEquivalent: "d")
         debugMenuItem.target = self
         debugMenuItem.state = DebugLog.shared.isEnabled ? .on : .off
@@ -191,6 +202,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         clearLogMenuItem.target = self
         clearLogMenuItem.isHidden = !DebugLog.shared.isEnabled
         menu.addItem(clearLogMenuItem)
+        #endif
 
         let reinstallItem = NSMenuItem(title: "Reinstall Hooks", action: #selector(reinstallHooks), keyEquivalent: "")
         reinstallItem.target = self
@@ -476,6 +488,27 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         themeWindow = window
     }
 
+    @objc private func openDoneClassifierSettings() {
+        if let existing = doneClassifierWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "AI Done Detection"
+        window.contentView = NSHostingView(rootView: DoneClassifierSettingsView(config: doneClassifierConfig))
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        doneClassifierWindow = window
+    }
+
     @objc private func openHotkeySettings() {
         if let existing = hotkeyWindow, existing.isVisible {
             existing.makeKeyAndOrderFront(nil)
@@ -571,6 +604,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    #if DEBUG
     @objc private func toggleDebug() {
         DebugLog.shared.isEnabled.toggle()
         debugMenuItem.state = DebugLog.shared.isEnabled ? .on : .off
@@ -594,6 +628,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func clearDebugLog() {
         DebugLog.shared.clear()
     }
+    #endif
 
     @objc private func reinstallHooks() {
         do {

@@ -113,6 +113,42 @@ struct AgentTests {
         #expect(agent.taskCompletedAt == 1710000000000)
     }
 
+    @Test func rawLastMessageDecodes() throws {
+        let json = """
+        {
+            "sessionId": "raw-msg-1",
+            "pid": 100,
+            "status": "waiting",
+            "waitReason": "done",
+            "rawLastMessage": "I've completed the task.",
+            "updatedAt": 1000
+        }
+        """
+        let agent = try JSONDecoder().decode(Agent.self, from: Data(json.utf8))
+        #expect(agent.rawLastMessage == "I've completed the task.")
+    }
+
+    @Test func rawLastMessageDefaultsToNil() throws {
+        let json = """
+        {
+            "sessionId": "raw-msg-2",
+            "pid": 100,
+            "status": "waiting",
+            "updatedAt": 1000
+        }
+        """
+        let agent = try JSONDecoder().decode(Agent.self, from: Data(json.utf8))
+        #expect(agent.rawLastMessage == nil)
+    }
+
+    @Test func fixtureRawLastMessage() {
+        let withMsg = Agent.fixture(rawLastMessage: "test message")
+        #expect(withMsg.rawLastMessage == "test message")
+
+        let withoutMsg = Agent.fixture()
+        #expect(withoutMsg.rawLastMessage == nil)
+    }
+
     @Test func isGithubToolWithNewFormat() {
         // New human-readable format: "Bash: git push"
         let gitPush = Agent.fixture(lastToolUse: "Bash: git push origin main")

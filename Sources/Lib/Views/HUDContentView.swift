@@ -121,6 +121,7 @@ struct HUDContentView: View {
                 theme: themeConfig.selectedTheme,
                 prominentStateChangesEnabled: !themeConfig.prominentStateChangesDisabled,
                 showAppIcons: store.appIconVisibility != .never,
+                hostAppIcons: store.hostAppIcons,
                 backgroundStyle: themeConfig.backgroundEnabled ? resolvedBackgroundStyle : .color(.black),
                 onAgentClick: { agent in
                     onAgentClick(agent)
@@ -141,6 +142,7 @@ struct HUDContentView: View {
                 theme: themeConfig.selectedTheme,
                 prominentStateChangesEnabled: !themeConfig.prominentStateChangesDisabled,
                 showAppIcons: store.appIconVisibility == .always,
+                hostAppIcons: store.hostAppIcons,
                 backgroundStyle: themeConfig.backgroundEnabled ? resolvedBackgroundStyle : nil
             )
             .transition(.opacity.combined(with: .scale(scale: 1.05, anchor: .top)))

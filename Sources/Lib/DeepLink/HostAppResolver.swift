@@ -48,11 +48,9 @@ enum HostAppResolver {
                 .map { $0.processIdentifier }
         )
         guard !pids.isEmpty else {
-            DebugLog.shared.log("HostAppResolver: \(bundleId) not running")
             return nil
         }
         guard ProcessTree.findAncestor(of: pid, where: { pids.contains($0) }) != nil else {
-            DebugLog.shared.log("HostAppResolver: pid \(pid) is not a descendant of \(bundleId)")
             return nil
         }
         guard let app = runningApps.first(where: { $0.bundleIdentifier == bundleId }),
