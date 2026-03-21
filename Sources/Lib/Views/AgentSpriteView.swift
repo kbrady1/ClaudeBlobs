@@ -83,17 +83,17 @@ struct AgentSpriteView: View {
                     .offset(y: -size * 0.55)
             }
 
-            // App icon badge — moves with blob
-            if let appIcon {
-                AppIconAccent(icon: appIcon, size: size, showsBorder: appIconShowsBorder)
-            }
-
             // Purple notification badge
             if hasNotified {
                 Circle()
                     .fill(Color.purple)
                     .frame(width: size * 0.25, height: size * 0.25)
                     .offset(x: size * 0.35, y: -size * 0.35)
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if let appIcon {
+                AppIconAccent(icon: appIcon, size: size, showsBorder: appIconShowsBorder)
             }
         }
         .rotationEffect(.degrees(waveAngle + prominentWiggle))
@@ -532,22 +532,18 @@ private struct AppIconAccent: View {
     let size: CGFloat
     let showsBorder: Bool
 
+    var offset: CGFloat { size * (showsBorder ? 0.15 : 0.2) }
+
     var body: some View {
-        let iconSize = showsBorder ? size * 0.35 : size * 0.65
-        if showsBorder {
-            Image(nsImage: icon)
-                .resizable()
-                .frame(width: iconSize, height: iconSize)
-                .clipShape(RoundedRectangle(cornerRadius: iconSize * 0.22))
-                .shadow(color: .black.opacity(0.5), radius: 1)
-                .offset(x: -size * 0.35, y: size * 0.35)
-        } else {
-            Image(nsImage: icon)
-                .resizable()
-                .frame(width: iconSize, height: iconSize)
-                .shadow(color: .black.opacity(0.5), radius: 1)
-                .offset(x: -size * 0.35, y: size * 0.35)
-        }
+        let iconSize = showsBorder ? size * 0.47 : size * 0.7
+        Image(nsImage: icon)
+            .interpolation(.high)
+            .resizable()
+            .frame(width: iconSize, height: iconSize)
+            .clipShape(RoundedRectangle(cornerRadius: iconSize * 0.22))
+            .shadow(color: .black.opacity(0.5), radius: 1)
+            .offset(x: -1 * offset, y: offset)
+            .scaleEffect(x: showsBorder ? 1 : 0.8, y: showsBorder ? 1 : 0.8)
     }
 }
 
