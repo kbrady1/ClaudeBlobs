@@ -12,26 +12,91 @@ struct ExpandedView: View {
     var showAppIcons: Bool = true
     var hostAppIcons: [Int: NSImage] = [:]
     var backgroundStyle: BackgroundStyle = .color(.black)
+    var customNames: [String: String] = [:]
     let onAgentClick: (Agent) -> Void
     let onSnooze: (Agent) -> Void
     let onDismiss: (Agent) -> Void
+    var onRename: ((Agent, String) -> Void)?
+    var onClearName: ((Agent) -> Void)?
+    var onRenameStateChanged: ((Bool) -> Void)?
     @Environment(\.notchInset) private var notchInset
+    @State private var renamingAgent: Agent?
+    @State private var renameText: String = ""
+    /// Frozen snapshot of agents while rename popover is open, preventing reorder from killing the popover.
+    @State private var frozenAgents: [Agent]?
+
+    private var displayAgents: [Agent] {
+        frozenAgents ?? agents
+    }
+
+    private func displayName(for agent: Agent) -> String {
+        customNames[agent.sessionId] ?? agent.directoryLabel
+    }
+
+    private func beginRename(_ agent: Agent) {
+        frozenAgents = agents
+        renameText = displayName(for: agent)
+        renamingAgent = agent
+        onRenameStateChanged?(true)
+    }
+
+    private func endRename() {
+        renamingAgent = nil
+        frozenAgents = nil
+        onRenameStateChanged?(false)
+    }
+
+    private func commitRename() {
+        guard let agent = renamingAgent else { return }
+        let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty || trimmed == agent.directoryLabel {
+            onClearName?(agent)
+        } else {
+            onRename?(agent, trimmed)
+        }
+        endRename()
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            ForEach(Array(agents.prefix(9).enumerated()), id: \.element.id) { index, agent in
+            ForEach(Array(displayAgents.prefix(9).enumerated()), id: \.element.id) { index, agent in
                 Button { onAgentClick(agent) } label: {
                     agentCard(agent, isSelected: selectedIndex == index)
                 }
                 .buttonStyle(.plain)
                 .opacity(snoozedIds.contains(agent.id) ? 0.45 : agent.status == .working ? 0.7 : 1.0)
+                .contextMenu {
+                    Button("Rename\u{2026}") { beginRename(agent) }
+                    if customNames[agent.sessionId] != nil {
+                        Button("Clear Name") { onClearName?(agent) }
+                    }
+                }
+                .popover(isPresented: Binding(
+                    get: { renamingAgent?.id == agent.id },
+                    set: { if !$0 { endRename() } }
+                )) {
+                    RenamePopover(
+                        text: $renameText,
+                        hasCustomName: customNames[agent.sessionId] != nil,
+                        onCommit: commitRename,
+                        onClear: {
+                            onClearName?(agent)
+                            endRename()
+                        }
+                    )
+                }
             }
-            if agents.count > 9 {
+            if displayAgents.count > 9 {
                 Text("+\(agents.count - 9)")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.secondary)
                     .frame(width: 40)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .renameSelectedAgent)) { notification in
+            guard let sessionId = notification.object as? String,
+                  let agent = agents.first(where: { $0.sessionId == sessionId }) else { return }
+            beginRename(agent)
         }
         .padding(12)
         .background(
@@ -165,9 +230,9 @@ struct ExpandedView: View {
                 }
             }
 
-            Text(agent.directoryLabel)
+            Text(displayName(for: agent))
                 .font(.system(size: 9))
-                .foregroundColor(.secondary)
+                .foregroundColor(customNames[agent.sessionId] != nil ? .primary : .secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: 80)
@@ -181,6 +246,36 @@ struct ExpandedView: View {
                 .strokeBorder(Color.white.opacity(isSelected ? 0.6 : 0), lineWidth: 1.5)
         )
         .animation(.easeInOut(duration: 0.15), value: isSelected)
+    }
+}
+
+extension Notification.Name {
+    static let renameSelectedAgent = Notification.Name("renameSelectedAgent")
+}
+
+/// Popover for renaming a blob.
+private struct RenamePopover: View {
+    @Binding var text: String
+    var hasCustomName: Bool
+    var onCommit: () -> Void
+    var onClear: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            TextField("Name", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 160)
+                .onSubmit { onCommit() }
+            HStack(spacing: 8) {
+                if hasCustomName {
+                    Button("Clear") { onClear() }
+                }
+                Spacer()
+                Button("Rename") { onCommit() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(12)
     }
 }
 

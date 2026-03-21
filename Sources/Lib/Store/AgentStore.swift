@@ -128,6 +128,26 @@ final class AgentStore: ObservableObject {
         }
     }
 
+    // MARK: - Custom Names
+
+    @Published var customNames: [String: String] = {
+        (UserDefaults.standard.dictionary(forKey: "customAgentNames") as? [String: String]) ?? [:]
+    }()
+
+    func setCustomName(_ name: String, for agent: Agent) {
+        customNames[agent.sessionId] = name
+        UserDefaults.standard.set(customNames, forKey: "customAgentNames")
+    }
+
+    func clearCustomName(for agent: Agent) {
+        customNames.removeValue(forKey: agent.sessionId)
+        UserDefaults.standard.set(customNames, forKey: "customAgentNames")
+    }
+
+    func displayName(for agent: Agent) -> String {
+        customNames[agent.sessionId] ?? agent.directoryLabel
+    }
+
     @Published var hideWorkingAgents: Bool = UserDefaults.standard.bool(forKey: "hideWorkingAgents") {
         didSet { UserDefaults.standard.set(hideWorkingAgents, forKey: "hideWorkingAgents") }
     }
@@ -296,8 +316,16 @@ final class AgentStore: ObservableObject {
 
         // Clean up snoozed/notification entries for sessions that no longer exist
         let activeIds = Set(loaded.map(\.id))
+        let activeSessionIds = Set(loaded.map(\.sessionId))
         snoozedSessionIds = snoozedSessionIds.intersection(activeIds)
         ntfyScheduler?.cleanupGone(activeIds: activeIds)
+
+        // Prune custom names for sessions that no longer exist
+        let staleNames = customNames.keys.filter { !activeSessionIds.contains($0) }
+        if !staleNames.isEmpty {
+            for key in staleNames { customNames.removeValue(forKey: key) }
+            UserDefaults.standard.set(customNames, forKey: "customAgentNames")
+        }
 
         // Clear AI classification state for agents that left waiting
         for agent in loaded {

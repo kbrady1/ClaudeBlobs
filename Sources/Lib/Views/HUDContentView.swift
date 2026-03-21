@@ -15,6 +15,7 @@ extension EnvironmentValues {
 final class HUDExpansionState: ObservableObject {
     @Published var isKeyboardExpanded = false
     @Published var selectedIndex: Int = 0
+    @Published var isRenaming = false
 
     func toggle(agentCount: Int) {
         withAnimation(.spring(duration: 0.35, bounce: 0.1)) {
@@ -85,7 +86,7 @@ struct HUDContentView: View {
                         }
                     } else {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            if isHovering { return }
+                            if isHovering || expansionState.isRenaming { return }
                             withAnimation(.spring(duration: 0.35, bounce: 0.1)) {
                                 isHoverExpanded = false
                             }
@@ -123,12 +124,16 @@ struct HUDContentView: View {
                 showAppIcons: store.appIconVisibility != .never,
                 hostAppIcons: store.hostAppIcons,
                 backgroundStyle: themeConfig.backgroundEnabled ? resolvedBackgroundStyle : .color(.black),
+                customNames: store.customNames,
                 onAgentClick: { agent in
                     onAgentClick(agent)
                     expansionState.collapse()
                 },
                 onSnooze: { store.snooze($0) },
-                onDismiss: { store.dismiss($0) }
+                onDismiss: { store.dismiss($0) },
+                onRename: { agent, name in store.setCustomName(name, for: agent) },
+                onClearName: { store.clearCustomName(for: $0) },
+                onRenameStateChanged: { expansionState.isRenaming = $0 }
             )
             .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
         } else {

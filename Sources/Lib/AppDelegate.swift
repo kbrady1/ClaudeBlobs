@@ -396,6 +396,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @discardableResult
     private func handlePickerKeyEvent(_ event: NSEvent) -> Bool {
         guard expansionState.isKeyboardExpanded else { return false }
+        // Let all key events pass through to the text field while renaming
+        if expansionState.isRenaming { return false }
         let agentCount = min(store.sortedTopLevelAgents.count, 9)
 
         // Escape — close picker
@@ -441,6 +443,19 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     DebugLog.shared.log("Hotkey select agent \(index): \(agents[index].sessionId)")
                     self.closePicker()
                     DeepLinker.open(agents[index])
+                }
+            }
+            return true
+        }
+
+        // R — rename selected agent
+        if event.keyCode == 15 && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
+            let index = expansionState.selectedIndex
+            let agents = store.sortedTopLevelAgents
+            if index < agents.count {
+                let agent = agents[index]
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .renameSelectedAgent, object: agent.sessionId)
                 }
             }
             return true
