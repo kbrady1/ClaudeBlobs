@@ -21,6 +21,58 @@ struct AgentStoreTests {
 
         #expect(store.agents.count == 1)
         #expect(store.agents.first?.sessionId == "s1")
+        #expect(store.agents.first?.provider == .claudeCode)
+    }
+
+    @Test func loadsAgentsFromMultipleProviders() throws {
+        let root = tmpDir.appendingPathComponent("providers")
+        let claudeDir = root.appendingPathComponent("claude")
+        let openDir = root.appendingPathComponent("opencode")
+        try FileManager.default.createDirectory(at: claudeDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: openDir, withIntermediateDirectories: true)
+
+        let claudeAgent = Agent.fixture(provider: .claudeCode, sessionId: "c1", pid: 111, status: .waiting)
+        let openAgent = Agent.fixture(provider: .openCode, sessionId: "o1", pid: 222, status: .working)
+        try JSONEncoder().encode(claudeAgent).write(to: claudeDir.appendingPathComponent("c1.json"))
+        try JSONEncoder().encode(openAgent).write(to: openDir.appendingPathComponent("o1.json"))
+
+        let store = AgentStore(
+            statusSources: [
+                AgentStatusSource(provider: .claudeCode, directoryURL: claudeDir),
+                AgentStatusSource(provider: .openCode, directoryURL: openDir),
+            ],
+            enableWatcher: false,
+            isProcessAlive: { _ in true }
+        )
+        store.reload()
+
+        #expect(store.agents.count == 2)
+        #expect(Set(store.agents.map(\.provider)) == Set([.claudeCode, .openCode]))
+    }
+
+    @Test func keepsSamePidAcrossProviders() throws {
+        let root = tmpDir.appendingPathComponent("same-pid")
+        let claudeDir = root.appendingPathComponent("claude")
+        let openDir = root.appendingPathComponent("opencode")
+        try FileManager.default.createDirectory(at: claudeDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: openDir, withIntermediateDirectories: true)
+
+        let claudeAgent = Agent.fixture(provider: .claudeCode, sessionId: "c1", pid: 999, status: .waiting)
+        let openAgent = Agent.fixture(provider: .openCode, sessionId: "o1", pid: 999, status: .working)
+        try JSONEncoder().encode(claudeAgent).write(to: claudeDir.appendingPathComponent("c1.json"))
+        try JSONEncoder().encode(openAgent).write(to: openDir.appendingPathComponent("o1.json"))
+
+        let store = AgentStore(
+            statusSources: [
+                AgentStatusSource(provider: .claudeCode, directoryURL: claudeDir),
+                AgentStatusSource(provider: .openCode, directoryURL: openDir),
+            ],
+            enableWatcher: false,
+            isProcessAlive: { _ in true }
+        )
+        store.reload()
+
+        #expect(store.agents.map(\.sessionId).sorted() == ["c1", "o1"])
     }
 
     @Test func filtersCollapsedAgents() throws {
@@ -127,7 +179,7 @@ struct AgentStoreTests {
         let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
         store.reload()
 
-        #expect(store.childSessionIds["parent"] == ["child"])
+        #expect(store.childSessionIds[parent.id] == [child.id])
         #expect(store.topLevelAgents.count == 1)
         #expect(store.topLevelAgents.first?.sessionId == "parent")
     }

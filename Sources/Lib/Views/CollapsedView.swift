@@ -5,7 +5,7 @@ struct CollapsedView: View {
     let agents: [Agent]
     let newAgentIds: Set<String>
     var notifiedIds: Set<String> = []
-    /// Resolved children per agent session ID, for deriving effective isCoding.
+    /// Resolved children per agent identity, for deriving effective isCoding.
     var childAgents: [String: [Agent]] = [:]
     var hideWhileCollapsed: Bool = false
     var peekingIds: Set<String> = []
@@ -95,42 +95,42 @@ struct CollapsedView: View {
     /// Parent's own isCoding takes precedence; otherwise derive from children.
     private func effectiveIsCoding(_ agent: Agent) -> Bool {
         if agent.isCoding { return true }
-        guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
+        guard let kids = childAgents[agent.id], !kids.isEmpty else { return false }
         return kids.contains { $0.isCoding }
     }
 
     /// Parent's own isSearching takes precedence; otherwise derive from children.
     private func effectiveIsSearching(_ agent: Agent) -> Bool {
         if agent.isSearching { return true }
-        guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
+        guard let kids = childAgents[agent.id], !kids.isEmpty else { return false }
         return kids.contains { $0.isSearching }
     }
 
     /// Parent's own isExploring takes precedence; otherwise derive from children.
     private func effectiveIsExploring(_ agent: Agent) -> Bool {
         if agent.isExploring { return true }
-        guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
+        guard let kids = childAgents[agent.id], !kids.isEmpty else { return false }
         return kids.contains { $0.isExploring }
     }
 
     /// Parent's own isMcpTool takes precedence; otherwise derive from children.
     private func effectiveIsMcpTool(_ agent: Agent) -> Bool {
         if agent.isMcpTool { return true }
-        guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
+        guard let kids = childAgents[agent.id], !kids.isEmpty else { return false }
         return kids.contains { $0.isMcpTool }
     }
 
     /// Parent's own isGithubTool takes precedence; otherwise derive from children.
     private func effectiveIsGithubTool(_ agent: Agent) -> Bool {
         if agent.isGithubTool { return true }
-        guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
+        guard let kids = childAgents[agent.id], !kids.isEmpty else { return false }
         return kids.contains { $0.isGithubTool }
     }
 
     /// Parent's own isTesting takes precedence; otherwise derive from children.
     private func effectiveIsTesting(_ agent: Agent) -> Bool {
         if agent.isTesting { return true }
-        guard let kids = childAgents[agent.sessionId], !kids.isEmpty else { return false }
+        guard let kids = childAgents[agent.id], !kids.isEmpty else { return false }
         return kids.contains { $0.isTesting }
     }
 }

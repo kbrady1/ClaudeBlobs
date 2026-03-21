@@ -216,9 +216,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(hookLogsMenuItem)
         #endif
 
-        let reinstallItem = NSMenuItem(title: "Reinstall Hooks", action: #selector(reinstallHooks), keyEquivalent: "")
+        let reinstallItem = NSMenuItem(title: "Reinstall Claude Code Hooks", action: #selector(reinstallHooks), keyEquivalent: "")
         reinstallItem.target = self
         menu.addItem(reinstallItem)
+
+        let openCodeItem = NSMenuItem(title: "Reinstall OpenCode Plugin", action: #selector(installOpenCodePlugin), keyEquivalent: "")
+        openCodeItem.target = self
+        menu.addItem(openCodeItem)
 
         menu.addItem(.separator())
 
@@ -237,7 +241,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !UserDefaults.standard.bool(forKey: "hooksInstalled") {
             let confirm = NSAlert()
             confirm.messageText = "Set up ClaudeBlobs?"
-            confirm.informativeText = "This will install hooks into your Claude Code settings to track agent status. You can uninstall later from the menu bar icon."
+            confirm.informativeText = "This will install Claude Code hooks and the bundled OpenCode plugin so ClaudeBlobs can track both providers. You can uninstall later from the menu bar icon."
             confirm.addButton(withTitle: "Continue")
             confirm.addButton(withTitle: "Quit")
 
@@ -253,17 +257,23 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         .appendingPathComponent(".claude/agent-status"),
                     withIntermediateDirectories: true
                 )
+                try OpenCodeInstaller().install()
                 UserDefaults.standard.set(true, forKey: "hooksInstalled")
             } catch {
                 let alert = NSAlert()
-                alert.messageText = "Failed to install hooks"
+                alert.messageText = "Failed to install ClaudeBlobs integrations"
                 alert.informativeText = error.localizedDescription
                 alert.runModal()
             }
         }
 
+        if UserDefaults.standard.bool(forKey: "hooksInstalled") {
+            try? OpenCodeInstaller().install()
+        }
+
         // Register as login item (skip in debug builds)
         #if !DEBUG
+        // Register as login item
         try? SMAppService.mainApp.register()
         #endif
 
@@ -443,7 +453,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if index < agents.count {
                 let agent = agents[index]
                 DispatchQueue.main.async {
-                    if self.store.snoozedSessionIds.contains(agent.sessionId) {
+                    if self.store.snoozedSessionIds.contains(agent.id) {
                         DebugLog.shared.log("Hotkey dismiss agent \(index): \(agent.sessionId)")
                         self.store.dismiss(agent)
                     } else {
@@ -670,7 +680,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do {
             try HookInstaller().install()
             let alert = NSAlert()
-            alert.messageText = "Hooks reinstalled"
+            alert.messageText = "Claude Code hooks reinstalled"
             alert.runModal()
         } catch {
             let alert = NSAlert()
@@ -680,10 +690,25 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    @objc private func installOpenCodePlugin() {
+        do {
+            try OpenCodeInstaller().install()
+            let alert = NSAlert()
+            alert.messageText = "OpenCode plugin reinstalled"
+            alert.informativeText = "ClaudeBlobs will now track your OpenCode sessions. Restart OpenCode if it is already running."
+            alert.runModal()
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Failed to reinstall OpenCode plugin"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
+    }
+
     @objc private func uninstallAndQuit() {
         let alert = NSAlert()
         alert.messageText = "Uninstall ClaudeBlobs?"
-        alert.informativeText = "This will remove hooks from Claude Code settings and delete status files."
+        alert.informativeText = "This will remove Claude Code hooks, uninstall the OpenCode plugin, and delete status files."
         alert.addButton(withTitle: "Uninstall & Quit")
         alert.addButton(withTitle: "Cancel")
 

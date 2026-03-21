@@ -18,4 +18,9 @@ struct DeepLinkerTests {
         let agent = Agent.fixture(cwd: nil, cmuxWorkspace: nil, cmuxSurface: nil)
         #expect(DeepLinker.linkType(for: agent) == .desktop)
     }
+
+    @Test func routesOpenCodeToTerminalWithoutCwd() {
+        let agent = Agent.fixture(provider: .openCode, cwd: nil, cmuxWorkspace: nil, cmuxSurface: nil)
+        #expect(DeepLinker.linkType(for: agent) == .terminal)
+    }
 }

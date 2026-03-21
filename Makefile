@@ -17,10 +17,12 @@ bundle: build
 	rm -rf "$(BUNDLE_DIR)"
 	mkdir -p "$(BUNDLE_DIR)/Contents/MacOS"
 	mkdir -p "$(BUNDLE_DIR)/Contents/Resources/hooks"
+	mkdir -p "$(BUNDLE_DIR)/Contents/Resources/opencode-plugin"
 	cp "$(BUILD_DIR)/ClaudeBlobs" "$(BUNDLE_DIR)/Contents/MacOS/"
 	cp Resources/Info.plist "$(BUNDLE_DIR)/Contents/"
 	cp Resources/hooks/*.sh "$(BUNDLE_DIR)/Contents/Resources/hooks/"
 	chmod +x "$(BUNDLE_DIR)/Contents/Resources/hooks/"*.sh
+	cp Resources/opencode-plugin/claudeblobs-opencode.js "$(BUNDLE_DIR)/Contents/Resources/opencode-plugin/"
 	swift Resources/generate-icon.swift "$(BUNDLE_DIR)/Contents/Resources/AppIcon.icns"
 
 bundle-debug: build-debug

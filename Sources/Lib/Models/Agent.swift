@@ -1,5 +1,20 @@
 import Foundation
 
+enum AgentProvider: String, Codable, CaseIterable, Sendable {
+    case claudeCode = "claude-code"
+    case openCode = "opencode"
+
+    var statusDirectory: URL {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        switch self {
+        case .claudeCode:
+            return home.appendingPathComponent(".claude/agent-status")
+        case .openCode:
+            return home.appendingPathComponent(".opencode/agent-status")
+        }
+    }
+}
+
 enum AgentStaleness: Sendable, Equatable {
     case active
     case stale   // X-eyes
@@ -25,10 +40,12 @@ enum AgentStaleness: Sendable, Equatable {
 }
 
 struct Agent: Codable, Identifiable, Equatable, Sendable {
+    var provider: AgentProvider
     let sessionId: String
     let pid: Int
     let cwd: String?
     var agentType: String?
+    var sessionTitle: String?
     var status: AgentStatus
     var lastMessage: String?
     var lastToolUse: String?
@@ -45,7 +62,98 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var updatedAt: Int64
     var statusChangedAt: Int64?
 
-    var id: String { sessionId }
+    var id: String { "\(provider.rawValue):\(sessionId)" }
+
+    init(
+        provider: AgentProvider = .claudeCode,
+        sessionId: String,
+        pid: Int,
+        cwd: String?,
+        agentType: String? = nil,
+        sessionTitle: String? = nil,
+        status: AgentStatus,
+        lastMessage: String? = nil,
+        lastToolUse: String? = nil,
+        tty: String? = nil,
+        cmuxWorkspace: String? = nil,
+        cmuxSurface: String? = nil,
+        cmuxSocketPath: String? = nil,
+        parentSessionId: String? = nil,
+        waitReason: String? = nil,
+        toolFailure: String? = nil,
+        taskCompletedAt: Int64? = nil,
+        createdAt: Int64? = nil,
+        updatedAt: Int64,
+        statusChangedAt: Int64? = nil
+    ) {
+        self.provider = provider
+        self.sessionId = sessionId
+        self.pid = pid
+        self.cwd = cwd
+        self.agentType = agentType
+        self.sessionTitle = sessionTitle
+        self.status = status
+        self.lastMessage = lastMessage
+        self.lastToolUse = lastToolUse
+        self.tty = tty
+        self.cmuxWorkspace = cmuxWorkspace
+        self.cmuxSurface = cmuxSurface
+        self.cmuxSocketPath = cmuxSocketPath
+        self.parentSessionId = parentSessionId
+        self.waitReason = waitReason
+        self.toolFailure = toolFailure
+        self.taskCompletedAt = taskCompletedAt
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.statusChangedAt = statusChangedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case sessionId
+        case pid
+        case cwd
+        case agentType
+        case sessionTitle
+        case status
+        case lastMessage
+        case lastToolUse
+        case tty
+        case cmuxWorkspace
+        case cmuxSurface
+        case cmuxSocketPath
+        case parentSessionId
+        case waitReason
+        case toolFailure
+        case taskCompletedAt
+        case createdAt
+        case updatedAt
+        case statusChangedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        provider = try container.decodeIfPresent(AgentProvider.self, forKey: .provider) ?? .claudeCode
+        sessionId = try container.decode(String.self, forKey: .sessionId)
+        pid = try container.decode(Int.self, forKey: .pid)
+        cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
+        agentType = try container.decodeIfPresent(String.self, forKey: .agentType)
+        sessionTitle = try container.decodeIfPresent(String.self, forKey: .sessionTitle)
+        status = try container.decode(AgentStatus.self, forKey: .status)
+        lastMessage = try container.decodeIfPresent(String.self, forKey: .lastMessage)
+        lastToolUse = try container.decodeIfPresent(String.self, forKey: .lastToolUse)
+        tty = try container.decodeIfPresent(String.self, forKey: .tty)
+        cmuxWorkspace = try container.decodeIfPresent(String.self, forKey: .cmuxWorkspace)
+        cmuxSurface = try container.decodeIfPresent(String.self, forKey: .cmuxSurface)
+        cmuxSocketPath = try container.decodeIfPresent(String.self, forKey: .cmuxSocketPath)
+        parentSessionId = try container.decodeIfPresent(String.self, forKey: .parentSessionId)
+        waitReason = try container.decodeIfPresent(String.self, forKey: .waitReason)
+        toolFailure = try container.decodeIfPresent(String.self, forKey: .toolFailure)
+        taskCompletedAt = try container.decodeIfPresent(Int64.self, forKey: .taskCompletedAt)
+        createdAt = try container.decodeIfPresent(Int64.self, forKey: .createdAt)
+        updatedAt = try container.decode(Int64.self, forKey: .updatedAt)
+        statusChangedAt = try container.decodeIfPresent(Int64.self, forKey: .statusChangedAt)
+    }
 
     /// Whether the agent is done (vs asking a follow-up question) when waiting.
     var isDone: Bool { waitReason == "done" }
@@ -226,10 +334,12 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
 
 extension Agent {
     static func fixture(
+        provider: AgentProvider = .claudeCode,
         sessionId: String = "test-session",
         pid: Int = 99999,
         cwd: String? = "/tmp/test",
         agentType: String? = nil,
+        sessionTitle: String? = nil,
         status: AgentStatus = .working,
         lastMessage: String? = nil,
         lastToolUse: String? = nil,
@@ -246,18 +356,21 @@ extension Agent {
         updatedAt: Int64 = 1000,
         statusChangedAt: Int64? = nil
     ) -> Agent {
-        Agent(
+        var agent = Agent(
+            provider: provider,
             sessionId: sessionId, pid: pid, cwd: cwd,
-            agentType: agentType, status: status,
+            agentType: agentType, sessionTitle: sessionTitle, status: status,
             lastMessage: lastMessage, lastToolUse: lastToolUse,
             tty: tty,
             cmuxWorkspace: cmuxWorkspace, cmuxSurface: cmuxSurface,
             cmuxSocketPath: cmuxSocketPath, parentSessionId: parentSessionId,
-            waitReason: waitReason, rawLastMessage: rawLastMessage,
+            waitReason: waitReason,
             toolFailure: toolFailure,
             taskCompletedAt: taskCompletedAt,
             createdAt: createdAt, updatedAt: updatedAt,
             statusChangedAt: statusChangedAt
         )
+        agent.rawLastMessage = rawLastMessage
+        return agent
     }
 }

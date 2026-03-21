@@ -24,7 +24,7 @@ struct ExpandedView: View {
                     agentCard(agent, isSelected: selectedIndex == index)
                 }
                 .buttonStyle(.plain)
-                .opacity(snoozedIds.contains(agent.sessionId) ? 0.45 : agent.status == .working ? 0.7 : 1.0)
+                .opacity(snoozedIds.contains(agent.id) ? 0.45 : agent.status == .working ? 0.7 : 1.0)
             }
             if agents.count > 9 {
                 Text("+\(agents.count - 9)")
@@ -60,14 +60,14 @@ struct ExpandedView: View {
     }
 
     private func agentCard(_ agent: Agent, isSelected: Bool = false) -> some View {
-        let kids = childAgents[agent.sessionId] ?? []
+        let kids = childAgents[agent.id] ?? []
         return VStack(spacing: 4) {
             ZStack(alignment: .topTrailing) {
                 VStack(spacing: 0) {
                     AgentSpriteView(
                         status: agent.status,
                         size: 40,
-                        isSnoozed: snoozedIds.contains(agent.sessionId),
+                        isSnoozed: snoozedIds.contains(agent.id),
                         theme: theme,
                         prominentStateChangesEnabled: prominentStateChangesEnabled,
                         isCoding: agent.isCoding,
@@ -111,7 +111,7 @@ struct ExpandedView: View {
                     }
                 }
 
-                if !snoozedIds.contains(agent.sessionId) {
+                if !snoozedIds.contains(agent.id) {
                     Button {
                         onSnooze(agent)
                     } label: {

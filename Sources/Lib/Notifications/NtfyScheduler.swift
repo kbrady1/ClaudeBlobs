@@ -15,14 +15,14 @@ final class NtfyScheduler: ObservableObject {
 
     /// Schedule a delayed notification if conditions are met.
     func scheduleIfNeeded(for agent: Agent, isSnoozed: Bool) {
+        let sessionId = agent.id
         guard config.isConfigured, !isSnoozed else { return }
-        guard pendingWork[agent.sessionId] == nil,
-              !notifiedSessionIds.contains(agent.sessionId),
-              !sentSessionIds.contains(agent.sessionId) else { return }
+        guard pendingWork[sessionId] == nil,
+              !notifiedSessionIds.contains(sessionId),
+              !sentSessionIds.contains(sessionId) else { return }
 
         guard shouldNotify(for: agent) else { return }
 
-        let sessionId = agent.sessionId
         let title = buildTitle(for: agent)
         let body = agent.speechBubbleText
         let priority = agent.status == .permission ? config.permissionPriority : config.defaultPriority
