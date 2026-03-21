@@ -398,22 +398,22 @@ struct HookScriptTests {
             let r = try h.runSubagentHook("hook-subagent-start.sh",
                 sessionId: "parent-sess",
                 subagentId: "sub-123",
-                input: ["cwd": "/tmp", "subagent_type": "task"])
+                input: ["cwd": "/tmp", "agent_type": "task"])
             #expect(r.status?["parentSessionId"] as? String == "parent-sess")
             #expect(r.status?["pid"] as? Int == 0)
             #expect(r.status?["status"] as? String == "starting")
             #expect(r.status?["sessionId"] as? String == "sub-123")
         }
 
-        @Test("exits silently when subagent_id is empty")
+        @Test("exits silently when agent_id is empty")
         func exitsSilently() throws {
             let h = try HookTestHelper()
             let r = try h.runSubagentHook("hook-subagent-start.sh",
                 sessionId: "parent-sess",
                 subagentId: "",
-                input: ["subagent_id": ""])
+                input: ["agent_id": ""])
             #expect(r.exitCode == 0)
-            // No file should be created for empty subagent_id — check the specific empty-named file
+            // No file should be created for empty agent_id — check the specific empty-named file
             let emptyFile = h.statusDir.appendingPathComponent(".json")
             #expect(!FileManager.default.fileExists(atPath: emptyFile.path))
         }

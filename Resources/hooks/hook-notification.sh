@@ -8,6 +8,7 @@ STATUS_FILE="$STATUS_DIR/$SESSION_ID.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/hook-ensure-status.sh"
 debug_log_input "Notification"
+resolve_agent_status_file
 ensure_status_file
 
 CURRENT_STATUS=$(jq -r '.status // empty' "$STATUS_FILE" 2>/dev/null)

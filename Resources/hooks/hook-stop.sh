@@ -8,6 +8,7 @@ STATUS_FILE="$STATUS_DIR/$SESSION_ID.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/hook-ensure-status.sh"
 debug_log_input "Stop"
+resolve_agent_status_file
 ensure_status_file
 
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty')

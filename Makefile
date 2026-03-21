@@ -5,7 +5,7 @@ DEBUG_BUILD_DIR = .build/debug
 BUNDLE_DIR = $(BUILD_DIR)/$(BUNDLE_NAME)
 DEBUG_BUNDLE_DIR = $(DEBUG_BUILD_DIR)/$(BUNDLE_NAME)
 
-.PHONY: build build-debug bundle bundle-debug clean run restart restart-dev stop release
+.PHONY: build build-debug bundle bundle-debug clean run restart restart-dev stop release test
 
 build:
 	swift build -c release
@@ -56,6 +56,9 @@ restart: bundle stop
 restart-dev: bundle-debug stop
 	@sleep 0.5
 	open "$(DEBUG_BUNDLE_DIR)"
+
+test:
+	swift test
 
 release:
 	@scripts/release.sh $(BUMP)

@@ -8,8 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/hook-ensure-status.sh"
 debug_log_input "SubagentStart"
 
-SUBAGENT_ID=$(echo "$INPUT" | jq -r '.subagent_id // empty')
-SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.subagent_type // empty')
+SUBAGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
+SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 TS=$(date +%s000)
 

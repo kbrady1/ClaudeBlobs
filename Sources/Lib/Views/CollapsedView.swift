@@ -20,8 +20,10 @@ struct CollapsedView: View {
             ForEach(agents.prefix(10)) { agent in
                 let isHidden = hideWhileCollapsed && !peekingIds.contains(agent.id)
                 WavingEntrance(shouldWave: newAgentIds.contains(agent.id)) {
+                    let resolved = effectiveStatus(agent)
+                    let urgent = mostUrgentChild(agent)
                     AgentSpriteView(
-                        status: agent.status,
+                        status: resolved,
                         size: 18,
                         theme: theme,
                         prominentStateChangesEnabled: prominentStateChangesEnabled,
@@ -33,13 +35,13 @@ struct CollapsedView: View {
                         isDone: agent.isDone,
                         hasNotified: notifiedIds.contains(agent.id),
                         staleness: agent.staleness,
-                        isPlanApproval: agent.isPlanApproval,
-                        isAskingQuestion: agent.isAskingQuestion,
-                        isBashPermission: agent.isBashPermission,
-                        isFilePermission: agent.isFilePermission,
-                        isWebPermission: agent.isWebPermission,
-                        isMcpPermission: agent.isMcpPermission,
-                        isGithubPermission: agent.isGithubPermission,
+                        isPlanApproval: resolved == agent.status ? agent.isPlanApproval : (urgent?.isPlanApproval ?? false),
+                        isAskingQuestion: resolved == agent.status ? agent.isAskingQuestion : (urgent?.isAskingQuestion ?? false),
+                        isBashPermission: resolved == agent.status ? agent.isBashPermission : (urgent?.isBashPermission ?? false),
+                        isFilePermission: resolved == agent.status ? agent.isFilePermission : (urgent?.isFilePermission ?? false),
+                        isWebPermission: resolved == agent.status ? agent.isWebPermission : (urgent?.isWebPermission ?? false),
+                        isMcpPermission: resolved == agent.status ? agent.isMcpPermission : (urgent?.isMcpPermission ?? false),
+                        isGithubPermission: resolved == agent.status ? agent.isGithubPermission : (urgent?.isGithubPermission ?? false),
                         isGithubTool: effectiveIsGithubTool(agent),
                         isTaskJustCompleted: agent.isTaskJustCompleted,
                         isInterrupted: agent.isInterrupted,
@@ -90,6 +92,14 @@ struct CollapsedView: View {
             }
         )
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: agents.map(\.id))
+    }
+
+    private func effectiveStatus(_ agent: Agent) -> AgentStatus {
+        Agent.effectiveStatus(of: agent, children: childAgents[agent.id] ?? [])
+    }
+
+    private func mostUrgentChild(_ agent: Agent) -> Agent? {
+        Agent.mostUrgentChild(of: agent, children: childAgents[agent.id] ?? [])
     }
 
     /// Parent's own isCoding takes precedence; otherwise derive from children.

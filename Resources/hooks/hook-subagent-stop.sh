@@ -1,6 +1,6 @@
 #!/bin/bash
 INPUT=$(cat)
-SUBAGENT_ID=$(echo "$INPUT" | jq -r '.subagent_id // empty')
+SUBAGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
 STATUS_DIR="$HOME/.claude/agent-status"
 STATUS_FILE="$STATUS_DIR/$SUBAGENT_ID.json"
 

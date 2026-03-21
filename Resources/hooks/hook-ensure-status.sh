@@ -139,6 +139,17 @@ format_tool_input() {
   fi
 }
 
+# Route to subagent status file when agent_id is present in input.
+# Call after STATUS_FILE is set. Overrides STATUS_FILE if the event
+# belongs to a subagent rather than the parent session.
+resolve_agent_status_file() {
+  local agent_id
+  agent_id=$(echo "$INPUT" | jq -r '.agent_id // empty')
+  if [ -n "$agent_id" ]; then
+    STATUS_FILE="$STATUS_DIR/$agent_id.json"
+  fi
+}
+
 ensure_status_file() {
   [ -f "$STATUS_FILE" ] && return 0
 

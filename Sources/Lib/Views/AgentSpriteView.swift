@@ -532,7 +532,7 @@ private struct AppIconAccent: View {
     let size: CGFloat
     let showsBorder: Bool
 
-    var offset: CGFloat { size * (showsBorder ? 0.15 : 0.2) }
+    var offset: CGFloat { size * (showsBorder ? 0.15 : 0.3) }
 
     var body: some View {
         let iconSize = showsBorder ? size * 0.47 : size * 0.7

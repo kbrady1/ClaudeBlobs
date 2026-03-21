@@ -7,7 +7,7 @@ macOS menu bar app that monitors Claude agent sessions and provides deep-linking
 After every code change, **build and restart** the app to test:
 
 ```sh
-make restart   # build release, kill running instance, relaunch
+make restart-dev   # build release, kill running instance, relaunch
 ```
 
 Other targets:
@@ -21,10 +21,10 @@ When working with superpowers, do not commit those files to the github repo. The
 
 ## Testing
 
-Run tests before considering any task complete:
+Run all tests (unit + E2E conversation tests) before considering any task complete:
 
 ```sh
-swift test
+make test     # runs swift test
 ```
 
 ## Architecture

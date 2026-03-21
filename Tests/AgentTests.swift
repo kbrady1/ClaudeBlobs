@@ -219,4 +219,58 @@ struct AgentTests {
         let none = Agent.fixture(taskCompletedAt: nil)
         #expect(none.isTaskJustCompleted == false)
     }
+
+    // MARK: - effectiveStatus
+
+    @Test("effectiveStatus returns parent status when no children")
+    func effectiveStatusNoChildren() {
+        let parent = Agent.fixture(status: .working)
+        #expect(Agent.effectiveStatus(of: parent, children: []) == .working)
+    }
+
+    @Test("effectiveStatus returns child permission when parent is working")
+    func effectiveStatusChildPermission() {
+        let parent = Agent.fixture(status: .working)
+        let childA = Agent.fixture(sessionId: "child-a", status: .permission)
+        let childB = Agent.fixture(sessionId: "child-b", status: .working)
+        #expect(Agent.effectiveStatus(of: parent, children: [childA, childB]) == .permission)
+    }
+
+    @Test("effectiveStatus returns child waiting when parent is working")
+    func effectiveStatusChildWaiting() {
+        let parent = Agent.fixture(status: .working)
+        let child = Agent.fixture(sessionId: "child", status: .waiting)
+        #expect(Agent.effectiveStatus(of: parent, children: [child]) == .waiting)
+    }
+
+    @Test("effectiveStatus prefers permission over waiting among children")
+    func effectiveStatusPermissionBeatsWaiting() {
+        let parent = Agent.fixture(status: .working)
+        let childA = Agent.fixture(sessionId: "child-a", status: .waiting)
+        let childB = Agent.fixture(sessionId: "child-b", status: .permission)
+        #expect(Agent.effectiveStatus(of: parent, children: [childA, childB]) == .permission)
+    }
+
+    @Test("effectiveStatus keeps parent status when more urgent than children")
+    func effectiveStatusParentMoreUrgent() {
+        let parent = Agent.fixture(status: .permission)
+        let child = Agent.fixture(sessionId: "child", status: .working)
+        #expect(Agent.effectiveStatus(of: parent, children: [child]) == .permission)
+    }
+
+    @Test("mostUrgentChild returns nil when no children")
+    func mostUrgentChildNone() {
+        let parent = Agent.fixture()
+        #expect(Agent.mostUrgentChild(of: parent, children: []) == nil)
+    }
+
+    @Test("mostUrgentChild returns permission child over working child")
+    func mostUrgentChildPermission() {
+        let parent = Agent.fixture()
+        let childA = Agent.fixture(sessionId: "child-a", status: .working, lastToolUse: "Bash: ls")
+        let childB = Agent.fixture(sessionId: "child-b", status: .permission, lastToolUse: "Bash: rm -rf /")
+        let urgent = Agent.mostUrgentChild(of: parent, children: [childA, childB])
+        #expect(urgent?.sessionId == "child-b")
+        #expect(urgent?.isBashPermission == true)
+    }
 }

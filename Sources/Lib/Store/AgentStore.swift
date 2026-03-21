@@ -39,14 +39,17 @@ final class AgentStore: ObservableObject {
     var collapsedAgents: [Agent] {
         let subs = subAgentIds
         var result = agents.filter {
-            (!hideWorkingAgents || $0.status.visibleWhenCollapsed)
+            let effective = effectiveStatus(of: $0)
+            return (!hideWorkingAgents || effective.visibleWhenCollapsed)
                 && !snoozedSessionIds.contains($0.id)
                 && !subs.contains($0.id)
         }
         if sortByPriority {
             result.sort {
-                if $0.status.sortPriority != $1.status.sortPriority {
-                    return $0.status.sortPriority < $1.status.sortPriority
+                let p0 = sortKey(for: $0)
+                let p1 = sortKey(for: $1)
+                if p0 != p1 {
+                    return p0 < p1
                 }
                 // Within same priority: sort by when the agent entered this status
                 let a = $0.statusChangedAt ?? $0.updatedAt
@@ -72,8 +75,10 @@ final class AgentStore: ObservableObject {
             let bSnooze = snoozed.contains(b.id)
             if aSnooze != bSnooze { return !aSnooze }
             if prioritySort {
-                if a.status.sortPriority != b.status.sortPriority {
-                    return a.status.sortPriority < b.status.sortPriority
+                let aP = sortKey(for: a)
+                let bP = sortKey(for: b)
+                if aP != bP {
+                    return aP < bP
                 }
                 let aT = a.statusChangedAt ?? a.updatedAt
                 let bT = b.statusChangedAt ?? b.updatedAt
@@ -81,6 +86,19 @@ final class AgentStore: ObservableObject {
             }
             return false
         }
+    }
+
+    /// Returns the effective status for sorting/filtering (considers child sub-agents).
+    private func effectiveStatus(of agent: Agent) -> AgentStatus {
+        Agent.effectiveStatus(of: agent, children: children(of: agent.id))
+    }
+
+    /// Sort key: effective priority, with done agents demoted within the waiting tier.
+    /// Waiting (not done) = 1, Waiting (done) = 1.5 (between waiting and starting).
+    private func sortKey(for agent: Agent) -> Double {
+        let base = Double(effectiveStatus(of: agent).sortPriority)
+        if effectiveStatus(of: agent) == .waiting && agent.isDone { return base + 0.5 }
+        return base
     }
 
     /// Returns child Agent objects for a given parent session ID.

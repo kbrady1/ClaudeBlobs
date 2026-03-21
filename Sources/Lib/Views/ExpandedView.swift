@@ -59,13 +59,28 @@ struct ExpandedView: View {
         )
     }
 
+    private func effectiveStatus(_ agent: Agent) -> AgentStatus {
+        Agent.effectiveStatus(of: agent, children: childAgents[agent.id] ?? [])
+    }
+
+    private func mostUrgentChild(_ agent: Agent) -> Agent? {
+        Agent.mostUrgentChild(of: agent, children: childAgents[agent.id] ?? [])
+    }
+
+    /// Whether any visible agent has child sub-agents (used for uniform card height).
+    private var anyAgentHasChildren: Bool {
+        agents.prefix(9).contains { (childAgents[$0.id] ?? []).count > 1 }
+    }
+
     private func agentCard(_ agent: Agent, isSelected: Bool = false) -> some View {
         let kids = childAgents[agent.id] ?? []
+        let resolved = effectiveStatus(agent)
+        let urgent = mostUrgentChild(agent)
         return VStack(spacing: 4) {
             ZStack(alignment: .topTrailing) {
                 VStack(spacing: 0) {
                     AgentSpriteView(
-                        status: agent.status,
+                        status: resolved,
                         size: 40,
                         isSnoozed: snoozedIds.contains(agent.id),
                         theme: theme,
@@ -78,13 +93,13 @@ struct ExpandedView: View {
                         isDone: agent.isDone,
                         hasNotified: notifiedIds.contains(agent.id),
                         staleness: agent.staleness,
-                        isPlanApproval: agent.isPlanApproval,
-                        isAskingQuestion: agent.isAskingQuestion,
-                        isBashPermission: agent.isBashPermission,
-                        isFilePermission: agent.isFilePermission,
-                        isWebPermission: agent.isWebPermission,
-                        isMcpPermission: agent.isMcpPermission,
-                        isGithubPermission: agent.isGithubPermission,
+                        isPlanApproval: resolved == agent.status ? agent.isPlanApproval : (urgent?.isPlanApproval ?? false),
+                        isAskingQuestion: resolved == agent.status ? agent.isAskingQuestion : (urgent?.isAskingQuestion ?? false),
+                        isBashPermission: resolved == agent.status ? agent.isBashPermission : (urgent?.isBashPermission ?? false),
+                        isFilePermission: resolved == agent.status ? agent.isFilePermission : (urgent?.isFilePermission ?? false),
+                        isWebPermission: resolved == agent.status ? agent.isWebPermission : (urgent?.isWebPermission ?? false),
+                        isMcpPermission: resolved == agent.status ? agent.isMcpPermission : (urgent?.isMcpPermission ?? false),
+                        isGithubPermission: resolved == agent.status ? agent.isGithubPermission : (urgent?.isGithubPermission ?? false),
                         isGithubTool: agent.isGithubTool,
                         isTaskJustCompleted: agent.isTaskJustCompleted,
                         isInterrupted: agent.isInterrupted,
@@ -95,19 +110,25 @@ struct ExpandedView: View {
                     )
                     .frame(width: 48, height: 44)
 
-                    // Mini child blobs along the bottom
-                    if !kids.isEmpty {
-                        HStack(spacing: 2) {
-                            ForEach(kids.prefix(3)) { child in
-                                MiniAgentBlob(status: child.status, staleness: child.staleness, theme: theme)
+                    // Uniform spacer for child blobs area; overlay actual blobs with offset
+                    if anyAgentHasChildren {
+                        Spacer()
+                            .overlay {
+                                if kids.count > 1 {
+                                    HStack(spacing: 2) {
+                                        ForEach(kids.prefix(3)) { child in
+                                            MiniAgentBlob(status: child.status, staleness: child.staleness, theme: theme)
+                                        }
+                                        if kids.count > 3 {
+                                            Text("+\(kids.count - 3)")
+                                                .font(.system(size: 6, weight: .medium))
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                    .offset(y: -5)
+                                }
                             }
-                            if kids.count > 3 {
-                                Text("+\(kids.count - 3)")
-                                    .font(.system(size: 6, weight: .medium))
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .offset(y: -7) // overlap parent by half child height
+                            .frame(height: 8)
                     }
                 }
 

@@ -124,6 +124,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         case cmuxSocketPath
         case parentSessionId
         case waitReason
+        case rawLastMessage
         case toolFailure
         case taskCompletedAt
         case createdAt
@@ -148,6 +149,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         cmuxSocketPath = try container.decodeIfPresent(String.self, forKey: .cmuxSocketPath)
         parentSessionId = try container.decodeIfPresent(String.self, forKey: .parentSessionId)
         waitReason = try container.decodeIfPresent(String.self, forKey: .waitReason)
+        rawLastMessage = try container.decodeIfPresent(String.self, forKey: .rawLastMessage)
         toolFailure = try container.decodeIfPresent(String.self, forKey: .toolFailure)
         taskCompletedAt = try container.decodeIfPresent(Int64.self, forKey: .taskCompletedAt)
         createdAt = try container.decodeIfPresent(Int64.self, forKey: .createdAt)
@@ -333,6 +335,25 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
 }
 
 extension Agent {
+    /// Returns the most urgent status among this agent and its children.
+    /// Uses `AgentStatus.sortPriority` (lower = more urgent).
+    static func effectiveStatus(of agent: Agent, children: [Agent]) -> AgentStatus {
+        guard !children.isEmpty else { return agent.status }
+        var best = agent.status
+        for child in children {
+            if child.status.sortPriority < best.sortPriority {
+                best = child.status
+            }
+        }
+        return best
+    }
+
+    /// Returns the child with the most urgent status, if any.
+    static func mostUrgentChild(of agent: Agent, children: [Agent]) -> Agent? {
+        guard !children.isEmpty else { return nil }
+        return children.min(by: { $0.status.sortPriority < $1.status.sortPriority })
+    }
+
     static func fixture(
         provider: AgentProvider = .claudeCode,
         sessionId: String = "test-session",

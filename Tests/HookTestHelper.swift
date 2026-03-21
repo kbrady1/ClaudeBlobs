@@ -82,7 +82,7 @@ struct HookTestHelper {
         return HookResult(exitCode: process.terminationStatus, status: parsed, statusFileExists: exists)
     }
 
-    /// Convenience: run a hook for a subagent (uses subagent_id for file lookup).
+    /// Convenience: run a hook for a subagent (uses agent_id for file lookup).
     @discardableResult
     func runSubagentHook(
         _ name: String,
@@ -93,7 +93,7 @@ struct HookTestHelper {
     ) throws -> HookResult {
         var inputDict = input ?? [:]
         if inputDict["session_id"] == nil { inputDict["session_id"] = sessionId }
-        if inputDict["subagent_id"] == nil { inputDict["subagent_id"] = subagentId }
+        if inputDict["agent_id"] == nil { inputDict["agent_id"] = subagentId }
 
         let inputData = try JSONSerialization.data(withJSONObject: inputDict)
         let statusFile = statusDir.appendingPathComponent("\(subagentId).json")
