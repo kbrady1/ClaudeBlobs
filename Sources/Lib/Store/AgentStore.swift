@@ -275,14 +275,13 @@ final class AgentStore: ObservableObject {
                 let regexResult = agent.waitReason
                 DebugLog.shared.log("DoneClassifier: queuing classification for \(sessionId) (regex=\(regexResult ?? "nil"))")
                 Task { [weak self] in
-                    guard let result = await self?.doneClassifier.classify(message: message) else {
+                    guard let self, let result = await self.doneClassifier.classify(message: message) else {
                         DebugLog.shared.log("DoneClassifier: no result for \(sessionId), keeping regex=\(regexResult ?? "nil")")
                         return
                     }
-                    await MainActor.run {
-                        guard let self else { return }
-                        let changed = result != regexResult
-                        DebugLog.shared.log("DoneClassifier: \(sessionId) ai=\(result) regex=\(regexResult ?? "nil") changed=\(changed)")
+                    let changed = result != regexResult
+                    DebugLog.shared.log("DoneClassifier: \(sessionId) ai=\(result) regex=\(regexResult ?? "nil") changed=\(changed)")
+                    await MainActor.run { [self] in
                         self.aiWaitReasonOverrides[sessionId] = result
                         if let idx = self.agents.firstIndex(where: { $0.sessionId == sessionId }) {
                             self.agents[idx].waitReason = result
