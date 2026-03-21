@@ -15,10 +15,24 @@ LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty')
 RAW_MSG=$(echo "$LAST_MSG" | head -c 2000)
 TS=$(date +%s000)
 
-# Extract first sentence: up to first period, question mark, or newline, max 200 chars
-FIRST_SENTENCE=$(echo "$LAST_MSG" | head -1 | cut -c1-200 | sed 's/[.?].*//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+# Strip markdown formatting and extract a clean first sentence.
+# 1. Remove markdown: headings, bold, backticks, bullets
+CLEAN_MSG=$(echo "$LAST_MSG" | sed 's/^#\{1,6\}[[:space:]]*//' | sed 's/\*\*//g' | sed 's/`//g' | sed 's/^- //')
+
+# 2. Skip filler preambles on line 1 — if line 1 is short filler, try line 2
+LINE1=$(echo "$CLEAN_MSG" | head -1 | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+if echo "$LINE1" | grep -qiE '^(good|great|now I have|perfect|excellent|sure|okay|alright|here|let me)[,. !]'; then
+  LINE2=$(echo "$CLEAN_MSG" | sed -n '2p' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+  if [ -n "$LINE2" ] && [ ${#LINE2} -gt 5 ]; then
+    LINE1="$LINE2"
+  fi
+fi
+
+# 3. Truncate at sentence boundary (". " followed by uppercase) but not inside URLs
+#    The negative lookbehind avoids splitting on "https://foo.com. Next" style
+FIRST_SENTENCE=$(echo "$LINE1" | cut -c1-200 | sed 's|\([^A-Z:/]\)\. [A-Z].*|\1|' | sed 's/[[:space:]]*$//')
 if [ -z "$FIRST_SENTENCE" ]; then
-  FIRST_SENTENCE=$(echo "$LAST_MSG" | cut -c1-200)
+  FIRST_SENTENCE=$(echo "$LAST_MSG" | sed 's/`//g' | cut -c1-200)
 fi
 
 # Detect if the agent is asking a follow-up question vs reporting completion.

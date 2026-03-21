@@ -24,7 +24,7 @@ final class NtfyScheduler: ObservableObject {
         guard shouldNotify(for: agent) else { return }
 
         let title = buildTitle(for: agent)
-        let body = agent.speechBubbleText
+        let body = buildBody(for: agent)
         let priority = agent.status == .permission ? config.permissionPriority : config.defaultPriority
         let endpoint = config.endpoint
         let topic = config.topic
@@ -105,6 +105,17 @@ final class NtfyScheduler: ObservableObject {
             return agent.isDone ? config.notifyOnDone : config.notifyOnWaiting
         default:
             return false
+        }
+    }
+
+    private func buildBody(for agent: Agent) -> String {
+        switch agent.status {
+        case .permission:
+            return agent.permissionToolUse
+        case .waiting:
+            return agent.notificationMessage
+        default:
+            return agent.speechBubbleText
         }
     }
 

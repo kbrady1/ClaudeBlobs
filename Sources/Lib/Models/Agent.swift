@@ -244,19 +244,187 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var speechBubbleText: String {
         switch status {
         case .waiting:
-            return lastMessage ?? ""
+            return cleanMessage
         case .working:
-            guard let tool = lastToolUse else { return "" }
-            return tool.hasPrefix("mcp__") ? Agent.formatMcpToolName(tool) : tool
+            return cleanToolUse
         case .permission:
-            guard let tool = lastToolUse else { return "" }
-            let display = tool.hasPrefix("mcp__") ? Agent.formatMcpToolName(tool) : tool
-            return "Wants to run: \(display)"
+            return permissionToolUse
         case .starting:
             return "Starting up..."
         case .compacting:
             return "Compacting context..."
         }
+    }
+
+    // MARK: - Clean display text
+
+    /// Cleaned message for speech bubble display. Strips markdown and filler preambles.
+    /// Falls back to rawLastMessage if lastMessage is too short/vague.
+    var cleanMessage: String {
+        let msg = lastMessage ?? ""
+        if msg.isEmpty { return "" }
+
+        var text = Agent.stripMarkdown(msg)
+        text = Agent.stripFillerPreamble(text)
+
+        // If cleaned text is too short, try extracting from rawLastMessage
+        if text.count < 15, let rawMsg = rawLastMessage {
+            let rawCleaned = Agent.cleanRawMessage(rawMsg, maxLength: 120)
+            if rawCleaned.count > text.count {
+                return rawCleaned
+            }
+        }
+
+        return String(text.prefix(120))
+    }
+
+    /// Longer cleaned message for push notifications. Uses rawLastMessage for more context.
+    var notificationMessage: String {
+        guard let raw = rawLastMessage, !raw.isEmpty else { return cleanMessage }
+        return Agent.cleanRawMessage(raw, maxLength: 300)
+    }
+
+    /// Human-readable tool use for working state (gerund form: "Reading", "Editing").
+    var cleanToolUse: String {
+        guard let tool = lastToolUse else { return "" }
+        return Agent.formatToolForDisplay(tool, imperative: false)
+    }
+
+    /// Human-readable tool use for permission state (imperative form: "Read", "Edit").
+    var permissionToolUse: String {
+        guard let tool = lastToolUse else { return "" }
+        return Agent.formatToolForDisplay(tool, imperative: true)
+    }
+
+    // MARK: - Text cleaning helpers
+
+    static func stripMarkdown(_ text: String) -> String {
+        var t = text
+        t = t.replacingOccurrences(of: #"^#{1,6}\s+"#, with: "", options: .regularExpression)
+        t = t.replacingOccurrences(of: "**", with: "")
+        t = t.replacingOccurrences(of: "`", with: "")
+        t = t.replacingOccurrences(of: #"^- "#, with: "", options: .regularExpression)
+        return t.trimmingCharacters(in: .whitespaces)
+    }
+
+    static func stripFillerPreamble(_ text: String) -> String {
+        let pattern = #"^(?:Good|Great|Perfect|Excellent|Sure|Okay|Now I have[^.]*|Here(?:'s| is)[^.]*|Let me[^.]*)[.,!]?\s*"#
+        let result = text.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+        return result.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Cleans a raw multi-line message into a single-line summary.
+    static func cleanRawMessage(_ raw: String, maxLength: Int) -> String {
+        var text = raw
+        // Strip markdown
+        text = text.replacingOccurrences(of: #"[*_`#>]"#, with: "", options: .regularExpression)
+        // Collapse paragraph breaks to dashes, newlines to spaces
+        text = text.replacingOccurrences(of: #"\n\n+"#, with: " \u{2014} ", options: .regularExpression)
+        text = text.replacingOccurrences(of: #"\n"#, with: " ", options: .regularExpression)
+        // Strip filler preambles
+        text = stripFillerPreamble(text)
+        // Collapse multiple spaces
+        text = text.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
+        text = text.trimmingCharacters(in: .whitespaces)
+        return String(text.prefix(maxLength))
+    }
+
+    /// Formats a tool use string for human-readable display.
+    /// - Parameter imperative: true for permission state ("Read X"), false for working state ("Reading X")
+    static func formatToolForDisplay(_ tool: String, imperative: Bool) -> String {
+        // Internal tools that show JSON — always use friendly names
+        if tool.hasPrefix("TaskUpdate:") || tool.hasPrefix("TaskCreate:") { return "Updating tasks" }
+        if tool.hasPrefix("TaskGet:") || tool.hasPrefix("TaskGet") { return "Checking tasks" }
+        if tool.hasPrefix("TaskList") { return "Checking tasks" }
+        if tool.hasPrefix("ExitPlanMode") { return imperative ? "Approve plan" : "Submitting plan" }
+        if tool.hasPrefix("EnterPlanMode") { return "Planning" }
+        if tool.hasPrefix("ToolSearch") { return "Looking up tools" }
+        if tool.hasPrefix("Skill:") || tool.hasPrefix("Skill ") { return "Loading skill" }
+
+        // AskUserQuestion — extract the question text
+        if tool.hasPrefix("AskUserQuestion:") {
+            let json = String(tool.dropFirst("AskUserQuestion:".count)).trimmingCharacters(in: .whitespaces)
+            if let questionText = extractAskQuestion(from: json) {
+                return imperative ? "Ask: \(questionText)" : "Ask: \(questionText)"
+            }
+            return imperative ? "Ask: ..." : "Asking question"
+        }
+
+        // Bash — strip paths, redirects, pipes
+        if tool.hasPrefix("Bash: ") {
+            let cmd = cleanBashCommand(String(tool.dropFirst(6)))
+            return imperative ? "Run: \(cmd)" : cmd
+        }
+        if tool == "Bash" { return "Bash" }
+
+        // File tools
+        if tool.hasPrefix("Read: ") {
+            let file = String(tool.dropFirst(6))
+            return imperative ? "Read \(file)" : "Reading \(file)"
+        }
+        if tool.hasPrefix("Edit: ") {
+            let file = String(tool.dropFirst(6))
+            return imperative ? "Edit \(file)" : "Editing \(file)"
+        }
+        if tool.hasPrefix("Write: ") {
+            let file = String(tool.dropFirst(7))
+            return imperative ? "Write \(file)" : "Writing \(file)"
+        }
+        if tool.hasPrefix("NotebookEdit: ") {
+            let file = String(tool.dropFirst(14))
+            return imperative ? "Edit \(file)" : "Editing \(file)"
+        }
+
+        // Search tools
+        if tool.hasPrefix("Grep: ") {
+            let pattern = String(tool.dropFirst(6)).components(separatedBy: "|").first ?? tool
+            return "Search: \(pattern.trimmingCharacters(in: .whitespaces))"
+        }
+        if tool.hasPrefix("Glob: ") {
+            let pattern = String(tool.dropFirst(6))
+            return "Search: \(pattern)"
+        }
+
+        // Web tools
+        if tool.hasPrefix("WebSearch: ") { return "Web: \(tool.dropFirst(11))" }
+        if tool.hasPrefix("WebFetch: ") { return "Web: \(tool.dropFirst(10))" }
+
+        // MCP tools
+        if tool.hasPrefix("mcp__") { return Agent.formatMcpToolName(tool) }
+
+        // Agent subagents
+        if tool.hasPrefix("Agent: ") { return String(tool.prefix(60)) }
+
+        return tool
+    }
+
+    /// Cleans a bash command for display: strips paths, cd prefixes, redirects, pipes.
+    static func cleanBashCommand(_ cmd: String) -> String {
+        var c = cmd
+        // Strip cd prefix to a directory
+        c = c.replacingOccurrences(of: #"^cd\s+\S+\s*&&\s*"#, with: "", options: .regularExpression)
+        // Strip absolute home paths: /Users/foo/SourceCode/bar/ → ""
+        c = c.replacingOccurrences(of: #"/Users/\w+/SourceCode/[^/]+/"#, with: "", options: .regularExpression)
+        // Strip remaining home paths: /Users/foo/ → ~/
+        c = c.replacingOccurrences(of: #"/Users/\w+/"#, with: "~/", options: .regularExpression)
+        // Strip output redirects (2>&1 and everything after)
+        c = c.replacingOccurrences(of: #"\s*2>&1.*$"#, with: "", options: .regularExpression)
+        // Strip trailing pipes to tail/head/grep
+        c = c.replacingOccurrences(of: #"\s*\|\s*(?:tail|head|grep)\b.*$"#, with: "", options: .regularExpression)
+        c = c.trimmingCharacters(in: .whitespaces)
+        return String(c.prefix(60))
+    }
+
+    /// Extracts the first question text from AskUserQuestion JSON.
+    static func extractAskQuestion(from json: String) -> String? {
+        guard let data = json.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let questions = obj["questions"] as? [[String: Any]],
+              let first = questions.first,
+              let question = first["question"] as? String else {
+            return nil
+        }
+        return String(question.prefix(80))
     }
 
     var isCmuxSession: Bool {
