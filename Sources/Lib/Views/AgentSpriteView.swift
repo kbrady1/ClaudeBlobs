@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import Combine
 
 struct AgentSpriteView: View {
@@ -27,6 +28,8 @@ struct AgentSpriteView: View {
     var isInterrupted: Bool = false
     var isToolFailure: Bool = false
     var isAPIError: Bool = false
+    var appIcon: NSImage? = nil
+    var appIconShowsBorder: Bool = false
 
     @State private var animationPhase: CGFloat = 0
     @State private var expressionFrame: Int = 0
@@ -78,6 +81,11 @@ struct AgentSpriteView: View {
             if isAPIError && !isSnoozed {
                 FireOverlay(size: size)
                     .offset(y: -size * 0.55)
+            }
+
+            // App icon badge — moves with blob
+            if let appIcon {
+                AppIconAccent(icon: appIcon, size: size, showsBorder: appIconShowsBorder)
             }
 
             // Purple notification badge
@@ -513,6 +521,32 @@ struct AgentSpriteView: View {
         case .working, .compacting:
             // Cycle: center (0), look left (1), look right (2), thinking mouth (3)
             expressionFrame = (expressionFrame + 1) % 4
+        }
+    }
+}
+
+// MARK: - App Icon Accent (bounces with blob)
+
+private struct AppIconAccent: View {
+    let icon: NSImage
+    let size: CGFloat
+    let showsBorder: Bool
+
+    var body: some View {
+        let iconSize = showsBorder ? size * 0.35 : size * 0.65
+        if showsBorder {
+            Image(nsImage: icon)
+                .resizable()
+                .frame(width: iconSize, height: iconSize)
+                .clipShape(RoundedRectangle(cornerRadius: iconSize * 0.22))
+                .shadow(color: .black.opacity(0.5), radius: 1)
+                .offset(x: -size * 0.35, y: size * 0.35)
+        } else {
+            Image(nsImage: icon)
+                .resizable()
+                .frame(width: iconSize, height: iconSize)
+                .shadow(color: .black.opacity(0.5), radius: 1)
+                .offset(x: -size * 0.35, y: size * 0.35)
         }
     }
 }

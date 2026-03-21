@@ -4,7 +4,7 @@ import SwiftUI
 import Combine
 import ServiceManagement
 
-public class AppDelegate: NSObject, NSApplicationDelegate {
+public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var panels: [HUDPanel] = []
     private var store: AgentStore!
     private var expansionState: HUDExpansionState!
@@ -16,6 +16,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var debugMenuItem: NSMenuItem!
     private var viewLogMenuItem: NSMenuItem!
     private var clearLogMenuItem: NSMenuItem!
+    private var hookLogsMenuItem: NSMenuItem!
     #endif
     private var ntfyMenuItem: NSMenuItem!
     private var settingsWindow: NSWindow?
@@ -23,7 +24,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyWindow: NSWindow?
     private var hotkeyConfig: HotkeyConfig!
     private var doneClassifierConfig: DoneClassifierConfig!
+    #if DEBUG
     private var doneClassifierWindow: NSWindow?
+    #endif
     private var hotkeyMenuItem: NSMenuItem!
     private var eventHandlerInstalled = false
     private var cancellables = Set<AnyCancellable>()
@@ -170,9 +173,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         ntfySettingsItem.target = self
         menu.addItem(ntfySettingsItem)
 
+        #if DEBUG
         let doneClassifierItem = NSMenuItem(title: "AI Done Detection\u{2026}", action: #selector(openDoneClassifierSettings), keyEquivalent: "")
         doneClassifierItem.target = self
         menu.addItem(doneClassifierItem)
+        #endif
 
         menu.addItem(.separator())
 
@@ -202,6 +207,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         clearLogMenuItem.target = self
         clearLogMenuItem.isHidden = !DebugLog.shared.isEnabled
         menu.addItem(clearLogMenuItem)
+
+        let hookLogsSubmenu = NSMenu()
+        hookLogsSubmenu.delegate = self
+        hookLogsMenuItem = NSMenuItem(title: "Hook Logs", action: nil, keyEquivalent: "")
+        hookLogsMenuItem.submenu = hookLogsSubmenu
+        hookLogsMenuItem.isHidden = !DebugLog.shared.isEnabled
+        menu.addItem(hookLogsMenuItem)
         #endif
 
         let reinstallItem = NSMenuItem(title: "Reinstall Hooks", action: #selector(reinstallHooks), keyEquivalent: "")
@@ -215,6 +227,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(uninstallItem)
 
         statusItem.menu = menu
+
+        // Always reinstall hooks in debug builds so dev changes take effect
+        #if DEBUG
+        try? HookInstaller().install()
+        #endif
 
         // First launch: confirm and install hooks
         if !UserDefaults.standard.bool(forKey: "hooksInstalled") {
@@ -245,8 +262,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Register as login item
+        // Register as login item (skip in debug builds)
+        #if !DEBUG
         try? SMAppService.mainApp.register()
+        #endif
 
         // Register global hotkey ⌃⌥A via Carbon (no Accessibility permission needed)
         registerGlobalHotkey()
@@ -264,6 +283,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         // Set dock/app icon programmatically
         NSApp.applicationIconImage = AppIcon.create(size: 512)
 
+        DebugLog.shared.syncDebugFlagOnLaunch()
         DebugLog.shared.log("App launched. Debug mode is ON.")
     }
 
@@ -488,6 +508,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         themeWindow = window
     }
 
+    #if DEBUG
     @objc private func openDoneClassifierSettings() {
         if let existing = doneClassifierWindow, existing.isVisible {
             existing.makeKeyAndOrderFront(nil)
@@ -508,6 +529,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         doneClassifierWindow = window
     }
+    #endif
 
     @objc private func openHotkeySettings() {
         if let existing = hotkeyWindow, existing.isVisible {
@@ -607,9 +629,14 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     #if DEBUG
     @objc private func toggleDebug() {
         DebugLog.shared.isEnabled.toggle()
-        debugMenuItem.state = DebugLog.shared.isEnabled ? .on : .off
-        viewLogMenuItem.isHidden = !DebugLog.shared.isEnabled
-        clearLogMenuItem.isHidden = !DebugLog.shared.isEnabled
+        let enabled = DebugLog.shared.isEnabled
+        debugMenuItem.state = enabled ? .on : .off
+        viewLogMenuItem.isHidden = !enabled
+        clearLogMenuItem.isHidden = !enabled
+        hookLogsMenuItem.isHidden = !enabled
+        if !enabled {
+            DebugLog.shared.clearHookLogs()
+        }
         DebugLog.shared.log("Debug mode toggled ON")
     }
 
@@ -627,6 +654,15 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func clearDebugLog() {
         DebugLog.shared.clear()
+    }
+
+    @objc private func openHookLogFile(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String else { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    @objc private func clearAllHookLogs() {
+        DebugLog.shared.clearHookLogs()
     }
     #endif
 
@@ -657,4 +693,43 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
         }
     }
+
+    public func applicationWillTerminate(_ notification: Notification) {
+        #if DEBUG
+        DebugLog.shared.clearHookLogs()
+        #endif
+    }
+
+    #if DEBUG
+    public func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu == hookLogsMenuItem?.submenu else { return }
+        menu.removeAllItems()
+
+        let sessionIds = DebugLog.shared.hookLogSessionIds()
+        if sessionIds.isEmpty {
+            let empty = NSMenuItem(title: "No hook logs", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+            return
+        }
+
+        for sid in sessionIds {
+            let agent = store.agents.first { $0.sessionId == sid }
+            let dirName = agent?.cwd.map { ($0 as NSString).lastPathComponent } ?? nil
+            let shortSid = String(sid.prefix(8))
+            let title = dirName.map { "\($0) (\(shortSid)\u{2026})" } ?? "\(shortSid)\u{2026}"
+
+            let item = NSMenuItem(title: title, action: #selector(openHookLogFile(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = DebugLog.shared.hookLogPath(for: sid)
+            menu.addItem(item)
+        }
+
+        menu.addItem(.separator())
+
+        let clearItem = NSMenuItem(title: "Clear All Hook Logs", action: #selector(clearAllHookLogs), keyEquivalent: "")
+        clearItem.target = self
+        menu.addItem(clearItem)
+    }
+    #endif
 }

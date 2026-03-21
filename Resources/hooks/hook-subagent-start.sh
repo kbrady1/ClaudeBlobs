@@ -4,6 +4,10 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 STATUS_DIR="$HOME/.claude/agent-status"
 mkdir -p "$STATUS_DIR"
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/hook-ensure-status.sh"
+debug_log_input "SubagentStart"
+
 SUBAGENT_ID=$(echo "$INPUT" | jq -r '.subagent_id // empty')
 SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.subagent_type // empty')
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
@@ -36,3 +40,5 @@ jq -n \
     updatedAt: $ts,
     statusChangedAt: $ts
   }' > "$TMP" && mv "$TMP" "$STATUS_FILE" || rm -f "$TMP"
+
+debug_log_result

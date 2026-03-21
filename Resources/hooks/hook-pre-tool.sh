@@ -7,6 +7,7 @@ STATUS_FILE="$STATUS_DIR/$SESSION_ID.json"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/hook-ensure-status.sh"
+debug_log_input "PreToolUse"
 ensure_status_file
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
@@ -20,3 +21,5 @@ atomic_update "$STATUS_FILE" \
   --arg toolUse "$TOOL_USE_STR" \
   --argjson ts "$TS" \
   '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .waitReason = null | .updatedAt = $ts'
+
+debug_log_result

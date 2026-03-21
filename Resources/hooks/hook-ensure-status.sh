@@ -3,6 +3,50 @@
 # Expects STATUS_FILE, SESSION_ID, and INPUT to be set by the caller.
 # Also provides atomic_update for safe concurrent writes.
 
+# --- Debug logging ---
+_CB_DEBUG_FLAG="$HOME/Library/Logs/ClaudeBlobs/.debug-enabled"
+_CB_HOOK_LOG_DIR="$HOME/Library/Logs/ClaudeBlobs/hooks"
+_CB_HOOK_LOG=""
+_CB_HOOK_NAME=""
+
+debug_log() {
+  [ -n "$_CB_HOOK_LOG" ] || return 0
+  local ts
+  ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  echo "[$ts] $1" >> "$_CB_HOOK_LOG"
+}
+
+debug_log_input() {
+  _CB_HOOK_NAME="$1"
+  [ -f "$_CB_DEBUG_FLAG" ] || return 0
+  local sid
+  sid=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+  [ -z "$sid" ] && return 0
+  mkdir -p "$_CB_HOOK_LOG_DIR"
+  _CB_HOOK_LOG="$_CB_HOOK_LOG_DIR/$sid.log"
+  local pid cwd
+  pid=$(echo "$INPUT" | jq -r '.pid // empty' 2>/dev/null)
+  cwd=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+  debug_log "[$1] sid=$sid pid=$pid cwd=$cwd INPUT:"
+  echo "$INPUT" >> "$_CB_HOOK_LOG"
+  echo "" >> "$_CB_HOOK_LOG"
+}
+
+debug_log_result() {
+  [ -n "$_CB_HOOK_LOG" ] || return 0
+  if [ -n "$STATUS_FILE" ] && [ -f "$STATUS_FILE" ]; then
+    local sid pid cwd
+    sid=$(jq -r '.sessionId // empty' "$STATUS_FILE" 2>/dev/null)
+    pid=$(jq -r '.pid // empty' "$STATUS_FILE" 2>/dev/null)
+    cwd=$(jq -r '.cwd // empty' "$STATUS_FILE" 2>/dev/null)
+    debug_log "[$_CB_HOOK_NAME] sid=$sid pid=$pid cwd=$cwd RESULT:"
+    cat "$STATUS_FILE" >> "$_CB_HOOK_LOG"
+  else
+    debug_log "[$_CB_HOOK_NAME] RESULT: (status file deleted)"
+  fi
+  echo "" >> "$_CB_HOOK_LOG"
+}
+
 # Atomically update a JSON file using jq. Uses a unique temp file per
 # invocation to avoid races when multiple hooks fire simultaneously.
 # Usage: atomic_update "$STATUS_FILE" jq-args... filter

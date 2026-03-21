@@ -89,14 +89,11 @@ struct ExpandedView: View {
                         isTaskJustCompleted: agent.isTaskJustCompleted,
                         isInterrupted: agent.isInterrupted,
                         isToolFailure: agent.isToolFailure,
-                        isAPIError: agent.isAPIError
+                        isAPIError: agent.isAPIError,
+                        appIcon: showAppIcons ? hostAppIcons[agent.pid] : nil,
+                        appIconShowsBorder: true
                     )
                     .frame(width: 48, height: 44)
-                    .overlay(alignment: .bottomLeading) {
-                        if showAppIcons {
-                            AppIconBadge(icon: hostAppIcons[agent.pid])
-                        }
-                    }
 
                     // Mini child blobs along the bottom
                     if !kids.isEmpty {
@@ -163,22 +160,6 @@ struct ExpandedView: View {
                 .strokeBorder(Color.white.opacity(isSelected ? 0.6 : 0), lineWidth: 1.5)
         )
         .animation(.easeInOut(duration: 0.15), value: isSelected)
-    }
-}
-
-/// Shows the host app icon (VS Code, Cursor, Claude Desktop) in the bottom-left corner.
-private struct AppIconBadge: View {
-    let icon: NSImage?
-
-    var body: some View {
-        if let icon {
-            Image(nsImage: icon)
-                .resizable()
-                .frame(width: 18, height: 18)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                .shadow(color: .black.opacity(0.5), radius: 1)
-                .offset(x: -5, y: 5)
-        }
     }
 }
 

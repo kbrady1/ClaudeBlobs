@@ -6,6 +6,10 @@ mkdir -p "$STATUS_DIR"
 chmod 700 "$STATUS_DIR"
 STATUS_FILE="$STATUS_DIR/$SESSION_ID.json"
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/hook-ensure-status.sh"
+debug_log_input "SessionStart"
+
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 PID=$PPID
@@ -46,3 +50,5 @@ jq -n \
     updatedAt: $ts,
     statusChangedAt: $ts
   }' > "$TMP" && mv "$TMP" "$STATUS_FILE" || rm -f "$TMP"
+
+debug_log_result

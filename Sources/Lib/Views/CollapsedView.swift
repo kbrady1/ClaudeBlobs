@@ -44,13 +44,9 @@ struct CollapsedView: View {
                         isTaskJustCompleted: agent.isTaskJustCompleted,
                         isInterrupted: agent.isInterrupted,
                         isToolFailure: agent.isToolFailure,
-                        isAPIError: agent.isAPIError
+                        isAPIError: agent.isAPIError,
+                        appIcon: showAppIcons ? hostAppIcons[agent.pid] : nil
                     )
-                    .overlay(alignment: .bottomLeading) {
-                        if showAppIcons {
-                            CollapsedAppIconBadge(icon: hostAppIcons[agent.pid])
-                        }
-                    }
                 }
                 .opacity(isHidden ? 0 : 1)
                 .animation(.easeInOut(duration: 0.3), value: isHidden)
@@ -165,18 +161,3 @@ private struct WavingEntrance<Content: View>: View {
     }
 }
 
-/// Smaller app icon badge for collapsed blobs (10px).
-private struct CollapsedAppIconBadge: View {
-    let icon: NSImage?
-
-    var body: some View {
-        if let icon {
-            Image(nsImage: icon)
-                .resizable()
-                .frame(width: 10, height: 10)
-                .clipShape(RoundedRectangle(cornerRadius: 2))
-                .shadow(color: .black.opacity(0.5), radius: 1)
-                .offset(x: -3, y: 3)
-        }
-    }
-}

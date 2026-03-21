@@ -7,6 +7,7 @@ STATUS_FILE="$STATUS_DIR/$SESSION_ID.json"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/hook-ensure-status.sh"
+debug_log_input "Stop"
 ensure_status_file
 
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty')
@@ -40,3 +41,5 @@ atomic_update "$STATUS_FILE" \
   --arg rawLastMessage "$RAW_MSG" \
   --argjson ts "$TS" \
   '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .waitReason = $waitReason | .rawLastMessage = (if $rawLastMessage == "" then null else $rawLastMessage end) | .updatedAt = $ts'
+
+debug_log_result

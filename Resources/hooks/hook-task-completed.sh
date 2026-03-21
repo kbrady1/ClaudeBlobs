@@ -7,6 +7,7 @@ STATUS_FILE="$STATUS_DIR/$SESSION_ID.json"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/hook-ensure-status.sh"
+debug_log_input "TaskCompleted"
 ensure_status_file
 
 TS=$(date +%s000)
@@ -14,3 +15,5 @@ TS=$(date +%s000)
 atomic_update "$STATUS_FILE" \
   --argjson ts "$TS" \
   '.taskCompletedAt = $ts | .updatedAt = $ts'
+
+debug_log_result

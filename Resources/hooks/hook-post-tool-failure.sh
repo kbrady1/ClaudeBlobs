@@ -7,6 +7,7 @@ STATUS_FILE="$STATUS_DIR/$SESSION_ID.json"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/hook-ensure-status.sh"
+debug_log_input "PostToolFailure"
 ensure_status_file
 
 IS_INTERRUPT=$(echo "$INPUT" | jq -r '.is_interrupt // false')
@@ -22,3 +23,5 @@ atomic_update "$STATUS_FILE" \
   --arg toolFailure "$FAILURE" \
   --argjson ts "$TS" \
   '.toolFailure = $toolFailure | .updatedAt = $ts'
+
+debug_log_result
