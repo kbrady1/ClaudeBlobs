@@ -22,6 +22,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var ntfyMenuItem: NSMenuItem!
     private var settingsWindow: NSWindow?
     private var themeWindow: NSWindow?
+    private var remoteWindow: NSWindow?
     private var hotkeyWindow: NSWindow?
     private var hotkeyConfig: HotkeyConfig!
     private var doneClassifierConfig: DoneClassifierConfig!
@@ -515,6 +516,30 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow = window
+    }
+
+    func openRemoteSettings() {
+        guard let remoteServer else { return }
+        if let existing = remoteWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let view = RemoteSettingsView(server: remoteServer)
+        let hostingView = NSHostingView(rootView: view)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.title = "Remote Control"
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        remoteWindow = window
     }
 
     @objc private func openThemeSettings() {
