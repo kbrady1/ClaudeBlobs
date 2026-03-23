@@ -1,5 +1,6 @@
 // ClaudeBlobsRemote/App.swift
 import SwiftUI
+import Network
 
 @main
 struct ClaudeBlobsRemoteApp: App {
@@ -58,7 +59,6 @@ struct ClaudeBlobsRemoteApp: App {
                             switch host {
                             case .ipv4(let addr): hostString = "\(addr)"
                             case .ipv6(let addr): hostString = "\(addr)"
-                            default: hostString = name
                             @unknown default: hostString = name
                             }
                             Task { @MainActor in
