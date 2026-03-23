@@ -6,6 +6,7 @@ import Network
 @MainActor
 final class ConnectionManager: ObservableObject {
     @Published var agents: [Agent] = []
+    @Published var agentIconData: [String: Data] = [:]  // sessionId -> PNG data
     @Published var connectionState: ConnectionState = .disconnected
     @Published var lastError: String?
 
@@ -109,17 +110,29 @@ final class ConnectionManager: ObservableObject {
         guard let message = try? JSONDecoder().decode(RemoteMessage.self, from: data) else { return }
 
         switch message {
-        case .snapshot(let agents):
-            self.agents = agents.sorted { $0.status.sortPriority < $1.status.sortPriority }
-        case .agentUpdated(let agent):
+        case .snapshot(let snapshots):
+            self.agents = snapshots.map(\.agent).sorted { $0.status.sortPriority < $1.status.sortPriority }
+            var icons: [String: Data] = [:]
+            for snapshot in snapshots {
+                if let iconData = snapshot.appIconPNG {
+                    icons[snapshot.agent.sessionId] = iconData
+                }
+            }
+            self.agentIconData = icons
+        case .agentUpdated(let snapshot):
+            let agent = snapshot.agent
             if let index = agents.firstIndex(where: { $0.sessionId == agent.sessionId }) {
                 agents[index] = agent
             } else {
                 agents.append(agent)
             }
             agents.sort { $0.status.sortPriority < $1.status.sortPriority }
+            if let iconData = snapshot.appIconPNG {
+                agentIconData[agent.sessionId] = iconData
+            }
         case .agentRemoved(let sessionId):
             agents.removeAll { $0.sessionId == sessionId }
+            agentIconData.removeValue(forKey: sessionId)
         case .heartbeat:
             break
         }

@@ -8,7 +8,7 @@ struct AgentListView: View {
         NavigationStack {
             List(connectionManager.agents) { agent in
                 NavigationLink(value: agent.sessionId) {
-                    AgentRow(agent: agent)
+                    AgentRow(agent: agent, appIconData: connectionManager.agentIconData[agent.sessionId])
                 }
             }
             .navigationTitle("Agents")
@@ -48,18 +48,34 @@ struct AgentListView: View {
 
 struct AgentRow: View {
     let agent: Agent
+    var appIconData: Data? = nil
 
     var body: some View {
         HStack(spacing: 12) {
-            // Blob placeholder — replace with AgentSpriteView port in v2
-            Circle()
-                .fill(statusColor)
-                .frame(width: 36, height: 36)
-                .overlay {
-                    statusIcon
-                        .font(.system(size: 16))
-                        .foregroundStyle(.white)
-                }
+            AgentSpriteView(
+                status: agent.status,
+                size: 36,
+                isCoding: agent.isCoding,
+                isSearching: agent.isSearching,
+                isExploring: agent.isExploring,
+                isMcpTool: agent.isMcpTool,
+                isTesting: agent.isTesting,
+                isDone: agent.isDone,
+                staleness: AgentStaleness(updatedAt: agent.updatedAt),
+                isPlanApproval: agent.isPlanApproval,
+                isAskingQuestion: agent.isAskingQuestion,
+                isBashPermission: agent.isBashPermission,
+                isFilePermission: agent.isFilePermission,
+                isWebPermission: agent.isWebPermission,
+                isMcpPermission: agent.isMcpPermission,
+                isGithubPermission: agent.isGithubPermission,
+                isGithubTool: agent.isGithubTool,
+                isTaskJustCompleted: agent.isTaskJustCompleted,
+                isInterrupted: agent.isInterrupted,
+                isToolFailure: agent.isToolFailure,
+                isAPIError: agent.isAPIError,
+                appIconData: appIconData
+            )
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(agent.projectName)
@@ -91,18 +107,6 @@ struct AgentRow: View {
         case .working: return .green
         case .starting: return .blue
         case .compacting: return .yellow
-        }
-    }
-
-    private var statusIcon: some View {
-        Group {
-            switch agent.status {
-            case .permission: Image(systemName: "hand.raised.fill")
-            case .waiting: Image(systemName: agent.waitReason == "done" ? "checkmark" : "questionmark")
-            case .working: Image(systemName: "gear")
-            case .starting: Image(systemName: "circle.dotted")
-            case .compacting: Image(systemName: "arrow.trianglehead.2.clockwise")
-            }
         }
     }
 

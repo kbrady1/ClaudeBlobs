@@ -3,9 +3,15 @@
 
 import Foundation
 
+/// Agent paired with its host app icon for network transmission.
+struct AgentSnapshot: Codable {
+    let agent: Agent
+    let appIconPNG: Data?  // PNG-encoded host app icon, if available
+}
+
 enum RemoteMessage: Codable {
-    case snapshot(agents: [Agent])
-    case agentUpdated(agent: Agent)
+    case snapshot(agents: [AgentSnapshot])
+    case agentUpdated(agent: AgentSnapshot)
     case agentRemoved(sessionId: String)
     case heartbeat
 
@@ -18,9 +24,9 @@ enum RemoteMessage: Codable {
         let type = try container.decode(String.self, forKey: .type)
         switch type {
         case "snapshot":
-            self = .snapshot(agents: try container.decode([Agent].self, forKey: .agents))
+            self = .snapshot(agents: try container.decode([AgentSnapshot].self, forKey: .agents))
         case "agentUpdated":
-            self = .agentUpdated(agent: try container.decode(Agent.self, forKey: .agent))
+            self = .agentUpdated(agent: try container.decode(AgentSnapshot.self, forKey: .agent))
         case "agentRemoved":
             self = .agentRemoved(sessionId: try container.decode(String.self, forKey: .sessionId))
         case "heartbeat":
