@@ -413,7 +413,8 @@ struct ConversationTests {
         let parent = try c.readStatus(parentSessionId)
         #expect(parent?["status"] as? String == "working")
 
-        // Now A's permission is granted, A resumes working
+        // Now A's permission is granted (user took >2s to approve), A resumes working
+        try c.backdateStatus(subagentA)
         try c.replay([
             preToolUse(agentId: subagentA, agentType: "Explore",
                        toolName: "Bash", toolInput: ["command": "rm -rf build/"]),

@@ -116,6 +116,18 @@ class ConversationTestHelper {
         return store
     }
 
+    /// Backdate a status file's `statusChangedAt` so race guards treat it as stale.
+    func backdateStatus(_ fileId: String, bySeconds seconds: Int = 3) throws {
+        let file = hookHelper.statusDir.appendingPathComponent("\(fileId).json")
+        let data = try Data(contentsOf: file)
+        guard var json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        if let ts = json["statusChangedAt"] as? Int {
+            json["statusChangedAt"] = ts - (seconds * 1000)
+        }
+        let updated = try JSONSerialization.data(withJSONObject: json)
+        try updated.write(to: file)
+    }
+
     // MARK: - Private
 
     private func runStep(_ step: ConversationStep) throws {

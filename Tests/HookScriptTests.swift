@@ -240,6 +240,45 @@ struct HookScriptTests {
             ], existingStatus: makeWorkingStatus())
             #expect(r.status?["lastToolUse"] as? String == "Bash")
         }
+
+        @Test("preserves recent permission status")
+        func preservesRecentPermission() throws {
+            let h = try HookTestHelper()
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            var existing = makeStatus(status: "permission")
+            existing["statusChangedAt"] = now
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Read",
+                "tool_input": ["file_path": "/tmp/foo.txt"],
+            ], existingStatus: existing)
+            #expect(r.status?["status"] as? String == "permission")
+        }
+
+        @Test("preserves recent waiting status")
+        func preservesRecentWaiting() throws {
+            let h = try HookTestHelper()
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            var existing = makeStatus(status: "waiting")
+            existing["statusChangedAt"] = now
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Read",
+                "tool_input": ["file_path": "/tmp/foo.txt"],
+            ], existingStatus: existing)
+            #expect(r.status?["status"] as? String == "waiting")
+        }
+
+        @Test("overwrites stale permission status")
+        func overwritesStalePermission() throws {
+            let h = try HookTestHelper()
+            let staleTs = Int64(Date().timeIntervalSince1970 * 1000) - 5000
+            var existing = makeStatus(status: "permission")
+            existing["statusChangedAt"] = staleTs
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Read",
+                "tool_input": ["file_path": "/tmp/foo.txt"],
+            ], existingStatus: existing)
+            #expect(r.status?["status"] as? String == "working")
+        }
     }
 
     // MARK: - hook-pre-tool.sh — JSON tool_input formatting

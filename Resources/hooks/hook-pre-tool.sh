@@ -17,6 +17,17 @@ TS=$(date +%s000)
 
 TOOL_USE_STR=$(format_tool_input "$TOOL_NAME" "$RAW_INPUT")
 
+# Don't overwrite permission/waiting if it was set in the last 2 seconds —
+# PreToolUse for a concurrent tool can race with PermissionRequest for another.
+CURRENT=$(jq -r '"\(.status // ""):\(.statusChangedAt // 0)"' "$STATUS_FILE" 2>/dev/null)
+CURRENT_STATUS="${CURRENT%%:*}"
+STATUS_AGE_MS=$(( TS - ${CURRENT#*:} ))
+
+if { [ "$CURRENT_STATUS" = "permission" ] || [ "$CURRENT_STATUS" = "waiting" ]; } && [ "$STATUS_AGE_MS" -lt 2000 ]; then
+  debug_log_result
+  exit 0
+fi
+
 atomic_update "$STATUS_FILE" \
   --arg status "working" \
   --arg toolUse "$TOOL_USE_STR" \
