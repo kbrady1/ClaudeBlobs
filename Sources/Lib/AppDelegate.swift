@@ -179,6 +179,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ntfySettingsItem.target = self
         menu.addItem(ntfySettingsItem)
 
+        let remoteSettingsItem = NSMenuItem(title: "Remote Control\u{2026}", action: #selector(openRemoteSettingsAction), keyEquivalent: "")
+        remoteSettingsItem.target = self
+        menu.addItem(remoteSettingsItem)
+
         #if DEBUG
         let doneClassifierItem = NSMenuItem(title: "AI Done Detection\u{2026}", action: #selector(openDoneClassifierSettings), keyEquivalent: "")
         doneClassifierItem.target = self
@@ -517,6 +521,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow = window
     }
+
+    @objc private func openRemoteSettingsAction() { openRemoteSettings() }
 
     func openRemoteSettings() {
         guard let remoteServer else { return }
