@@ -7,16 +7,34 @@ struct RemoteTypesTests {
 
     @Test func agentSnapshotEncodesToJSON() throws {
         let agent = Agent.fixture(sessionId: "s1", status: .permission, lastToolUse: "Bash: npm deploy")
-        let snapshot = RemoteMessage.snapshot(agents: [agent])
+        let agentSnapshot = AgentSnapshot(agent: agent, appIconPNG: nil)
+        let snapshot = RemoteMessage.snapshot(agents: [agentSnapshot])
         let data = try JSONEncoder().encode(snapshot)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         #expect(json["type"] as? String == "snapshot")
         #expect((json["agents"] as? [[String: Any]])?.count == 1)
     }
 
+    @Test func agentSnapshotWithIconEncodesToJSON() throws {
+        let agent = Agent.fixture(sessionId: "s1", status: .working)
+        let fakeIconData = Data([0x89, 0x50, 0x4E, 0x47]) // PNG magic bytes
+        let agentSnapshot = AgentSnapshot(agent: agent, appIconPNG: fakeIconData)
+        let snapshot = RemoteMessage.snapshot(agents: [agentSnapshot])
+        let data = try JSONEncoder().encode(snapshot)
+        let decoded = try JSONDecoder().decode(RemoteMessage.self, from: data)
+        if case .snapshot(let agents) = decoded {
+            #expect(agents.count == 1)
+            #expect(agents[0].appIconPNG == fakeIconData)
+            #expect(agents[0].agent.sessionId == "s1")
+        } else {
+            Issue.record("Expected snapshot message")
+        }
+    }
+
     @Test func agentUpdateEncodesToJSON() throws {
         let agent = Agent.fixture(sessionId: "s1", status: .working)
-        let update = RemoteMessage.agentUpdated(agent: agent)
+        let agentSnapshot = AgentSnapshot(agent: agent, appIconPNG: nil)
+        let update = RemoteMessage.agentUpdated(agent: agentSnapshot)
         let data = try JSONEncoder().encode(update)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         #expect(json["type"] as? String == "agentUpdated")

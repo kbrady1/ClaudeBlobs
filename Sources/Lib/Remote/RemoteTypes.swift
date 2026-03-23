@@ -1,9 +1,16 @@
 import Foundation
 
+/// Agent paired with its host app icon for network transmission.
+/// Keeps icon data out of the Agent model (which is file-based).
+struct AgentSnapshot: Codable {
+    let agent: Agent
+    let appIconPNG: Data?  // PNG-encoded host app icon, if available
+}
+
 /// Messages sent from server to client over WebSocket
 enum RemoteMessage: Codable {
-    case snapshot(agents: [Agent])
-    case agentUpdated(agent: Agent)
+    case snapshot(agents: [AgentSnapshot])
+    case agentUpdated(agent: AgentSnapshot)
     case agentRemoved(sessionId: String)
     case heartbeat
 
@@ -33,10 +40,10 @@ enum RemoteMessage: Codable {
         let type = try container.decode(String.self, forKey: .type)
         switch type {
         case "snapshot":
-            let agents = try container.decode([Agent].self, forKey: .agents)
+            let agents = try container.decode([AgentSnapshot].self, forKey: .agents)
             self = .snapshot(agents: agents)
         case "agentUpdated":
-            let agent = try container.decode(Agent.self, forKey: .agent)
+            let agent = try container.decode(AgentSnapshot.self, forKey: .agent)
             self = .agentUpdated(agent: agent)
         case "agentRemoved":
             let sessionId = try container.decode(String.self, forKey: .sessionId)

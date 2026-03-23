@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Combine
+import AppKit
 
 /// Embedded WebSocket server for remote control.
 final class RemoteServer: ObservableObject {
@@ -120,7 +121,8 @@ final class RemoteServer: ObservableObject {
             DispatchQueue.main.async {
                 self.connectedClientCount = self.connections.count
             }
-            let snapshot = RemoteMessage.snapshot(agents: self.agentStore.agents)
+            let snapshots = self.buildSnapshots(self.agentStore.agents)
+            let snapshot = RemoteMessage.snapshot(agents: snapshots)
             connection.send(snapshot)
             connection.receive { data in
                 self.handleIncomingData(data, from: connId)
@@ -156,9 +158,21 @@ final class RemoteServer: ObservableObject {
     }
 
     private func broadcastSnapshot(_ agents: [Agent]) {
-        let message = RemoteMessage.snapshot(agents: agents)
+        let snapshots = buildSnapshots(agents)
+        let message = RemoteMessage.snapshot(agents: snapshots)
         for connection in connections.values {
             connection.send(message)
+        }
+    }
+
+    private func buildSnapshots(_ agents: [Agent]) -> [AgentSnapshot] {
+        agents.map { agent in
+            let iconData: Data? = agentStore.hostAppIcons[agent.pid].flatMap { nsImage in
+                guard let tiffData = nsImage.tiffRepresentation,
+                      let bitmap = NSBitmapImageRep(data: tiffData) else { return nil }
+                return bitmap.representation(using: .png, properties: [:])
+            }
+            return AgentSnapshot(agent: agent, appIconPNG: iconData)
         }
     }
 
