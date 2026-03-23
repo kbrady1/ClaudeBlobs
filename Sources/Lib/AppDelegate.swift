@@ -11,6 +11,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var ntfyConfig: NtfyConfig!
     private var themeConfig: ThemeConfig!
     private var ntfyScheduler: NtfyScheduler!
+    private var remoteServer: RemoteServer?
     private var statusItem: NSStatusItem!
     #if DEBUG
     private var debugMenuItem: NSMenuItem!
@@ -52,6 +53,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ntfyScheduler = NtfyScheduler(config: ntfyConfig)
         store.ntfyScheduler = ntfyScheduler
         store.doneClassifierConfig = doneClassifierConfig
+        remoteServer = RemoteServer(agentStore: store)
+        if UserDefaults.standard.bool(forKey: "remoteControlEnabled") {
+            remoteServer?.start()
+        }
         rebuildPanels()
 
         // Rebuild panels when screen placement preference changes
@@ -735,6 +740,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
+        remoteServer?.stop()
         #if DEBUG
         DebugLog.shared.clearHookLogs()
         #endif
