@@ -13,22 +13,16 @@ struct ClaudeBlobsRemoteApp: App {
         WindowGroup {
             Group {
                 if pairingStore.isPaired {
-                    AgentListView(connectionManager: connectionManager)
+                    AgentListView(connectionManager: connectionManager, onUnpair: {
+                            connectionManager.disconnect()
+                            bonjourBrowser.stop()
+                            pairingStore.unpair()
+                        })
                         .onAppear { connectIfNeeded() }
                         .onChange(of: bonjourBrowser.discoveredHosts) { _, hosts in
                             // React to Bonjour discovery instead of using a fixed delay
                             if !hosts.isEmpty, connectionManager.connectionState == .disconnected {
                                 resolveAndConnect(hosts: hosts)
-                            }
-                        }
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button("Unpair") {
-                                    connectionManager.disconnect()
-                                    bonjourBrowser.stop()
-                                    pairingStore.unpair()
-                                }
-                                .font(.caption)
                             }
                         }
                 } else {

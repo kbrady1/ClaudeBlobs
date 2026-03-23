@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AgentListView: View {
     @ObservedObject var connectionManager: ConnectionManager
+    var onUnpair: (() -> Void)? = nil
 
     var body: some View {
         NavigationStack {
@@ -27,6 +28,14 @@ struct AgentListView: View {
                 }
             }
             .toolbar {
+                if let onUnpair {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Unpair", role: .destructive) {
+                            onUnpair()
+                        }
+                        .font(.caption)
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     connectionStatusIndicator
                 }
