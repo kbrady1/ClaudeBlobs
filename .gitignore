@@ -1,6 +1,7 @@
 .build/
 .swiftpm/
 .superpowers/
+.worktrees/
 docs/superpowers/
 *.xcodeproj/xcuserdata/
 DerivedData/
