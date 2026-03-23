@@ -2,6 +2,7 @@ import Foundation
 import Network
 import Combine
 import AppKit
+import SwiftUI
 
 /// Embedded WebSocket server for remote control.
 final class RemoteServer: ObservableObject {
@@ -39,7 +40,7 @@ final class RemoteServer: ObservableObject {
         }
 
         listener?.stateUpdateHandler = { [weak self] state in
-            DebugLog.shared.log("RemoteServer: listener state \(state)")
+            DebugLog.shared.log("RemoteServer: listener state \(String(describing: state))")
             DispatchQueue.main.async {
                 self?.isRunning = (state == .ready)
             }
@@ -68,7 +69,7 @@ final class RemoteServer: ObservableObject {
             self?.sendHeartbeats()
         }
 
-        DebugLog.shared.log("RemoteServer: started on port \(port)")
+        DebugLog.shared.log("RemoteServer: started on port \(self.port)")
     }
 
     func stop() {
@@ -150,13 +151,16 @@ final class RemoteServer: ObservableObject {
             let result = try await CommandExecutor.execute(
                 command: request.command,
                 agent: agent,
-                text: request.text
+                text: request.text,
+                optionIndex: request.optionIndex
             )
-            DebugLog.shared.log("RemoteServer: command \(request.command) for \(request.sessionId): \(result.success ? "ok" : result.error ?? "failed")")
+            DebugLog.shared.log("RemoteServer: command \(request.command.rawValue) for \(request.sessionId): \(result.success ? "ok" : result.error ?? "failed")")
         }
     }
 
     private func broadcastSnapshot(_ agents: [Agent]) {
+        let statuses = agents.map { "\($0.sessionId.prefix(8)):\($0.status.rawValue)" }.joined(separator: ", ")
+        DebugLog.shared.log("RemoteServer: broadcasting to \(connections.count) client(s): [\(statuses)]")
         let snapshots = buildSnapshots(agents)
         let message = RemoteMessage.snapshot(agents: snapshots)
         for connection in connections.values {
@@ -167,12 +171,52 @@ final class RemoteServer: ObservableObject {
     private func buildSnapshots(_ agents: [Agent]) -> [AgentSnapshot] {
         agents.map { agent in
             let iconData: Data? = agentStore.hostAppIcons[agent.pid].flatMap { nsImage in
-                guard let tiffData = nsImage.tiffRepresentation,
+                // Resize to 64x64 before encoding — full-size icons blow up the WebSocket frame
+                let targetSize = NSSize(width: 64, height: 64)
+                let resized = NSImage(size: targetSize)
+                resized.lockFocus()
+                nsImage.draw(in: NSRect(origin: .zero, size: targetSize),
+                            from: NSRect(origin: .zero, size: nsImage.size),
+                            operation: .copy, fraction: 1.0)
+                resized.unlockFocus()
+                guard let tiffData = resized.tiffRepresentation,
                       let bitmap = NSBitmapImageRep(data: tiffData) else { return nil }
                 return bitmap.representation(using: .png, properties: [:])
             }
-            return AgentSnapshot(agent: agent, appIconPNG: iconData)
+            // Resolve the status color from the current theme, matching macOS sprite logic
+            let theme = ColorTheme(rawValue: UserDefaults.standard.string(forKey: "selectedTheme") ?? "") ?? .trafficLight
+            let effectiveStatus: AgentStatus
+            if agent.status == .waiting && agent.isDone {
+                // Done agents use the starting color (green), matching AgentSpriteView.backgroundColor
+                effectiveStatus = .starting
+            } else {
+                effectiveStatus = agent.status
+            }
+            let color = theme.color(for: effectiveStatus)
+            let hex = Self.colorToHex(color)
+
+            // Parse permission options from screen if agent is waiting for permission
+            var permissionOptions: [String]? = nil
+            if agent.status == .permission, let surface = agent.cmuxSurface {
+                let socketPath = agent.cmuxSocketPath ?? "/tmp/cmux.sock"
+                if let screen = CommandExecutor.readScreen(surface: surface, workspace: agent.cmuxWorkspace, socketPath: socketPath) {
+                    let options = CommandExecutor.parsePermissionOptions(from: screen)
+                    if !options.isEmpty {
+                        permissionOptions = options
+                    }
+                }
+            }
+
+            return AgentSnapshot(agent: agent, appIconPNG: iconData, statusColorHex: hex, permissionOptions: permissionOptions)
         }
+    }
+
+    private static func colorToHex(_ color: Color) -> String {
+        let nsColor = NSColor(color).usingColorSpace(.deviceRGB) ?? NSColor(color)
+        let r = Int(nsColor.redComponent * 255)
+        let g = Int(nsColor.greenComponent * 255)
+        let b = Int(nsColor.blueComponent * 255)
+        return String(format: "#%02X%02X%02X", r, g, b)
     }
 
     private func sendHeartbeats() {

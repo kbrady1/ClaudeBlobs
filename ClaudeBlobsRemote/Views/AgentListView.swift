@@ -9,7 +9,7 @@ struct AgentListView: View {
         NavigationStack {
             List(connectionManager.agents) { agent in
                 NavigationLink(value: agent.sessionId) {
-                    AgentRow(agent: agent, appIconData: connectionManager.agentIconData[agent.sessionId])
+                    AgentRow(agent: agent, appIconData: connectionManager.agentIconData[agent.sessionId], statusColorHex: connectionManager.agentColorHex[agent.sessionId])
                 }
             }
             .navigationTitle("Agents")
@@ -19,12 +19,43 @@ struct AgentListView: View {
                 }
             }
             .overlay {
-                if connectionManager.agents.isEmpty {
-                    ContentUnavailableView(
-                        "No Agents",
-                        systemImage: "bubble.left.and.bubble.right",
-                        description: Text("No Claude agents are currently running")
-                    )
+                switch connectionManager.connectionState {
+                case .disconnected:
+                    VStack(spacing: 16) {
+                        Image(systemName: "wifi.slash")
+                            .font(.system(size: 40))
+                            .foregroundStyle(.secondary)
+                        Text("Offline")
+                            .font(.title3)
+                            .fontWeight(.medium)
+                        if let error = connectionManager.lastError {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                        }
+                        Text("Searching for ClaudeBlobs on your network...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                case .connecting:
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .controlSize(.large)
+                        Text("Connecting...")
+                            .font(.title3)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
+                    }
+                case .connected:
+                    if connectionManager.agents.isEmpty {
+                        ContentUnavailableView(
+                            "No Agents",
+                            systemImage: "bubble.left.and.bubble.right",
+                            description: Text("No Claude agents are currently running")
+                        )
+                    }
                 }
             }
             .toolbar {
@@ -74,6 +105,7 @@ struct AgentListView: View {
 struct AgentRow: View {
     let agent: Agent
     var appIconData: Data? = nil
+    var statusColorHex: String? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -99,7 +131,8 @@ struct AgentRow: View {
                 isInterrupted: agent.isInterrupted,
                 isToolFailure: agent.isToolFailure,
                 isAPIError: agent.isAPIError,
-                appIconData: appIconData
+                appIconData: appIconData,
+                statusColorHex: statusColorHex
             )
 
             VStack(alignment: .leading, spacing: 2) {
@@ -126,12 +159,17 @@ struct AgentRow: View {
     }
 
     private var statusColor: Color {
+//        if let hex = statusColorHex, let col = Color(hex: hex) {
+//            return col
+//        }
+
+        // Fallback if no hex provided
         switch agent.status {
-        case .permission: return .orange
-        case .waiting: return agent.waitReason == "done" ? .gray : .purple
-        case .working: return .green
-        case .starting: return .blue
-        case .compacting: return .yellow
+        case .permission: return .red
+        case .waiting: return .orange
+        case .working: return .blue
+        case .starting: return .green
+        case .compacting: return .purple
         }
     }
 

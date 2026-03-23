@@ -31,6 +31,7 @@ struct AgentSpriteView: View {
     var isAPIError: Bool = false
     var appIconData: Data? = nil
     var appIconShowsBorder: Bool = false
+    var statusColorHex: String? = nil
 
     @State private var animationPhase: CGFloat = 0
     @State private var expressionFrame: Int = 0
@@ -196,7 +197,11 @@ struct AgentSpriteView: View {
     private var backgroundColor: Color {
         if isSnoozed { return .gray }
         if status == .waiting && isDone {
-            return .blue  // starting color
+            // Done uses the starting color (green in trafficLight)
+            if let hex = statusColorHex, let col = Color(hex: hex) {
+                return col
+            }
+            return Color(red: 0.204, green: 0.780, blue: 0.349)
         }
         if status == .permission && isPlanApproval {
             return Color.orange
@@ -207,14 +212,18 @@ struct AgentSpriteView: View {
         return statusColor
     }
 
-    /// Maps status to color (simplified from macOS ColorTheme, uses trafficLight defaults)
+    /// Maps status to color — uses server-provided hex (matches macOS theme) with trafficLight fallbacks
     private var statusColor: Color {
+        if let hex = statusColorHex, let col = Color(hex: hex) {
+            return col
+        }
+        // Fallback: trafficLight theme defaults
         switch status {
-        case .starting:   return .blue
-        case .working:    return .green
-        case .permission: return .red
-        case .waiting:    return .purple
-        case .compacting: return .yellow
+        case .starting:   return Color(red: 0.204, green: 0.780, blue: 0.349)
+        case .working:    return Color(red: 0.298, green: 0.553, blue: 1.0)
+        case .waiting:    return Color(red: 1.0, green: 0.584, blue: 0.0)
+        case .permission: return Color(red: 1.0, green: 0.231, blue: 0.188)
+        case .compacting: return Color(red: 0.6, green: 0.4, blue: 1.0)
         }
     }
 

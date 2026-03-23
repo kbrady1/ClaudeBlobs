@@ -1,12 +1,17 @@
 // ClaudeBlobsRemote/ConnectionManager.swift
 import Foundation
 import Network
+import os
+
+private let log = Logger(subsystem: "com.claudeblobs.remote", category: "Connection")
 
 /// Manages the WebSocket connection to the ClaudeBlobs server.
 @MainActor
 final class ConnectionManager: ObservableObject {
     @Published var agents: [Agent] = []
     @Published var agentIconData: [String: Data] = [:]  // sessionId -> PNG data
+    @Published var agentColorHex: [String: String] = [:]  // sessionId -> hex color
+    @Published var agentPermissionOptions: [String: [String]] = [:]  // sessionId -> options
     @Published var connectionState: ConnectionState = .disconnected
     @Published var lastError: String?
 
@@ -23,10 +28,12 @@ final class ConnectionManager: ObservableObject {
     func connect(host: String, port: Int, token: String) {
         authToken = token
         // TODO: Switch to wss:// once server has TLS with self-signed cert.
-        // For now, use plain ws:// since the server is plain TCP + WebSocket.
-        // The auth token in the first message still provides authentication.
         let urlString = "ws://\(host):\(port)"
-        guard let url = URL(string: urlString) else { return }
+        log.info("Connecting to \(urlString)")
+        guard let url = URL(string: urlString) else {
+            log.error("Invalid URL: \(urlString)")
+            return
+        }
         serverURL = url
 
         connectionState = .connecting
@@ -35,18 +42,23 @@ final class ConnectionManager: ObservableObject {
         session = URLSession(configuration: config)
 
         webSocketTask = session?.webSocketTask(with: url)
+        webSocketTask?.maximumMessageSize = 16 * 1024 * 1024  // 16 MB — snapshots include icon PNG data
+        log.info("WebSocket task created, resuming...")
         webSocketTask?.resume()
 
         // First message must be auth token
         let authMessage = "{\"type\":\"auth\",\"token\":\"\(token)\"}"
+        log.info("Sending auth message...")
         webSocketTask?.send(.string(authMessage)) { [weak self] error in
             if let error {
+                log.error("Auth send failed: \(error.localizedDescription)")
                 Task { @MainActor in
                     self?.lastError = "Auth failed: \(error.localizedDescription)"
                     self?.connectionState = .disconnected
                 }
                 return
             }
+            log.info("Auth sent successfully, now connected")
             Task { @MainActor in
                 self?.connectionState = .connected
                 self?.receiveMessage()
@@ -56,6 +68,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     func disconnect() {
+        log.info("Disconnecting")
         reconnectTimer?.invalidate()
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
@@ -64,15 +77,17 @@ final class ConnectionManager: ObservableObject {
 
     // MARK: - Commands (sent over WebSocket, same channel as state)
 
-    func sendCommand(_ command: CommandType, sessionId: String, text: String? = nil) async {
-        let request = CommandRequest(command: command, sessionId: sessionId, text: text)
+    func sendCommand(_ command: CommandType, sessionId: String, text: String? = nil, optionIndex: Int? = nil) async {
+        let request = CommandRequest(command: command, sessionId: sessionId, text: text, optionIndex: optionIndex)
         guard let data = try? JSONEncoder().encode(request),
               let jsonString = String(data: data, encoding: .utf8)
         else { return }
 
+        log.info("Sending command: \(command.rawValue) for \(sessionId)")
         do {
             try await webSocketTask?.send(.string(jsonString))
         } catch {
+            log.error("Command send failed: \(error.localizedDescription)")
             lastError = error.localizedDescription
         }
     }
@@ -86,17 +101,20 @@ final class ConnectionManager: ObservableObject {
                 case .success(let message):
                     switch message {
                     case .string(let text):
+                        log.info("Received text frame (\(text.count) chars)")
                         if let data = text.data(using: .utf8) {
                             self?.handleMessage(data)
                         }
                     case .data(let data):
+                        log.info("Received data frame (\(data.count) bytes)")
                         self?.handleMessage(data)
                     @unknown default:
-                        break
+                        log.warning("Received unknown frame type")
                     }
                     self?.receiveMessage()
 
                 case .failure(let error):
+                    log.error("WebSocket receive error: \(error.localizedDescription)")
                     self?.connectionState = .disconnected
                     self?.lastError = error.localizedDescription
                     self?.scheduleReconnect()
@@ -106,52 +124,74 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func handleMessage(_ data: Data) {
-        guard let message = try? JSONDecoder().decode(RemoteMessage.self, from: data) else { return }
-
-        switch message {
-        case .snapshot(let snapshots):
-            self.agents = snapshots.map(\.agent).sorted { $0.status.sortPriority < $1.status.sortPriority }
-            var icons: [String: Data] = [:]
-            for snapshot in snapshots {
-                if let iconData = snapshot.appIconPNG {
-                    icons[snapshot.agent.sessionId] = iconData
+        do {
+            let message = try JSONDecoder().decode(RemoteMessage.self, from: data)
+            switch message {
+            case .snapshot(let snapshots):
+                log.info("Received snapshot with \(snapshots.count) agent(s)")
+                self.agents = snapshots.map(\.agent).sorted { $0.status.sortPriority < $1.status.sortPriority }
+                var icons: [String: Data] = [:]
+                var colors: [String: String] = [:]
+                var perms: [String: [String]] = [:]
+                for snapshot in snapshots {
+                    let sid = snapshot.agent.sessionId
+                    if let iconData = snapshot.appIconPNG { icons[sid] = iconData }
+                    if let hex = snapshot.statusColorHex { colors[sid] = hex }
+                    if let opts = snapshot.permissionOptions { perms[sid] = opts }
                 }
+                self.agentIconData = icons
+                self.agentColorHex = colors
+                self.agentPermissionOptions = perms
+            case .agentUpdated(let snapshot):
+                let agent = snapshot.agent
+                log.info("Agent updated: \(agent.sessionId) status=\(agent.status.rawValue)")
+                if let index = agents.firstIndex(where: { $0.sessionId == agent.sessionId }) {
+                    agents[index] = agent
+                } else {
+                    agents.append(agent)
+                }
+                agents.sort { $0.status.sortPriority < $1.status.sortPriority }
+                if let iconData = snapshot.appIconPNG {
+                    agentIconData[agent.sessionId] = iconData
+                }
+                if let hex = snapshot.statusColorHex {
+                    agentColorHex[agent.sessionId] = hex
+                }
+                if let opts = snapshot.permissionOptions {
+                    agentPermissionOptions[agent.sessionId] = opts
+                } else {
+                    agentPermissionOptions.removeValue(forKey: agent.sessionId)
+                }
+            case .agentRemoved(let sessionId):
+                log.info("Agent removed: \(sessionId)")
+                agents.removeAll { $0.sessionId == sessionId }
+                agentIconData.removeValue(forKey: sessionId)
+            case .heartbeat:
+                log.debug("Heartbeat received")
             }
-            self.agentIconData = icons
-        case .agentUpdated(let snapshot):
-            let agent = snapshot.agent
-            if let index = agents.firstIndex(where: { $0.sessionId == agent.sessionId }) {
-                agents[index] = agent
-            } else {
-                agents.append(agent)
-            }
-            agents.sort { $0.status.sortPriority < $1.status.sortPriority }
-            if let iconData = snapshot.appIconPNG {
-                agentIconData[agent.sessionId] = iconData
-            }
-        case .agentRemoved(let sessionId):
-            agents.removeAll { $0.sessionId == sessionId }
-            agentIconData.removeValue(forKey: sessionId)
-        case .heartbeat:
-            break
+        } catch {
+            let preview = String(data: data.prefix(200), encoding: .utf8) ?? "<binary>"
+            log.error("Failed to decode message: \(error.localizedDescription)\nData: \(preview)")
         }
     }
 
     private func scheduleReconnect() {
+        log.info("Scheduling reconnect in 5s")
         reconnectTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let serverURL = self.serverURL, let token = self.authToken else { return }
+                log.info("Reconnecting...")
                 self.connect(host: serverURL.host ?? "", port: serverURL.port ?? 8443, token: token)
             }
         }
     }
 
     private func startHeartbeatMonitor() {
-        // Ping every 30s to detect dead connections
         Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
             self.webSocketTask?.sendPing { error in
-                if error != nil {
+                if let error {
+                    log.warning("Ping failed: \(error.localizedDescription)")
                     Task { @MainActor in
                         self.connectionState = .disconnected
                         self.scheduleReconnect()

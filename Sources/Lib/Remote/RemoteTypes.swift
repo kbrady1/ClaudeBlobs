@@ -5,6 +5,8 @@ import Foundation
 struct AgentSnapshot: Codable {
     let agent: Agent
     let appIconPNG: Data?  // PNG-encoded host app icon, if available
+    let statusColorHex: String?  // e.g. "#4C8DFF" — the current theme color for this agent's status
+    let permissionOptions: [String]?  // Parsed from screen when status == .permission, e.g. ["Yes, and tell Claude what to do next", "Yes, allow all edits...", "No"]
 }
 
 /// Messages sent from server to client over WebSocket
@@ -59,13 +61,15 @@ enum RemoteMessage: Codable {
 /// Command types the phone can send
 enum CommandType: String, Codable {
     case approve, deny, respond, interrupt
+    case selectOption  // Navigate to a specific permission menu option and select it
 }
 
 /// Incoming command from phone
 struct CommandRequest: Codable {
     let command: CommandType
     let sessionId: String
-    let text: String?
+    let text: String?  // For respond: the text to send. For selectOption: optional follow-up text after selecting.
+    let optionIndex: Int?  // For selectOption: 0-based index of the option to select
 }
 
 /// Response to a command

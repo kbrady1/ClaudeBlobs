@@ -15,13 +15,13 @@ enum RemoteRouter {
         }
 
         switch command {
-        case .approve, .deny:
+        case .approve, .deny, .selectOption:
             guard agent.status == .permission else {
                 return "Agent is not in permission state"
             }
         case .respond:
-            guard agent.status == .waiting || agent.status == .permission else {
-                return "Agent is not waiting for input"
+            guard agent.status != .working && agent.status != .compacting else {
+                return "Agent is currently working"
             }
         case .interrupt:
             break

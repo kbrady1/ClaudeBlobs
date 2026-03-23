@@ -7,6 +7,8 @@ import Foundation
 struct AgentSnapshot: Codable {
     let agent: Agent
     let appIconPNG: Data?  // PNG-encoded host app icon, if available
+    let statusColorHex: String?  // e.g. "#4C8DFF" — theme color from Mac
+    let permissionOptions: [String]?  // e.g. ["Yes, and tell Claude...", "Yes, allow all...", "No"]
 }
 
 enum RemoteMessage: Codable {
@@ -56,10 +58,12 @@ enum RemoteMessage: Codable {
 
 enum CommandType: String, Codable {
     case approve, deny, respond, interrupt
+    case selectOption
 }
 
 struct CommandRequest: Codable {
     let command: CommandType
     let sessionId: String
     let text: String?
+    let optionIndex: Int?
 }

@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		EEFF001122334455FFEEDDCC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CCDD001122334455AABBCCDD /* Assets.xcassets */; };
+		AA11223344556677COLORHEX /* ColorHex.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677COLORHEX /* ColorHex.swift */; };
 		50404052425CD8F0585568D2 /* ConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFBCC4E95B6B15BAD89CA58A /* ConnectionManager.swift */; };
 		8133E2332039FFAD7F670683 /* PairingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA74ED839D87099871A38635 /* PairingStore.swift */; };
 		922E45E721579F6CDE069581 /* AgentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0CFFDDCA8EF9ED418515BF1 /* AgentListView.swift */; };
@@ -23,7 +25,7 @@
 		05918BC2A8BB9F28A8AD9339 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		0A495F737A96483A2C2F0952 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
 		316ECCF6E9BB09C1B7AB6811 /* AgentDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailView.swift; sourceTree = "<group>"; };
-		6CA9136B6CAD08609C2792B3 /* ClaudeBlobsRemote.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClaudeBlobsRemote.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6CA9136B6CAD08609C2792B3 /* ClaudeBlobsRemote.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeBlobsRemote.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		958272A69539EC3C1D0CE11F /* Agent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Agent.swift; sourceTree = "<group>"; };
 		9EE845AE7F9CA665F48FE858 /* AgentSpriteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSpriteView.swift; sourceTree = "<group>"; };
 		B2DD8667E34AE1BA8610B87B /* RemoteMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMessage.swift; sourceTree = "<group>"; };
@@ -31,6 +33,9 @@
 		F0CFFDDCA8EF9ED418515BF1 /* AgentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentListView.swift; sourceTree = "<group>"; };
 		FA26CFE3D27B7F41E18798E0 /* BonjourBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BonjourBrowser.swift; sourceTree = "<group>"; };
 		FFBCC4E95B6B15BAD89CA58A /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
+		AABB001122334455DEADBEEF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		CCDD001122334455AABBCCDD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BB11223344556677COLORHEX /* ColorHex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorHex.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -68,8 +73,9 @@
 				FA26CFE3D27B7F41E18798E0 /* BonjourBrowser.swift */,
 				FFBCC4E95B6B15BAD89CA58A /* ConnectionManager.swift */,
 				DA74ED839D87099871A38635 /* PairingStore.swift */,
-				6D8C46810C406380F72A30AC /* Models */,
-				F5A92557C4506C4CF68511E4 /* Views */,
+				AABB001122334455DEADBEEF /* Info.plist */,
+				CCDD001122334455AABBCCDD /* Assets.xcassets */,
+				DD11223344556677UTILSGRP /* Utilities */,
 			);
 			name = ClaudeBlobsRemote;
 			path = .;
@@ -86,14 +92,31 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		DD11223344556677UTILSGRP /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				BB11223344556677COLORHEX /* ColorHex.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		AABB998877665544RESOURCES /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EEFF001122334455FFEEDDCC /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D22039870DD4F631C9518A36 /* ClaudeBlobsRemote */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E22D4F2C918BC5895751F7C6 /* Build configuration list for PBXNativeTarget "ClaudeBlobsRemote" */;
 			buildPhases = (
 				D0E17ED713E695F719BD1225 /* Sources */,
+				AABB998877665544RESOURCES /* Resources */,
 			);
 			buildRules = (
 			);
@@ -150,6 +173,7 @@
 				A3085CC581AB6DB74BFECACB /* AgentSpriteView.swift in Sources */,
 				FC520BD18EA97357093FB9DB /* App.swift in Sources */,
 				93E752100789D0D11BF51F80 /* BonjourBrowser.swift in Sources */,
+				AA11223344556677COLORHEX /* ColorHex.swift in Sources */,
 				50404052425CD8F0585568D2 /* ConnectionManager.swift in Sources */,
 				8133E2332039FFAD7F670683 /* PairingStore.swift in Sources */,
 				F9CCA6E371B29CAF4E68C520 /* PairingView.swift in Sources */,
@@ -230,11 +254,10 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4YZHCN2XQC;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "ClaudeBlobs Remote";
-				INFOPLIST_KEY_NSBonjourServices = "(_claudeblobs._tcp)";
-				INFOPLIST_KEY_NSCameraUsageDescription = "ClaudeBlobs Remote needs camera access to scan QR pairing codes from your Mac.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "ClaudeBlobs Remote connects to your Mac over the local network to monitor and control Claude agents.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -255,11 +278,10 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4YZHCN2XQC;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "ClaudeBlobs Remote";
-				INFOPLIST_KEY_NSBonjourServices = "(_claudeblobs._tcp)";
-				INFOPLIST_KEY_NSCameraUsageDescription = "ClaudeBlobs Remote needs camera access to scan QR pairing codes from your Mac.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "ClaudeBlobs Remote connects to your Mac over the local network to monitor and control Claude agents.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

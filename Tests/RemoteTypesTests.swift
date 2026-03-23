@@ -7,7 +7,7 @@ struct RemoteTypesTests {
 
     @Test func agentSnapshotEncodesToJSON() throws {
         let agent = Agent.fixture(sessionId: "s1", status: .permission, lastToolUse: "Bash: npm deploy")
-        let agentSnapshot = AgentSnapshot(agent: agent, appIconPNG: nil)
+        let agentSnapshot = AgentSnapshot(agent: agent, appIconPNG: nil, statusColorHex: nil, permissionOptions: nil)
         let snapshot = RemoteMessage.snapshot(agents: [agentSnapshot])
         let data = try JSONEncoder().encode(snapshot)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
@@ -18,7 +18,7 @@ struct RemoteTypesTests {
     @Test func agentSnapshotWithIconEncodesToJSON() throws {
         let agent = Agent.fixture(sessionId: "s1", status: .working)
         let fakeIconData = Data([0x89, 0x50, 0x4E, 0x47]) // PNG magic bytes
-        let agentSnapshot = AgentSnapshot(agent: agent, appIconPNG: fakeIconData)
+        let agentSnapshot = AgentSnapshot(agent: agent, appIconPNG: fakeIconData, statusColorHex: "#4C8DFF", permissionOptions: nil)
         let snapshot = RemoteMessage.snapshot(agents: [agentSnapshot])
         let data = try JSONEncoder().encode(snapshot)
         let decoded = try JSONDecoder().decode(RemoteMessage.self, from: data)
@@ -33,7 +33,7 @@ struct RemoteTypesTests {
 
     @Test func agentUpdateEncodesToJSON() throws {
         let agent = Agent.fixture(sessionId: "s1", status: .working)
-        let agentSnapshot = AgentSnapshot(agent: agent, appIconPNG: nil)
+        let agentSnapshot = AgentSnapshot(agent: agent, appIconPNG: nil, statusColorHex: nil, permissionOptions: nil)
         let update = RemoteMessage.agentUpdated(agent: agentSnapshot)
         let data = try JSONEncoder().encode(update)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
