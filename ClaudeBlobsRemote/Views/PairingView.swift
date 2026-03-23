@@ -37,12 +37,32 @@ struct PairingView: View {
     }
 }
 
+/// UIView subclass that keeps its preview layer sized to bounds.
+class CameraPreviewView: UIView {
+    var previewLayer: AVCaptureVideoPreviewLayer? {
+        didSet {
+            oldValue?.removeFromSuperlayer()
+            if let previewLayer {
+                previewLayer.videoGravity = .resizeAspectFill
+                layer.addSublayer(previewLayer)
+                previewLayer.frame = bounds
+            }
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        previewLayer?.frame = bounds
+    }
+}
+
 /// UIViewRepresentable wrapper for AVFoundation QR scanner.
 struct QRScannerView: UIViewRepresentable {
     let onScan: (String) -> Void
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+    func makeUIView(context: Context) -> CameraPreviewView {
+        let view = CameraPreviewView()
+        view.backgroundColor = .black
         let session = AVCaptureSession()
 
         guard let device = AVCaptureDevice.default(for: .video),
@@ -57,11 +77,7 @@ struct QRScannerView: UIViewRepresentable {
         output.metadataObjectTypes = [.qr]
 
         let preview = AVCaptureVideoPreviewLayer(session: session)
-        preview.frame = view.bounds
-        preview.videoGravity = .resizeAspectFill
-        view.layer.addSublayer(preview)
-
-        context.coordinator.previewLayer = preview
+        view.previewLayer = preview
 
         DispatchQueue.global(qos: .userInitiated).async {
             session.startRunning()
@@ -70,8 +86,8 @@ struct QRScannerView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.previewLayer?.frame = uiView.bounds
+    func updateUIView(_ uiView: CameraPreviewView, context: Context) {
+        // layoutSubviews on CameraPreviewView handles frame updates
     }
 
     func makeCoordinator() -> Coordinator {
@@ -80,7 +96,6 @@ struct QRScannerView: UIViewRepresentable {
 
     class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
         let onScan: (String) -> Void
-        var previewLayer: AVCaptureVideoPreviewLayer?
         private var hasScanned = false
 
         init(onScan: @escaping (String) -> Void) {
