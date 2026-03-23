@@ -22,18 +22,17 @@ final class ConnectionManager: ObservableObject {
 
     func connect(host: String, port: Int, token: String) {
         authToken = token
-        let urlString = "wss://\(host):\(port)/ws"
+        // TODO: Switch to wss:// once server has TLS with self-signed cert.
+        // For now, use plain ws:// since the server is plain TCP + WebSocket.
+        // The auth token in the first message still provides authentication.
+        let urlString = "ws://\(host):\(port)"
         guard let url = URL(string: urlString) else { return }
         serverURL = url
 
         connectionState = .connecting
 
-        // Configure TLS with cert pinning (pin from QR pairing payload)
         let config = URLSessionConfiguration.default
         session = URLSession(configuration: config)
-        // Note: For self-signed cert pinning, implement URLSessionDelegate
-        // with urlSession(_:didReceive:completionHandler:) to validate
-        // the server cert's SHA-256 against the stored certPin.
 
         webSocketTask = session?.webSocketTask(with: url)
         webSocketTask?.resume()

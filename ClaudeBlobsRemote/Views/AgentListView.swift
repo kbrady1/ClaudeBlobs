@@ -37,11 +37,27 @@ struct AgentListView: View {
     private var connectionStatusIndicator: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(connectionManager.connectionState == .connected ? .green : .red)
+                .fill(statusColor)
                 .frame(width: 8, height: 8)
-            Text(connectionManager.connectionState == .connected ? "Connected" : "Offline")
+            Text(statusText)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var statusColor: Color {
+        switch connectionManager.connectionState {
+        case .connected: return .green
+        case .connecting: return .orange
+        case .disconnected: return .red
+        }
+    }
+
+    private var statusText: String {
+        switch connectionManager.connectionState {
+        case .connected: return "Connected"
+        case .connecting: return "Connecting..."
+        case .disconnected: return "Offline"
         }
     }
 }

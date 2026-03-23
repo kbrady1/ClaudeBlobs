@@ -30,8 +30,7 @@ final class RemoteServer: ObservableObject {
         let params = NWParameters.tcp
         params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
 
-        params.requiredInterfaceType = .wifi
-
+        // No interface restriction — works over WiFi and Ethernet
         do {
             listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
         } catch {

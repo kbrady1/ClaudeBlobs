@@ -1,6 +1,7 @@
 // ClaudeBlobsRemote/App.swift
 import SwiftUI
 import Network
+import Combine
 
 @main
 struct ClaudeBlobsRemoteApp: App {
@@ -14,10 +15,17 @@ struct ClaudeBlobsRemoteApp: App {
                 if pairingStore.isPaired {
                     AgentListView(connectionManager: connectionManager)
                         .onAppear { connectIfNeeded() }
+                        .onChange(of: bonjourBrowser.discoveredHosts) { _, hosts in
+                            // React to Bonjour discovery instead of using a fixed delay
+                            if !hosts.isEmpty, connectionManager.connectionState == .disconnected {
+                                resolveAndConnect(hosts: hosts)
+                            }
+                        }
                         .toolbar {
                             ToolbarItem(placement: .topBarLeading) {
                                 Button("Unpair") {
                                     connectionManager.disconnect()
+                                    bonjourBrowser.stop()
                                     pairingStore.unpair()
                                 }
                                 .font(.caption)
@@ -35,41 +43,46 @@ struct ClaudeBlobsRemoteApp: App {
 
     private func connectIfNeeded() {
         guard pairingStore.isPaired,
-              let token = pairingStore.token,
-              let port = pairingStore.serverPort,
               connectionManager.connectionState == .disconnected
         else { return }
 
-        // Start Bonjour discovery to find the Mac's IP
         bonjourBrowser.start()
 
-        // For v1, connect to first discovered host
-        // In production, match against cert pin from pairing
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            if let result = bonjourBrowser.discoveredHosts.first,
-               case let .service(name, _, _, _) = result.endpoint {
-                // Resolve the Bonjour endpoint to connect
-                let connection = NWConnection(to: result.endpoint, using: .tcp)
-                connection.stateUpdateHandler = { state in
-                    if case .ready = state {
-                        if let path = connection.currentPath,
-                           let endpoint = path.remoteEndpoint,
-                           case let .hostPort(host, _) = endpoint {
-                            let hostString: String
-                            switch host {
-                            case .ipv4(let addr): hostString = "\(addr)"
-                            case .ipv6(let addr): hostString = "\(addr)"
-                            @unknown default: hostString = name
-                            }
-                            Task { @MainActor in
-                                connectionManager.connect(host: hostString, port: port, token: token)
-                            }
-                        }
-                        connection.cancel()
+        // If hosts are already discovered (e.g., from a previous browse), connect immediately
+        if !bonjourBrowser.discoveredHosts.isEmpty {
+            resolveAndConnect(hosts: bonjourBrowser.discoveredHosts)
+        }
+        // Otherwise, onChange(of: discoveredHosts) will fire when they appear
+    }
+
+    private func resolveAndConnect(hosts: [NWBrowser.Result]) {
+        guard let token = pairingStore.token,
+              let port = pairingStore.serverPort,
+              let result = hosts.first
+        else { return }
+
+        // Resolve the Bonjour endpoint to an IP address
+        let connection = NWConnection(to: result.endpoint, using: .tcp)
+        connection.stateUpdateHandler = { state in
+            if case .ready = state {
+                if let path = connection.currentPath,
+                   let endpoint = path.remoteEndpoint,
+                   case let .hostPort(host, _) = endpoint {
+                    let hostString: String
+                    switch host {
+                    case .ipv4(let addr): hostString = "\(addr)"
+                    case .ipv6(let addr): hostString = "\(addr)"
+                    @unknown default: hostString = "localhost"
+                    }
+                    Task { @MainActor in
+                        connectionManager.connect(host: hostString, port: port, token: token)
                     }
                 }
-                connection.start(queue: .global())
+                connection.cancel()
+            } else if case .failed = state {
+                connection.cancel()
             }
         }
+        connection.start(queue: .global())
     }
 }
