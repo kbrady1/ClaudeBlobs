@@ -43,7 +43,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var provider: AgentProvider
     let sessionId: String
     let pid: Int
-    let cwd: String?
+    var cwd: String?
     var agentType: String?
     var sessionTitle: String?
     var status: AgentStatus

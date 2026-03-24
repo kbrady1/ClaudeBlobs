@@ -11,27 +11,56 @@ final class RemoteServer: ObservableObject {
     private var heartbeatTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
 
+    /// Serial queue protecting `connections` and `failedAuthAttempts` from data races.
+    /// All reads/writes to those dictionaries MUST go through this queue.
+    private let syncQueue = DispatchQueue(label: "com.claudeblobs.remote.sync")
+
     let pairingManager: PairingManager
     private let agentStore: AgentStore
     private let port: UInt16
 
+    /// Rate limiting: track failed auth attempts per remote IP.
+    private var failedAuthAttempts: [String: [Date]] = [:]
+    private static let maxFailedAttempts = 5
+    private static let lockoutDuration: TimeInterval = 60
+    private static let maxConnections = 3
+
     @Published var isRunning = false
     @Published var connectedClientCount = 0
 
-    init(agentStore: AgentStore, port: UInt16 = 8443) {
+    init(agentStore: AgentStore, port: UInt16 = 8443, pairingManager: PairingManager? = nil) {
         self.agentStore = agentStore
         self.port = port
-        self.pairingManager = PairingManager()
+        self.pairingManager = pairingManager ?? PairingManager()
     }
 
     func start() {
         guard !isRunning else { return }
 
+        pairingManager.removeExpiredDevices()
+
         let wsOptions = NWProtocolWebSocket.Options()
-        let params = NWParameters.tcp
+
+        // Configure TLS with self-signed certificate
+        let tlsOptions = NWProtocolTLS.Options()
+        if let identity = pairingManager.tlsIdentity {
+            sec_protocol_options_set_local_identity(
+                tlsOptions.securityProtocolOptions,
+                sec_identity_create(identity)!
+            )
+            sec_protocol_options_set_min_tls_protocol_version(
+                tlsOptions.securityProtocolOptions,
+                .TLSv12
+            )
+        } else {
+            DebugLog.shared.log("RemoteServer: WARNING — no TLS identity, falling back to plaintext")
+        }
+
+        let params = pairingManager.tlsIdentity != nil
+            ? NWParameters(tls: tlsOptions)
+            : NWParameters.tcp
         params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
 
-        // No interface restriction — works over WiFi and Ethernet
         do {
             listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
         } catch {
@@ -78,8 +107,11 @@ final class RemoteServer: ObservableObject {
         heartbeatTimer?.invalidate()
         heartbeatTimer = nil
         cancellables.removeAll()
-        connections.values.forEach { $0.cancel() }
-        connections.removeAll()
+        syncQueue.sync {
+            connections.values.forEach { $0.cancel() }
+            connections.removeAll()
+            failedAuthAttempts.removeAll()
+        }
         isRunning = false
         connectedClientCount = 0
         DebugLog.shared.log("RemoteServer: stopped")
@@ -88,12 +120,36 @@ final class RemoteServer: ObservableObject {
     private func handleNewConnection(_ nwConnection: NWConnection) {
         let connId = UUID().uuidString
         let connection = WebSocketConnection(id: connId, connection: nwConnection)
+        let remoteIP = Self.remoteIP(from: nwConnection)
+
+        // All checks against shared state go through syncQueue
+        let rejected: String? = syncQueue.sync {
+            // Rate limiting: reject if this IP has too many recent failures
+            if let ip = remoteIP, isRateLimited(ip: ip) {
+                return "rate-limited ip=\(ip)"
+            }
+            // Connection limit (atomic check-and-reserve not needed here —
+            // the actual insert happens later, but this is a best-effort guard)
+            if connections.count >= Self.maxConnections {
+                return "max connections reached (\(Self.maxConnections)) ip=\(remoteIP ?? "unknown")"
+            }
+            return nil
+        }
+        if let reason = rejected {
+            DebugLog.shared.log("RemoteServer [AUDIT]: \(reason), rejecting conn=\(connId)")
+            nwConnection.cancel()
+            return
+        }
 
         nwConnection.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
             if case .cancelled = state {
-                self?.connections.removeValue(forKey: connId)
-                DispatchQueue.main.async {
-                    self?.connectedClientCount = self?.connections.count ?? 0
+                self.syncQueue.async {
+                    self.connections.removeValue(forKey: connId)
+                    let count = self.connections.count
+                    DispatchQueue.main.async {
+                        self.connectedClientCount = count
+                    }
                 }
             }
         }
@@ -112,14 +168,30 @@ final class RemoteServer: ObservableObject {
                   let token = json["token"],
                   self.pairingManager.isValidToken(token)
             else {
-                DebugLog.shared.log("RemoteServer: auth failed, dropping connection (\(connId))")
+                self.syncQueue.async {
+                    if let ip = remoteIP {
+                        self.recordFailedAuth(ip: ip)
+                    }
+                }
+                DebugLog.shared.log("RemoteServer [AUDIT]: auth failed conn=\(connId) ip=\(remoteIP ?? "unknown")")
                 connection.cancel()
                 return
             }
 
-            self.connections[connId] = connection
+            // Atomic check-and-insert: reject if limit was reached between initial check and now
+            let accepted: Bool = self.syncQueue.sync {
+                guard self.connections.count < Self.maxConnections else { return false }
+                self.connections[connId] = connection
+                return true
+            }
+            guard accepted else {
+                DebugLog.shared.log("RemoteServer [AUDIT]: max connections reached post-auth, rejecting conn=\(connId)")
+                connection.cancel()
+                return
+            }
+
             DispatchQueue.main.async {
-                self.connectedClientCount = self.connections.count
+                self.connectedClientCount = self.syncQueue.sync { self.connections.count }
             }
             let snapshots = self.buildSnapshots(self.agentStore.agents)
             let snapshot = RemoteMessage.snapshot(agents: snapshots)
@@ -127,8 +199,33 @@ final class RemoteServer: ObservableObject {
             connection.receive { data in
                 self.handleIncomingData(data, from: connId)
             }
-            DebugLog.shared.log("RemoteServer: client authenticated (\(connId))")
+            DebugLog.shared.log("RemoteServer [AUDIT]: auth success conn=\(connId) ip=\(remoteIP ?? "unknown")")
         }
+    }
+
+    // MARK: - Rate Limiting
+
+    private func isRateLimited(ip: String) -> Bool {
+        let now = Date()
+        guard let attempts = failedAuthAttempts[ip] else { return false }
+        let recent = attempts.filter { now.timeIntervalSince($0) < Self.lockoutDuration }
+        return recent.count >= Self.maxFailedAttempts
+    }
+
+    private func recordFailedAuth(ip: String) {
+        let now = Date()
+        var attempts = failedAuthAttempts[ip, default: []]
+        attempts.append(now)
+        // Only keep attempts within the lockout window
+        attempts = attempts.filter { now.timeIntervalSince($0) < Self.lockoutDuration }
+        failedAuthAttempts[ip] = attempts
+    }
+
+    private static func remoteIP(from connection: NWConnection) -> String? {
+        if case let .hostPort(host, _) = connection.endpoint {
+            return "\(host)"
+        }
+        return nil
     }
 
     private func handleIncomingData(_ data: Data, from connId: String) {
@@ -148,28 +245,51 @@ final class RemoteServer: ObservableObject {
                 return
             }
 
+            // Validate optionIndex bounds for selectOption commands
+            if request.command == .selectOption, let optionIndex = request.optionIndex {
+                if let surface = agent.cmuxSurface {
+                    let socketPath = agent.cmuxSocketPath ?? "/tmp/cmux.sock"
+                    if let screen = CommandExecutor.readScreen(surface: surface, workspace: agent.cmuxWorkspace, socketPath: socketPath) {
+                        let options = CommandExecutor.parsePermissionOptions(from: screen)
+                        if optionIndex < 0 || optionIndex >= options.count {
+                            DebugLog.shared.log("RemoteServer: optionIndex \(optionIndex) out of bounds (0..<\(options.count))")
+                            return
+                        }
+                    }
+                }
+            }
+
             let result = try await CommandExecutor.execute(
                 command: request.command,
                 agent: agent,
                 text: request.text,
                 optionIndex: request.optionIndex
             )
-            DebugLog.shared.log("RemoteServer: command \(request.command.rawValue) for \(request.sessionId): \(result.success ? "ok" : result.error ?? "failed")")
+            DebugLog.shared.log("RemoteServer [AUDIT]: command=\(request.command.rawValue) session=\(request.sessionId.prefix(8)) from=\(connId) result=\(result.success ? "ok" : result.error ?? "failed")")
         }
     }
 
     private func broadcastSnapshot(_ agents: [Agent]) {
-        let statuses = agents.map { "\($0.sessionId.prefix(8)):\($0.status.rawValue)" }.joined(separator: ", ")
-        DebugLog.shared.log("RemoteServer: broadcasting to \(connections.count) client(s): [\(statuses)]")
         let snapshots = buildSnapshots(agents)
         let message = RemoteMessage.snapshot(agents: snapshots)
-        for connection in connections.values {
+        let activeConnections = syncQueue.sync { Array(connections.values) }
+        let statuses = agents.map { "\($0.sessionId.prefix(8)):\($0.status.rawValue)" }.joined(separator: ", ")
+        DebugLog.shared.log("RemoteServer: broadcasting to \(activeConnections.count) client(s): [\(statuses)]")
+        for connection in activeConnections {
             connection.send(message)
         }
     }
 
     private func buildSnapshots(_ agents: [Agent]) -> [AgentSnapshot] {
-        agents.map { agent in
+        agents.map { originalAgent in
+            // Sanitize agent data for network transmission:
+            // - Strip rawLastMessage (can contain sensitive full output)
+            // - Truncate cwd to basename (hides full filesystem paths)
+            var agent = originalAgent
+            agent.rawLastMessage = nil
+            if let cwd = agent.cwd {
+                agent.cwd = (cwd as NSString).lastPathComponent
+            }
             let iconData: Data? = agentStore.hostAppIcons[agent.pid].flatMap { nsImage in
                 // Resize to 64x64 before encoding — full-size icons blow up the WebSocket frame
                 let targetSize = NSSize(width: 64, height: 64)
@@ -220,7 +340,8 @@ final class RemoteServer: ObservableObject {
     }
 
     private func sendHeartbeats() {
-        for connection in connections.values {
+        let activeConnections = syncQueue.sync { Array(connections.values) }
+        for connection in activeConnections {
             connection.sendPing()
         }
     }

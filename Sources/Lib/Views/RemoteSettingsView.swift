@@ -44,9 +44,10 @@ struct RemoteSettingsView: View {
                 } else {
                     Button("Generate Pairing Code") {
                         let token = PairingManager.generateToken()
+                        let pin = server.pairingManager.certificatePin ?? "sha256/unknown"
                         pendingPayload = PairingManager.QRPayload(
                             token: token,
-                            certPin: "sha256/placeholder",
+                            certPin: pin,
                             port: 8443
                         )
                         showingNewPairingCode = true

@@ -102,8 +102,9 @@ struct ClaudeBlobsRemoteApp: App {
                         hostString = "localhost"
                     }
                     log.info("Resolved to IP: \(hostString), connecting WebSocket on port \(port)")
+                    let pin = pairingStore.certPin
                     Task { @MainActor in
-                        connectionManager.connect(host: hostString, port: port, token: token)
+                        connectionManager.connect(host: hostString, port: port, token: token, certPin: pin)
                     }
                 } else {
                     log.error("Connection ready but could not extract remote endpoint")

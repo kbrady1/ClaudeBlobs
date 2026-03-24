@@ -1,11 +1,17 @@
 import Foundation
 import Network
+import os
 
 /// Manages a single WebSocket client connection.
 final class WebSocketConnection: Identifiable {
     let id: String
     let nwConnection: NWConnection
-    private var isAlive = true
+    private let _isAlive = OSAllocatedUnfairLock(initialState: true)
+
+    private var isAlive: Bool {
+        get { _isAlive.withLock { $0 } }
+        set { _isAlive.withLock { $0 = newValue } }
+    }
 
     init(id: String, connection: NWConnection) {
         self.id = id

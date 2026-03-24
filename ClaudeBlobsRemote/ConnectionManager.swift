@@ -1,6 +1,7 @@
 // ClaudeBlobsRemote/ConnectionManager.swift
 import Foundation
 import Network
+import CryptoKit
 import os
 
 private let log = Logger(subsystem: "com.claudeblobs.remote", category: "Connection")
@@ -21,14 +22,16 @@ final class ConnectionManager: ObservableObject {
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var session: URLSession?
+    private var sessionDelegate: CertPinningDelegate?
     private var serverURL: URL?
     private var authToken: String?
+    private var expectedCertPin: String?
     private var reconnectTimer: Timer?
 
-    func connect(host: String, port: Int, token: String) {
+    func connect(host: String, port: Int, token: String, certPin: String? = nil) {
         authToken = token
-        // TODO: Switch to wss:// once server has TLS with self-signed cert.
-        let urlString = "ws://\(host):\(port)"
+        expectedCertPin = certPin
+        let urlString = "wss://\(host):\(port)"
         log.info("Connecting to \(urlString)")
         guard let url = URL(string: urlString) else {
             log.error("Invalid URL: \(urlString)")
@@ -39,7 +42,9 @@ final class ConnectionManager: ObservableObject {
         connectionState = .connecting
 
         let config = URLSessionConfiguration.default
-        session = URLSession(configuration: config)
+        let delegate = CertPinningDelegate(expectedPin: certPin)
+        sessionDelegate = delegate
+        session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
 
         webSocketTask = session?.webSocketTask(with: url)
         webSocketTask?.maximumMessageSize = 16 * 1024 * 1024  // 16 MB — snapshots include icon PNG data
@@ -47,7 +52,12 @@ final class ConnectionManager: ObservableObject {
         webSocketTask?.resume()
 
         // First message must be auth token
-        let authMessage = "{\"type\":\"auth\",\"token\":\"\(token)\"}"
+        struct AuthMessage: Encodable {
+            let type = "auth"
+            let token: String
+        }
+        let authJSON = try? JSONEncoder().encode(AuthMessage(token: token))
+        let authMessage = authJSON.flatMap { String(data: $0, encoding: .utf8) } ?? ""
         log.info("Sending auth message...")
         webSocketTask?.send(.string(authMessage)) { [weak self] error in
             if let error {
@@ -181,7 +191,7 @@ final class ConnectionManager: ObservableObject {
             Task { @MainActor in
                 guard let self, let serverURL = self.serverURL, let token = self.authToken else { return }
                 log.info("Reconnecting...")
-                self.connect(host: serverURL.host ?? "", port: serverURL.port ?? 8443, token: token)
+                self.connect(host: serverURL.host ?? "", port: serverURL.port ?? 8443, token: token, certPin: self.expectedCertPin)
             }
         }
     }
@@ -199,5 +209,57 @@ final class ConnectionManager: ObservableObject {
                 }
             }
         }
+    }
+}
+
+// MARK: - TLS Certificate Pinning
+
+/// URLSession delegate that validates the server's TLS certificate against
+/// a SHA-256 pin received during QR code pairing.
+final class CertPinningDelegate: NSObject, URLSessionDelegate {
+    private let expectedPin: String?
+
+    init(expectedPin: String?) {
+        self.expectedPin = expectedPin
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              let serverTrust = challenge.protectionSpace.serverTrust else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        // Require a certificate pin — reject if none was configured
+        guard let expectedPin, !expectedPin.isEmpty else {
+            log.error("No certificate pin configured — rejecting connection")
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+
+        // Validate certificate pin
+        if SecTrustGetCertificateCount(serverTrust) > 0,
+           let serverCert = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
+           let leafCert = serverCert.first {
+            let derData = SecCertificateCopyData(leafCert) as Data
+            let hash = SHA256.hash(data: derData)
+            let pin = "sha256/" + Data(hash).base64EncodedString()
+
+            if pin == expectedPin {
+                log.info("Certificate pin matches")
+                completionHandler(.useCredential, URLCredential(trust: serverTrust))
+                return
+            } else {
+                log.error("Certificate pin mismatch: expected=\(expectedPin) got=\(pin)")
+            }
+        } else {
+            log.error("Failed to extract server certificate for pin validation")
+        }
+
+        completionHandler(.cancelAuthenticationChallenge, nil)
     }
 }

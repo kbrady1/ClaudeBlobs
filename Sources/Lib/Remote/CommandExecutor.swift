@@ -6,6 +6,8 @@ import Foundation
 enum CommandExecutor {
 
     private static let cmuxPath = "/Applications/cmux.app/Contents/Resources/bin/cmux"
+    /// Maximum allowed length for respond text to prevent abuse.
+    static let maxRespondTextLength = 10_000
 
     /// Build cmux args for surface-targeted commands.
     private static func cmuxBase(socketPath: String) -> [String] {
@@ -26,12 +28,14 @@ enum CommandExecutor {
 
     /// Parse permission options from a Claude Code permission prompt screen.
     /// Looks for lines like "❯ 1. Yes, and tell Claude..." or "  2. Yes, allow all..."
+    /// Only returns the LAST contiguous block of numbered options to avoid picking up
+    /// numbered lists from the conversation text above the permission menu.
     static func parsePermissionOptions(from screenText: String) -> [String] {
-        var options: [String] = []
+        var currentGroup: [String] = []
+        var lastGroup: [String] = []
         for line in screenText.split(separator: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             // Match "❯ N. <text>" or "N. <text>" where N is a digit
-            // Also handle lines starting with just the number
             let stripped = trimmed
                 .replacingOccurrences(of: "❯ ", with: "")
                 .replacingOccurrences(of: "❯", with: "")
@@ -42,30 +46,51 @@ enum CommandExecutor {
                stripped.count > 2, stripped.dropFirst().first == "." {
                 let text = String(stripped.dropFirst(2)).trimmingCharacters(in: .whitespaces)
                 if !text.isEmpty {
-                    options.append(text)
+                    currentGroup.append(text)
+                    continue
                 }
             }
+            // Non-option line: save current group if non-empty, start fresh
+            if !currentGroup.isEmpty {
+                lastGroup = currentGroup
+                currentGroup = []
+            }
         }
-        return options
+        // If we ended mid-group, that's the last one
+        if !currentGroup.isEmpty {
+            lastGroup = currentGroup
+        }
+        return lastGroup
     }
 
-    /// Find which option index the cursor (❯) is currently on (0-based).
+    /// Find which option index the cursor (❯) is currently on (0-based)
+    /// within the last contiguous block of numbered options.
     static func currentCursorIndex(from screenText: String) -> Int {
-        var index = 0
+        // Find the last contiguous block and track cursor position within it
+        var currentGroup: [(text: String, hasCursor: Bool)] = []
+        var lastGroup: [(text: String, hasCursor: Bool)] = []
         for line in screenText.split(separator: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("❯") {
-                return index
-            }
-            // Count numbered options to track position
-            let stripped = trimmed.replacingOccurrences(of: "❯ ", with: "").replacingOccurrences(of: "❯", with: "").trimmingCharacters(in: .whitespaces)
+            let hasCursor = trimmed.hasPrefix("❯")
+            let stripped = trimmed
+                .replacingOccurrences(of: "❯ ", with: "")
+                .replacingOccurrences(of: "❯", with: "")
+                .trimmingCharacters(in: .whitespaces)
             if let firstChar = stripped.first, firstChar.isNumber,
                stripped.count > 2, stripped.dropFirst().first == "." {
                 let text = String(stripped.dropFirst(2)).trimmingCharacters(in: .whitespaces)
-                if !text.isEmpty { index += 1 }
+                if !text.isEmpty {
+                    currentGroup.append((text, hasCursor))
+                    continue
+                }
+            }
+            if !currentGroup.isEmpty {
+                lastGroup = currentGroup
+                currentGroup = []
             }
         }
-        return 0
+        if !currentGroup.isEmpty { lastGroup = currentGroup }
+        return lastGroup.firstIndex(where: \.hasCursor) ?? 0
     }
 
     /// Execute a command against a cmux agent.
@@ -120,6 +145,9 @@ enum CommandExecutor {
             guard let text, !text.isEmpty else {
                 return CommandResponse(success: false, error: "No text provided")
             }
+            guard text.count <= maxRespondTextLength else {
+                return CommandResponse(success: false, error: "Text exceeds maximum length of \(maxRespondTextLength) characters")
+            }
             commands.append(base + ["send"] + sArgs + [text])
             commands.append(base + ["send-key"] + sArgs + ["enter"])
 
@@ -146,6 +174,9 @@ enum CommandExecutor {
 
     // MARK: - Process helpers
 
+    /// Timeout for all cmux process executions.
+    private static let processTimeout: TimeInterval = 10
+
     private static func runProcess(_ args: [String]) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: args[0])
@@ -155,7 +186,7 @@ enum CommandExecutor {
         process.standardError = FileHandle.nullDevice
         do {
             try process.run()
-            process.waitUntilExit()
+            waitWithTimeout(process: process, timeout: processTimeout)
             guard process.terminationStatus == 0 else { return nil }
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             return String(data: data, encoding: .utf8)
@@ -173,11 +204,27 @@ enum CommandExecutor {
         process.standardError = stderrPipe
         do {
             try process.run()
-            process.waitUntilExit()
+            waitWithTimeout(process: process, timeout: processTimeout)
             let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
             return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
         } catch {
             return (-1, error.localizedDescription)
+        }
+    }
+
+    /// Wait for process to exit, or terminate it after the given timeout.
+    private static func waitWithTimeout(process: Process, timeout: TimeInterval) {
+        let deadline = DispatchTime.now() + timeout
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global().async {
+            process.waitUntilExit()
+            group.leave()
+        }
+        if group.wait(timeout: deadline) == .timedOut {
+            DebugLog.shared.log("CommandExecutor: process timed out after \(Int(timeout))s, terminating")
+            process.terminate()
+            process.waitUntilExit()
         }
     }
 }

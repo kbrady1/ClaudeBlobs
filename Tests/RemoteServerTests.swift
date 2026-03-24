@@ -13,7 +13,8 @@ struct RemoteServerIntegrationTests {
             isProcessAlive: { _ in false }
         )
         let port = UInt16.random(in: 49152...65535)
-        let server = RemoteServer(agentStore: store, port: port)
+        let pairing = PairingManager(keychainPrefix: "test-\(UUID().uuidString)", enableTLS: false)
+        let server = RemoteServer(agentStore: store, port: port, pairingManager: pairing)
         server.start()
         // Server starts asynchronously — give it a moment
         try? await Task.sleep(for: .milliseconds(100))

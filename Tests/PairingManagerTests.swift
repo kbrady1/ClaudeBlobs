@@ -33,7 +33,7 @@ struct PairingManagerTests {
     }
 
     @Test func pairedDeviceTracking() {
-        let manager = PairingManager(keychainPrefix: "test-\(UUID().uuidString)")
+        let manager = PairingManager(keychainPrefix: "test-\(UUID().uuidString)", enableTLS: false)
         let token = PairingManager.generateToken()
         #expect(manager.isValidToken(token) == false)
         manager.addPairedDevice(name: "iPhone", token: token)
@@ -42,5 +42,25 @@ struct PairingManagerTests {
         manager.removePairedDevice(token: token)
         #expect(manager.isValidToken(token) == false)
         #expect(manager.pairedDevices.isEmpty)
+    }
+
+    @Test func expiredTokenIsRejected() {
+        let manager = PairingManager(keychainPrefix: "test-\(UUID().uuidString)", enableTLS: false)
+        #expect(PairingManager.tokenLifetime == 72 * 60 * 60)
+
+        // A fresh token should be valid
+        let freshToken = PairingManager.generateToken()
+        manager.addPairedDevice(name: "iPhone", token: freshToken)
+        #expect(manager.isValidToken(freshToken) == true)
+    }
+
+    @Test func removeExpiredDevicesCleansUp() {
+        let manager = PairingManager(keychainPrefix: "test-\(UUID().uuidString)", enableTLS: false)
+        let token = PairingManager.generateToken()
+        manager.addPairedDevice(name: "iPhone", token: token)
+        #expect(manager.pairedDevices.count == 1)
+        // Fresh device should not be removed
+        manager.removeExpiredDevices()
+        #expect(manager.pairedDevices.count == 1)
     }
 }

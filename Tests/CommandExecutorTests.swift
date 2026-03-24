@@ -67,6 +67,51 @@ struct CommandExecutorTests {
         #expect(options[2] == "No")
     }
 
+    @Test func parsePermissionOptionsIgnoresConversationNumberedLists() {
+        let screen = """
+        Here are the available options from the config:
+        1. Enable notifications
+        2. Disable logging
+        3. Reset defaults
+        4. Update credentials
+        5. Clear cache
+        6. Run diagnostics
+        7. Export data
+        8. Import settings
+        9. Toggle dark mode
+
+        ? Allow Bash: npm install
+        ❯ 1. Yes, and tell Claude what to do next
+          2. Yes, allow all Bash commands during this session
+          3. No
+        """
+        let options = CommandExecutor.parsePermissionOptions(from: screen)
+        #expect(options.count == 3)
+        #expect(options[0].hasPrefix("Yes, and tell"))
+        #expect(options[2] == "No")
+    }
+
+    @Test func cursorIndexIgnoresConversationNumberedLists() {
+        let screen = """
+        1. First item in conversation
+        2. Second item in conversation
+
+        ? Allow Edit: file.swift
+          1. Yes, and tell Claude what to do next
+        ❯ 2. Yes, allow all edits
+          3. No
+        """
+        #expect(CommandExecutor.currentCursorIndex(from: screen) == 1)
+    }
+
+    @Test func respondRejectsOversizeText() async throws {
+        let agent = Agent.fixture(sessionId: "s1", status: .waiting, cmuxSurface: "surface:1")
+        let longText = String(repeating: "x", count: CommandExecutor.maxRespondTextLength + 1)
+        let result = try await CommandExecutor.execute(command: .respond, agent: agent, text: longText)
+        #expect(result.success == false)
+        #expect(result.error?.contains("maximum length") == true)
+    }
+
     @Test func cursorIndexDetection() {
         let screen1 = """
         ❯ 1. First option

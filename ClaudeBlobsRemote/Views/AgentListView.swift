@@ -5,9 +5,19 @@ struct AgentListView: View {
     @ObservedObject var connectionManager: ConnectionManager
     var onUnpair: (() -> Void)? = nil
 
+    /// Top-level agents only — sub-agents whose parent is present are filtered out.
+    private var topLevelAgents: [Agent] {
+        let sessionIds = Set(connectionManager.agents.map(\.sessionId))
+        return connectionManager.agents.filter { agent in
+            guard let parentId = agent.parentSessionId else { return true }
+            // Show as top-level if parent is no longer in the list
+            return !sessionIds.contains(parentId)
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            List(connectionManager.agents) { agent in
+            List(topLevelAgents) { agent in
                 NavigationLink(value: agent.sessionId) {
                     AgentRow(agent: agent, appIconData: connectionManager.agentIconData[agent.sessionId], statusColorHex: connectionManager.agentColorHex[agent.sessionId])
                 }
@@ -49,7 +59,7 @@ struct AgentListView: View {
                             .foregroundStyle(.secondary)
                     }
                 case .connected:
-                    if connectionManager.agents.isEmpty {
+                    if topLevelAgents.isEmpty {
                         ContentUnavailableView(
                             "No Agents",
                             systemImage: "bubble.left.and.bubble.right",
