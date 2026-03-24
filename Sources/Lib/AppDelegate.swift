@@ -29,10 +29,6 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     #endif
     private var hotkeyWindow: NSWindow?
     private var hotkeyConfig: HotkeyConfig!
-    private var doneClassifierConfig: DoneClassifierConfig!
-    #if DEBUG
-    private var doneClassifierWindow: NSWindow?
-    #endif
     private var hotkeyMenuItem: NSMenuItem!
     private var eventHandlerInstalled = false
     private var cancellables = Set<AnyCancellable>()
@@ -54,10 +50,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         expansionState = HUDExpansionState()
         ntfyConfig = NtfyConfig()
         themeConfig = ThemeConfig()
-        doneClassifierConfig = DoneClassifierConfig()
         ntfyScheduler = NtfyScheduler(config: ntfyConfig)
         store.ntfyScheduler = ntfyScheduler
-        store.doneClassifierConfig = doneClassifierConfig
         #if DEBUG
         remoteServer = RemoteServer(agentStore: store)
         if UserDefaults.standard.bool(forKey: "remoteControlEnabled") {
@@ -189,12 +183,6 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let remoteSettingsItem = NSMenuItem(title: "Remote Control\u{2026}", action: #selector(openRemoteSettingsAction), keyEquivalent: "")
         remoteSettingsItem.target = self
         menu.addItem(remoteSettingsItem)
-        #endif
-
-        #if DEBUG
-        let doneClassifierItem = NSMenuItem(title: "AI Done Detection\u{2026}", action: #selector(openDoneClassifierSettings), keyEquivalent: "")
-        doneClassifierItem.target = self
-        menu.addItem(doneClassifierItem)
         #endif
 
         menu.addItem(.separator())
@@ -578,29 +566,6 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
         themeWindow = window
     }
-
-    #if DEBUG
-    @objc private func openDoneClassifierSettings() {
-        if let existing = doneClassifierWindow, existing.isVisible {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "AI Done Detection"
-        window.contentView = NSHostingView(rootView: DoneClassifierSettingsView(config: doneClassifierConfig))
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        doneClassifierWindow = window
-    }
-    #endif
 
     @objc private func openHotkeySettings() {
         if let existing = hotkeyWindow, existing.isVisible {

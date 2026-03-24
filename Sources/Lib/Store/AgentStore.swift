@@ -20,11 +20,6 @@ final class AgentStore: ObservableObject {
     private var peekTimer: DispatchWorkItem?
 
     var ntfyScheduler: NtfyScheduler?
-    var doneClassifierConfig: DoneClassifierConfig?
-
-    private let doneClassifier = DoneClassifier()
-    private var classifiedSessionIds: Set<String> = []
-    private var aiWaitReasonOverrides: [String: String] = [:]
 
     private let statusSources: [AgentStatusSource]
     private var watchers: [StatusFileWatcher] = []
@@ -325,49 +320,6 @@ final class AgentStore: ObservableObject {
         if !staleNames.isEmpty {
             for key in staleNames { customNames.removeValue(forKey: key) }
             UserDefaults.standard.set(customNames, forKey: "customAgentNames")
-        }
-
-        // Clear AI classification state for agents that left waiting
-        for agent in loaded {
-            if agent.status != .waiting {
-                classifiedSessionIds.remove(agent.sessionId)
-                aiWaitReasonOverrides.removeValue(forKey: agent.sessionId)
-            }
-        }
-
-        // Apply any AI overrides to waitReason
-        for i in loaded.indices {
-            if let override = aiWaitReasonOverrides[loaded[i].sessionId] {
-                loaded[i].waitReason = override
-            }
-        }
-
-        // Launch AI classification for waiting agents with rawLastMessage
-        if doneClassifierConfig?.appleIntelligenceEnabled == true {
-            for agent in loaded where agent.status == .waiting
-                && agent.rawLastMessage != nil
-                && !classifiedSessionIds.contains(agent.sessionId) {
-                classifiedSessionIds.insert(agent.sessionId)
-                let sessionId = agent.sessionId
-                let message = agent.rawLastMessage!
-                let regexResult = agent.waitReason
-                DebugLog.shared.log("DoneClassifier: queuing classification for \(sessionId) (regex=\(regexResult ?? "nil"))")
-                Task { [weak self] in
-                    guard let self, let result = await self.doneClassifier.classify(message: message) else {
-                        DebugLog.shared.log("DoneClassifier: no result for \(sessionId), keeping regex=\(regexResult ?? "nil")")
-                        return
-                    }
-                    let changed = result != regexResult
-                    DebugLog.shared.log("DoneClassifier: \(sessionId) ai=\(result) regex=\(regexResult ?? "nil") changed=\(changed)")
-                    await MainActor.run { [self] in
-                        self.aiWaitReasonOverrides[sessionId] = result
-                        if let idx = self.agents.firstIndex(where: { $0.sessionId == sessionId }) {
-                            self.agents[idx].waitReason = result
-                        }
-                        self.objectWillChange.send()
-                    }
-                }
-            }
         }
 
         // Resolve host app icons for new PIDs
