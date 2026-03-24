@@ -11,6 +11,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var ntfyConfig: NtfyConfig!
     private var themeConfig: ThemeConfig!
     private var ntfyScheduler: NtfyScheduler!
+    #if DEBUG
+    private var remoteServer: RemoteServer?
+    #endif
     private var statusItem: NSStatusItem!
     #if DEBUG
     private var debugMenuItem: NSMenuItem!
@@ -21,6 +24,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var ntfyMenuItem: NSMenuItem!
     private var settingsWindow: NSWindow?
     private var themeWindow: NSWindow?
+    #if DEBUG
+    private var remoteWindow: NSWindow?
+    #endif
     private var hotkeyWindow: NSWindow?
     private var hotkeyConfig: HotkeyConfig!
     private var doneClassifierConfig: DoneClassifierConfig!
@@ -52,6 +58,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ntfyScheduler = NtfyScheduler(config: ntfyConfig)
         store.ntfyScheduler = ntfyScheduler
         store.doneClassifierConfig = doneClassifierConfig
+        #if DEBUG
+        remoteServer = RemoteServer(agentStore: store)
+        if UserDefaults.standard.bool(forKey: "remoteControlEnabled") {
+            remoteServer?.start()
+        }
+        #endif
         rebuildPanels()
 
         // Rebuild panels when screen placement preference changes
@@ -172,6 +184,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let ntfySettingsItem = NSMenuItem(title: "Notification Settings\u{2026}", action: #selector(openNtfySettings), keyEquivalent: "")
         ntfySettingsItem.target = self
         menu.addItem(ntfySettingsItem)
+
+        #if DEBUG
+        let remoteSettingsItem = NSMenuItem(title: "Remote Control\u{2026}", action: #selector(openRemoteSettingsAction), keyEquivalent: "")
+        remoteSettingsItem.target = self
+        menu.addItem(remoteSettingsItem)
+        #endif
 
         #if DEBUG
         let doneClassifierItem = NSMenuItem(title: "AI Done Detection\u{2026}", action: #selector(openDoneClassifierSettings), keyEquivalent: "")
@@ -512,6 +530,34 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsWindow = window
     }
 
+    #if DEBUG
+    @objc private func openRemoteSettingsAction() { openRemoteSettings() }
+
+    func openRemoteSettings() {
+        guard let remoteServer else { return }
+        if let existing = remoteWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let view = RemoteSettingsView(server: remoteServer)
+        let hostingView = NSHostingView(rootView: view)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.title = "Remote Control"
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        remoteWindow = window
+    }
+    #endif
+
     @objc private func openThemeSettings() {
         if let existing = themeWindow, existing.isVisible {
             existing.makeKeyAndOrderFront(nil)
@@ -735,6 +781,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
+        #if DEBUG
+        remoteServer?.stop()
+        #endif
         #if DEBUG
         DebugLog.shared.clearHookLogs()
         #endif

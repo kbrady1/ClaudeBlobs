@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>ClaudeBlobs Remote connects to your Mac over the local network to monitor and control Claude agents.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_claudeblobs._tcp.</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>ClaudeBlobs Remote needs camera access to scan QR pairing codes from your Mac.</string>
+</dict>
+</plist>
