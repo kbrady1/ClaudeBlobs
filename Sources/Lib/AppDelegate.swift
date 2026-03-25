@@ -247,7 +247,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !UserDefaults.standard.bool(forKey: "hooksInstalled") {
             let confirm = NSAlert()
             confirm.messageText = "Set up ClaudeBlobs?"
-            confirm.informativeText = "This will install Claude Code hooks and the bundled OpenCode plugin so ClaudeBlobs can track both providers. You can uninstall later from the menu bar icon."
+            confirm.informativeText = "This will install hooks for any detected coding agents (Claude Code, OpenCode). You can uninstall later from the menu bar icon."
             confirm.addButton(withTitle: "Continue")
             confirm.addButton(withTitle: "Quit")
 
@@ -256,25 +256,81 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return
             }
 
+            var claudeOk = false
+            var openCodeOk = false
+
             do {
                 try HookInstaller().install()
                 try FileManager.default.createDirectory(
-                    at: FileManager.default.homeDirectoryForCurrentUser
-                        .appendingPathComponent(".claude/agent-status"),
+                    at: AgentProvider.claudeCode.statusDirectory,
                     withIntermediateDirectories: true
                 )
+                claudeOk = true
+            } catch {}
+
+            do {
                 try OpenCodeInstaller().install()
+                openCodeOk = true
+            } catch {}
+
+            if claudeOk || openCodeOk {
                 UserDefaults.standard.set(true, forKey: "hooksInstalled")
-            } catch {
+                UserDefaults.standard.set(claudeOk, forKey: "claudeHooksInstalled")
+                UserDefaults.standard.set(openCodeOk, forKey: "openCodeHooksInstalled")
+            } else {
                 let alert = NSAlert()
                 alert.messageText = "Failed to install ClaudeBlobs integrations"
-                alert.informativeText = error.localizedDescription
+                alert.informativeText = "Neither Claude Code nor OpenCode could be set up. Make sure at least one is installed."
                 alert.runModal()
             }
         }
 
+        // On subsequent launches, offer to install for a newly detected app
         if UserDefaults.standard.bool(forKey: "hooksInstalled") {
-            try? OpenCodeInstaller().install()
+            let fm = FileManager.default
+            let home = fm.homeDirectoryForCurrentUser
+
+            if !UserDefaults.standard.bool(forKey: "claudeHooksInstalled") &&
+                fm.fileExists(atPath: home.appendingPathComponent(".claude").path) {
+                let alert = NSAlert()
+                alert.messageText = "Claude Code detected"
+                alert.informativeText = "Would you like to install ClaudeBlobs hooks for Claude Code?"
+                alert.addButton(withTitle: "Install")
+                alert.addButton(withTitle: "Not Now")
+                if alert.runModal() == .alertFirstButtonReturn {
+                    do {
+                        try HookInstaller().install()
+                        try fm.createDirectory(
+                            at: AgentProvider.claudeCode.statusDirectory,
+                            withIntermediateDirectories: true
+                        )
+                        UserDefaults.standard.set(true, forKey: "claudeHooksInstalled")
+                    } catch {}
+                }
+            }
+
+            if !UserDefaults.standard.bool(forKey: "openCodeHooksInstalled") &&
+                fm.fileExists(atPath: home.appendingPathComponent(".config/opencode").path) {
+                let alert = NSAlert()
+                alert.messageText = "OpenCode detected"
+                alert.informativeText = "Would you like to install the ClaudeBlobs plugin for OpenCode?"
+                alert.addButton(withTitle: "Install")
+                alert.addButton(withTitle: "Not Now")
+                if alert.runModal() == .alertFirstButtonReturn {
+                    do {
+                        try OpenCodeInstaller().install()
+                        UserDefaults.standard.set(true, forKey: "openCodeHooksInstalled")
+                    } catch {}
+                }
+            }
+
+            // Silently update existing installations (e.g. new hook paths after app update)
+            if UserDefaults.standard.bool(forKey: "claudeHooksInstalled") {
+                try? HookInstaller().install()
+            }
+            if UserDefaults.standard.bool(forKey: "openCodeHooksInstalled") {
+                try? OpenCodeInstaller().install()
+            }
         }
 
         // Register as login item (skip in debug builds)
@@ -705,6 +761,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func reinstallHooks() {
         do {
             try HookInstaller().install()
+            UserDefaults.standard.set(true, forKey: "claudeHooksInstalled")
             let alert = NSAlert()
             alert.messageText = "Claude Code hooks reinstalled"
             alert.runModal()
@@ -719,6 +776,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func installOpenCodePlugin() {
         do {
             try OpenCodeInstaller().install()
+            UserDefaults.standard.set(true, forKey: "openCodeHooksInstalled")
             let alert = NSAlert()
             alert.messageText = "OpenCode plugin reinstalled"
             alert.informativeText = "ClaudeBlobs will now track your OpenCode sessions. Restart OpenCode if it is already running."
@@ -741,6 +799,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if alert.runModal() == .alertFirstButtonReturn {
             try? Uninstaller().uninstall()
             UserDefaults.standard.removeObject(forKey: "hooksInstalled")
+            UserDefaults.standard.removeObject(forKey: "claudeHooksInstalled")
+            UserDefaults.standard.removeObject(forKey: "openCodeHooksInstalled")
             NSApp.terminate(nil)
         }
     }
