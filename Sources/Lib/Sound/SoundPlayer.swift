@@ -7,13 +7,13 @@ final class SoundPlayer {
         self.config = config
     }
 
-    /// Play sounds for a batch of status changes. Deduplicates so each color sounds at most once.
-    func playForChanges(_ statuses: [AgentStatus]) {
+    /// Play sounds for a batch of agent changes. Deduplicates so each color sounds at most once.
+    func playForChanges(_ agents: [Agent]) {
         guard config.isEnabled else { return }
 
         var playedColors: Set<String> = []
-        for status in statuses {
-            guard let color = colorGroup(for: status),
+        for agent in agents {
+            guard let color = colorGroup(for: agent),
                   !playedColors.contains(color) else { continue }
             playedColors.insert(color)
             play(soundName(for: color))
@@ -25,10 +25,10 @@ final class SoundPlayer {
         play(name)
     }
 
-    private func colorGroup(for status: AgentStatus) -> String? {
-        switch status {
+    private func colorGroup(for agent: Agent) -> String? {
+        switch agent.status {
         case .starting:   return "green"
-        case .waiting:    return "orange"
+        case .waiting:    return agent.isDone ? "done" : "orange"
         case .permission: return "red"
         case .working, .compacting: return nil
         }
@@ -39,6 +39,7 @@ final class SoundPlayer {
         case "green":  return config.greenSound
         case "orange": return config.orangeSound
         case "red":    return config.redSound
+        case "done":   return config.doneSound
         default:       return ""
         }
     }

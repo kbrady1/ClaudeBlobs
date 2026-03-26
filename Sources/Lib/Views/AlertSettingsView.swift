@@ -15,6 +15,7 @@ struct AlertSettingsView: View {
             Section {
                 soundRow(label: "Green (Starting)", color: .green, selection: $soundConfig.greenSound)
                 soundRow(label: "Orange (Waiting)", color: .orange, selection: $soundConfig.orangeSound)
+                soundRow(label: "Green (Done)", color: .green, selection: $soundConfig.doneSound)
                 soundRow(label: "Red (Permission)", color: .red, selection: $soundConfig.redSound)
             } header: {
                 Toggle("Sound Effects", isOn: $soundConfig.isEnabled)

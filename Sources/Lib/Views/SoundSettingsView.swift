@@ -13,6 +13,7 @@ struct SoundSettingsView: View {
             Section("Sounds") {
                 soundRow(label: "Green (Starting)", color: .green, selection: $config.greenSound)
                 soundRow(label: "Orange (Waiting)", color: .orange, selection: $config.orangeSound)
+                soundRow(label: "Green (Done)", color: .green, selection: $config.doneSound)
                 soundRow(label: "Red (Permission)", color: .red, selection: $config.redSound)
             }
         }

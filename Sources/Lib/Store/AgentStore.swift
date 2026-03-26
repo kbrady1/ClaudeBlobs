@@ -294,10 +294,9 @@ final class AgentStore: ObservableObject {
 
         // Play sound effects for status changes
         if !changedIds.isEmpty {
-            let changedStatuses = loaded
+            let changedAgents = loaded
                 .filter { changedIds.contains($0.id) }
-                .map(\.status)
-            soundPlayer?.playForChanges(changedStatuses)
+            soundPlayer?.playForChanges(changedAgents)
         }
 
         // Pop in briefly when status changes and hideWhileCollapsed is on
@@ -314,7 +313,7 @@ final class AgentStore: ObservableObject {
             if notifiable {
                 ntfyScheduler?.scheduleIfNeeded(for: agent, isSnoozed: isSnoozed)
             } else {
-                ntfyScheduler?.cancelPending(for: agent.id)
+                ntfyScheduler?.reset(for: agent.id)
             }
         }
 

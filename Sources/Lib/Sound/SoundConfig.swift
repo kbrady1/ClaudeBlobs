@@ -14,6 +14,9 @@ final class SoundConfig: ObservableObject {
     @Published var redSound: String = UserDefaults.standard.string(forKey: "soundRed") ?? "Ping" {
         didSet { UserDefaults.standard.set(redSound, forKey: "soundRed") }
     }
+    @Published var doneSound: String = UserDefaults.standard.string(forKey: "soundDone") ?? "" {
+        didSet { UserDefaults.standard.set(doneSound, forKey: "soundDone") }
+    }
 
     /// Available system sound names, discovered from /System/Library/Sounds.
     static let availableSounds: [String] = {
