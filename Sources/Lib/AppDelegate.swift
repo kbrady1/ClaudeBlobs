@@ -10,7 +10,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var expansionState: HUDExpansionState!
     private var ntfyConfig: NtfyConfig!
     private var themeConfig: ThemeConfig!
+    private var soundConfig: SoundConfig!
     private var ntfyScheduler: NtfyScheduler!
+    private var soundPlayer: SoundPlayer!
     #if DEBUG
     private var remoteServer: RemoteServer?
     #endif
@@ -21,7 +23,6 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var clearLogMenuItem: NSMenuItem!
     private var hookLogsMenuItem: NSMenuItem!
     #endif
-    private var ntfyMenuItem: NSMenuItem!
     private var settingsWindow: NSWindow?
     private var themeWindow: NSWindow?
     #if DEBUG
@@ -52,6 +53,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         themeConfig = ThemeConfig()
         ntfyScheduler = NtfyScheduler(config: ntfyConfig)
         store.ntfyScheduler = ntfyScheduler
+        soundConfig = SoundConfig()
+        soundPlayer = SoundPlayer(config: soundConfig)
+        store.soundPlayer = soundPlayer
         #if DEBUG
         remoteServer = RemoteServer(agentStore: store)
         if UserDefaults.standard.bool(forKey: "remoteControlEnabled") {
@@ -170,14 +174,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        ntfyMenuItem = NSMenuItem(title: "Push Notifications", action: #selector(toggleNtfy), keyEquivalent: "n")
-        ntfyMenuItem.target = self
-        ntfyMenuItem.state = ntfyConfig.isEnabled ? .on : .off
-        menu.addItem(ntfyMenuItem)
-
-        let ntfySettingsItem = NSMenuItem(title: "Notification Settings\u{2026}", action: #selector(openNtfySettings), keyEquivalent: "")
-        ntfySettingsItem.target = self
-        menu.addItem(ntfySettingsItem)
+        let alertSettingsItem = NSMenuItem(title: "Alert Settings\u{2026}", action: #selector(openAlertSettings), keyEquivalent: "")
+        alertSettingsItem.target = self
+        menu.addItem(alertSettingsItem)
 
         #if DEBUG
         let remoteSettingsItem = NSMenuItem(title: "Remote Control\u{2026}", action: #selector(openRemoteSettingsAction), keyEquivalent: "")
@@ -545,28 +544,26 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return false
     }
 
-    @objc private func toggleNtfy() {
-        ntfyConfig.isEnabled.toggle()
-        ntfyMenuItem.state = ntfyConfig.isEnabled ? .on : .off
-        if !ntfyConfig.isEnabled {
-            ntfyScheduler.cancelAll()
-        }
-    }
-
-    @objc private func openNtfySettings() {
+    @objc private func openAlertSettings() {
         if let existing = settingsWindow, existing.isVisible {
             existing.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
+        let view = AlertSettingsView(
+            ntfyConfig: ntfyConfig,
+            soundConfig: soundConfig,
+            soundPlayer: soundPlayer,
+            ntfyScheduler: ntfyScheduler
+        )
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 420),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 560),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Notification Settings"
-        window.contentView = NSHostingView(rootView: NtfySettingsView(config: ntfyConfig))
+        window.title = "Alert Settings"
+        window.contentView = NSHostingView(rootView: view)
         window.center()
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)

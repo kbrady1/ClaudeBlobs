@@ -122,28 +122,22 @@ final class RemoteServer: ObservableObject {
         let connection = WebSocketConnection(id: connId, connection: nwConnection)
         let remoteIP = Self.remoteIP(from: nwConnection)
 
-        // All checks against shared state go through syncQueue
-        let rejected: String? = syncQueue.sync {
-            // Rate limiting: reject if this IP has too many recent failures
-            if let ip = remoteIP, isRateLimited(ip: ip) {
-                return "rate-limited ip=\(ip)"
-            }
-            // Connection limit (atomic check-and-reserve not needed here —
-            // the actual insert happens later, but this is a best-effort guard)
-            if connections.count >= Self.maxConnections {
-                return "max connections reached (\(Self.maxConnections)) ip=\(remoteIP ?? "unknown")"
-            }
-            return nil
+        // Rate limiting check (before auth, no connection-count gate — that
+        // happens post-auth after pruning dead connections and evicting dupes)
+        let rateLimited: Bool = syncQueue.sync {
+            if let ip = remoteIP, isRateLimited(ip: ip) { return true }
+            return false
         }
-        if let reason = rejected {
-            DebugLog.shared.log("RemoteServer [AUDIT]: \(reason), rejecting conn=\(connId)")
+        if rateLimited {
+            DebugLog.shared.log("RemoteServer [AUDIT]: rate-limited ip=\(remoteIP ?? "unknown"), rejecting conn=\(connId)")
             nwConnection.cancel()
             return
         }
 
         nwConnection.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
-            if case .cancelled = state {
+            switch state {
+            case .cancelled, .failed:
                 self.syncQueue.async {
                     self.connections.removeValue(forKey: connId)
                     let count = self.connections.count
@@ -151,6 +145,8 @@ final class RemoteServer: ObservableObject {
                         self.connectedClientCount = count
                     }
                 }
+            default:
+                break
             }
         }
 
@@ -178,11 +174,27 @@ final class RemoteServer: ObservableObject {
                 return
             }
 
-            // Atomic check-and-insert: reject if limit was reached between initial check and now
-            let accepted: Bool = self.syncQueue.sync {
-                guard self.connections.count < Self.maxConnections else { return false }
+            // Prune dead connections, evict any existing connection from the
+            // same device (same token), then check the limit — all atomically.
+            connection.authToken = token
+            let (accepted, evicted) = self.syncQueue.sync { () -> (Bool, [WebSocketConnection]) in
+                // 1. Prune connections that are no longer alive
+                let dead = self.connections.filter { !$0.value.isAlive }
+                for id in dead.keys { self.connections.removeValue(forKey: id) }
+
+                // 2. Evict existing connections with the same token (device reconnected)
+                let dupes = self.connections.filter { $0.value.authToken == token }
+                for id in dupes.keys { self.connections.removeValue(forKey: id) }
+
+                // 3. Check limit after cleanup
+                guard self.connections.count < Self.maxConnections else { return (false, []) }
                 self.connections[connId] = connection
-                return true
+                return (true, Array(dupes.values))
+            }
+            // Cancel evicted connections outside the lock
+            for dupe in evicted {
+                DebugLog.shared.log("RemoteServer: evicting stale connection \(dupe.id) (same token)")
+                dupe.cancel()
             }
             guard accepted else {
                 DebugLog.shared.log("RemoteServer [AUDIT]: max connections reached post-auth, rejecting conn=\(connId)")

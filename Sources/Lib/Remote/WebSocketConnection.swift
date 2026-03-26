@@ -6,9 +6,11 @@ import os
 final class WebSocketConnection: Identifiable {
     let id: String
     let nwConnection: NWConnection
+    /// The auth token this connection authenticated with, used for dedup/eviction.
+    var authToken: String?
     private let _isAlive = OSAllocatedUnfairLock(initialState: true)
 
-    private var isAlive: Bool {
+    var isAlive: Bool {
         get { _isAlive.withLock { $0 } }
         set { _isAlive.withLock { $0 = newValue } }
     }
@@ -39,7 +41,7 @@ final class WebSocketConnection: Identifiable {
         )
     }
 
-    /// Send a ping frame for heartbeat.
+    /// Send a ping frame for heartbeat. Marks connection dead if send fails.
     func sendPing() {
         guard isAlive else { return }
         let metadata = NWProtocolWebSocket.Metadata(opcode: .ping)
@@ -48,7 +50,13 @@ final class WebSocketConnection: Identifiable {
             content: nil,
             contentContext: context,
             isComplete: true,
-            completion: .contentProcessed { _ in }
+            completion: .contentProcessed { [weak self] error in
+                if let error {
+                    DebugLog.shared.log("WebSocketConnection[\(self?.id ?? "?")] ping failed: \(error)")
+                    self?.isAlive = false
+                    self?.nwConnection.cancel()
+                }
+            }
         )
     }
 

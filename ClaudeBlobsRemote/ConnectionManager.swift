@@ -27,8 +27,20 @@ final class ConnectionManager: ObservableObject {
     private var authToken: String?
     private var expectedCertPin: String?
     private var reconnectTimer: Timer?
+    private var heartbeatTimer: Timer?
 
     func connect(host: String, port: Int, token: String, certPin: String? = nil) {
+        // Clean up any previous connection to prevent timer/task accumulation
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
+        reconnectTimer?.invalidate()
+        reconnectTimer = nil
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+        session?.invalidateAndCancel()
+        session = nil
+        sessionDelegate = nil
+
         authToken = token
         expectedCertPin = certPin
         let urlString = "wss://\(host):\(port)"
@@ -51,6 +63,10 @@ final class ConnectionManager: ObservableObject {
         log.info("WebSocket task created, resuming...")
         webSocketTask?.resume()
 
+        // Capture current task so stale completion handlers from cancelled
+        // tasks (e.g. after backgrounding) don't interfere with new connections
+        let task = webSocketTask
+
         // First message must be auth token
         struct AuthMessage: Encodable {
             let type = "auth"
@@ -59,29 +75,37 @@ final class ConnectionManager: ObservableObject {
         let authJSON = try? JSONEncoder().encode(AuthMessage(token: token))
         let authMessage = authJSON.flatMap { String(data: $0, encoding: .utf8) } ?? ""
         log.info("Sending auth message...")
-        webSocketTask?.send(.string(authMessage)) { [weak self] error in
+        task?.send(.string(authMessage)) { [weak self] error in
             if let error {
                 log.error("Auth send failed: \(error.localizedDescription)")
                 Task { @MainActor in
-                    self?.lastError = "Auth failed: \(error.localizedDescription)"
-                    self?.connectionState = .disconnected
+                    guard let self, self.webSocketTask === task else { return }
+                    self.lastError = "Auth failed: \(error.localizedDescription)"
+                    self.connectionState = .disconnected
                 }
                 return
             }
             log.info("Auth sent successfully, now connected")
             Task { @MainActor in
-                self?.connectionState = .connected
-                self?.receiveMessage()
-                self?.startHeartbeatMonitor()
+                guard let self, self.webSocketTask === task else { return }
+                self.connectionState = .connected
+                self.receiveMessage()
+                self.startHeartbeatMonitor()
             }
         }
     }
 
     func disconnect() {
         log.info("Disconnecting")
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
         reconnectTimer?.invalidate()
+        reconnectTimer = nil
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
+        session?.invalidateAndCancel()
+        session = nil
+        sessionDelegate = nil
         connectionState = .disconnected
     }
 
@@ -105,29 +129,31 @@ final class ConnectionManager: ObservableObject {
     // MARK: - WebSocket Receiving
 
     private func receiveMessage() {
-        webSocketTask?.receive { [weak self] result in
+        let task = webSocketTask
+        task?.receive { [weak self] result in
             Task { @MainActor in
+                guard let self, self.webSocketTask === task else { return }
                 switch result {
                 case .success(let message):
                     switch message {
                     case .string(let text):
                         log.info("Received text frame (\(text.count) chars)")
                         if let data = text.data(using: .utf8) {
-                            self?.handleMessage(data)
+                            self.handleMessage(data)
                         }
                     case .data(let data):
                         log.info("Received data frame (\(data.count) bytes)")
-                        self?.handleMessage(data)
+                        self.handleMessage(data)
                     @unknown default:
                         log.warning("Received unknown frame type")
                     }
-                    self?.receiveMessage()
+                    self.receiveMessage()
 
                 case .failure(let error):
                     log.error("WebSocket receive error: \(error.localizedDescription)")
-                    self?.connectionState = .disconnected
-                    self?.lastError = error.localizedDescription
-                    self?.scheduleReconnect()
+                    self.connectionState = .disconnected
+                    self.lastError = error.localizedDescription
+                    self.scheduleReconnect()
                 }
             }
         }
@@ -186,6 +212,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func scheduleReconnect() {
+        reconnectTimer?.invalidate()
         log.info("Scheduling reconnect in 5s")
         reconnectTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
             Task { @MainActor in
@@ -197,12 +224,15 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func startHeartbeatMonitor() {
-        Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] timer in
-            guard let self else { timer.invalidate(); return }
-            self.webSocketTask?.sendPing { error in
+        heartbeatTimer?.invalidate()
+        let task = webSocketTask
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] timer in
+            guard let self, self.webSocketTask === task else { timer.invalidate(); return }
+            task?.sendPing { error in
                 if let error {
                     log.warning("Ping failed: \(error.localizedDescription)")
                     Task { @MainActor in
+                        guard self.webSocketTask === task else { return }
                         self.connectionState = .disconnected
                         self.scheduleReconnect()
                     }

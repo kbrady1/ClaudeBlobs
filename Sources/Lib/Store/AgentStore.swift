@@ -20,6 +20,7 @@ final class AgentStore: ObservableObject {
     private var peekTimer: DispatchWorkItem?
 
     var ntfyScheduler: NtfyScheduler?
+    var soundPlayer: SoundPlayer?
 
     private let statusSources: [AgentStatusSource]
     private var watchers: [StatusFileWatcher] = []
@@ -289,6 +290,14 @@ final class AgentStore: ObservableObject {
                 changedIds.insert(agent.id)
             }
             lastSeenStatus[agent.id] = agent.status
+        }
+
+        // Play sound effects for status changes
+        if !changedIds.isEmpty {
+            let changedStatuses = loaded
+                .filter { changedIds.contains($0.id) }
+                .map(\.status)
+            soundPlayer?.playForChanges(changedStatuses)
         }
 
         // Pop in briefly when status changes and hideWhileCollapsed is on
