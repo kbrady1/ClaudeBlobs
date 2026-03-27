@@ -398,6 +398,51 @@ struct HookScriptTests {
             #expect(r.status?["lastToolUse"] as? String == "Bash: rm -rf /")
         }
 
+        @Test("subagent permission updates parent's lastToolUse")
+        func subagentPermissionUpdatesParent() throws {
+            let h = try HookTestHelper()
+            // Set up parent with an old ExitPlanMode permission
+            let parentStatus: [String: Any] = [
+                "sessionId": "parent-sess",
+                "pid": 99999,
+                "status": "permission",
+                "lastToolUse": "ExitPlanMode: {\"allowedPrompts\":[]}",
+                "permissionKey": "old-key",
+                "lastMessage": NSNull(),
+                "waitReason": NSNull(),
+                "cwd": NSNull(),
+                "agentType": NSNull(),
+                "tty": NSNull(),
+                "cmuxWorkspace": NSNull(),
+                "cmuxSurface": NSNull(),
+                "cmuxSocketPath": NSNull(),
+                "createdAt": 1000000,
+                "updatedAt": 1000000,
+            ]
+            let parentFile = h.statusDir.appendingPathComponent("parent-sess.json")
+            let parentData = try JSONSerialization.data(withJSONObject: parentStatus)
+            try parentData.write(to: parentFile)
+
+            // Create subagent status file
+            try h.runSubagentHook("hook-subagent-start.sh",
+                sessionId: "parent-sess", subagentId: "sub-agent-1",
+                input: ["cwd": "/tmp", "agent_type": "general-purpose"])
+
+            // Fire permission request for the subagent's WebFetch tool
+            try h.runSubagentHook("hook-permission.sh",
+                sessionId: "parent-sess", subagentId: "sub-agent-1",
+                input: [
+                    "tool_name": "WebFetch",
+                    "tool_input": ["url": "https://example.com"],
+                ])
+
+            // Read the parent's status file — it should now reflect the subagent's permission
+            let updatedParentData = try Data(contentsOf: parentFile)
+            let updatedParent = try JSONSerialization.jsonObject(with: updatedParentData) as? [String: Any]
+            #expect(updatedParent?["lastToolUse"] as? String == "WebFetch: https://example.com")
+            #expect(updatedParent?["permissionKey"] as? String != "old-key")
+        }
+
         @Test("permission with Edit extracts basename")
         func permissionEdit() throws {
             let h = try HookTestHelper()
