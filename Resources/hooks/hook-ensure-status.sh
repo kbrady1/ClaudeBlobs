@@ -62,6 +62,11 @@ atomic_update() {
   fi
 }
 
+# Millisecond-precision timestamp. macOS date(1) lacks %N, so use perl.
+now_ms() {
+  perl -MTime::HiRes=time -e 'printf "%d\n", time*1000'
+}
+
 # Find the claude process by walking up the process tree.
 find_claude_pid() {
   local current=$$
@@ -158,7 +163,7 @@ ensure_status_file() {
   local PID=$(find_claude_pid)
   local TTY_NAME=$(ps -o tty= -p "$PID" 2>/dev/null | tr -d ' ')
   local TTY=$([ -n "$TTY_NAME" ] && [ "$TTY_NAME" != "??" ] && echo "/dev/$TTY_NAME" || echo "")
-  local TS=$(date +%s000)
+  local TS=$(now_ms)
   local CMUX_WS="${CMUX_WORKSPACE_ID:-}"
   local CMUX_SF="${CMUX_SURFACE_ID:-}"
   local CMUX_SOCK="${CMUX_SOCKET_PATH:-}"

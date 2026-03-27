@@ -11,15 +11,29 @@ debug_log_input "Notification"
 resolve_agent_status_file
 ensure_status_file
 
-CURRENT_STATUS=$(jq -r '.status // empty' "$STATUS_FILE" 2>/dev/null)
-TS=$(date +%s000)
+TS=$(now_ms)
+NOTIFICATION_TYPE=$(echo "$INPUT" | jq -r '.notification_type // empty')
 
-# Don't overwrite permission or waiting status — notifications often fire right after these
-if [ "$CURRENT_STATUS" != "permission" ] && [ "$CURRENT_STATUS" != "waiting" ]; then
-  atomic_update "$STATUS_FILE" \
-    --arg status "working" \
-    --argjson ts "$TS" \
-    '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .updatedAt = $ts | .waitReason = null'
-fi
+case "$NOTIFICATION_TYPE" in
+  permission_prompt)
+    atomic_update "$STATUS_FILE" \
+      --arg status "permission" \
+      --argjson ts "$TS" \
+      '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .updatedAt = $ts'
+    ;;
+  idle_prompt)
+    # Ignored — Stop hook already sets the correct waiting status and waitReason
+    ;;
+  *)
+    # Other notifications (auth_success, etc.) — mark working unless in a protected state
+    CURRENT_STATUS=$(jq -r '.status // empty' "$STATUS_FILE" 2>/dev/null)
+    if [ "$CURRENT_STATUS" != "permission" ] && [ "$CURRENT_STATUS" != "waiting" ]; then
+      atomic_update "$STATUS_FILE" \
+        --arg status "working" \
+        --argjson ts "$TS" \
+        '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .updatedAt = $ts | .waitReason = null'
+    fi
+    ;;
+esac
 
 debug_log_result

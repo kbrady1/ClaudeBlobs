@@ -11,7 +11,7 @@ debug_log_input "SubagentStart"
 SUBAGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
 SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
-TS=$(date +%s000)
+TS=$(now_ms)
 
 [ -z "$SUBAGENT_ID" ] && exit 0
 

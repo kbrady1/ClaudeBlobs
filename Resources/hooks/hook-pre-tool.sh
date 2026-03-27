@@ -13,17 +13,16 @@ ensure_status_file
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 RAW_INPUT=$(echo "$INPUT" | jq -c '.tool_input // empty' 2>/dev/null)
-TS=$(date +%s000)
+TS=$(now_ms)
 
 TOOL_USE_STR=$(format_tool_input "$TOOL_NAME" "$RAW_INPUT")
 
-# Don't overwrite permission/waiting if it was set in the last 2 seconds —
-# PreToolUse for a concurrent tool can race with PermissionRequest for another.
-CURRENT=$(jq -r '"\(.status // ""):\(.statusChangedAt // 0)"' "$STATUS_FILE" 2>/dev/null)
-CURRENT_STATUS="${CURRENT%%:*}"
-STATUS_AGE_MS=$(( TS - ${CURRENT#*:} ))
+# Never overwrite permission or waiting.
+# PreToolUse fires BEFORE PermissionRequest for the same tool, so it can
+# never be the signal that permission was granted. That signal is PostToolUse.
+CURRENT_STATUS=$(jq -r '.status // empty' "$STATUS_FILE" 2>/dev/null)
 
-if { [ "$CURRENT_STATUS" = "permission" ] || [ "$CURRENT_STATUS" = "waiting" ]; } && [ "$STATUS_AGE_MS" -lt 2000 ]; then
+if [ "$CURRENT_STATUS" = "permission" ] || [ "$CURRENT_STATUS" = "waiting" ]; then
   debug_log_result
   exit 0
 fi

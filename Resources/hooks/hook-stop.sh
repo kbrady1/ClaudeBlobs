@@ -13,7 +13,7 @@ ensure_status_file
 
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty')
 RAW_MSG=$(echo "$LAST_MSG" | head -c 2000)
-TS=$(date +%s000)
+TS=$(now_ms)
 
 # Strip markdown formatting and extract a clean first sentence.
 # 1. Remove markdown: headings, bold, backticks, bullets

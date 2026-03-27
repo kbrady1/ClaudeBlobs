@@ -10,7 +10,7 @@ source "$SCRIPT_DIR/hook-ensure-status.sh"
 debug_log_input "UserPromptSubmit"
 ensure_status_file
 
-TS=$(date +%s000)
+TS=$(now_ms)
 
 atomic_update "$STATUS_FILE" \
   --arg status "working" \

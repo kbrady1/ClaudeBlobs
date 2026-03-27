@@ -241,12 +241,11 @@ struct HookScriptTests {
             #expect(r.status?["lastToolUse"] as? String == "Bash")
         }
 
-        @Test("preserves recent permission status")
-        func preservesRecentPermission() throws {
+        @Test("does NOT overwrite permission status")
+        func preservesPermission() throws {
             let h = try HookTestHelper()
-            let now = Int64(Date().timeIntervalSince1970 * 1000)
             var existing = makeStatus(status: "permission")
-            existing["statusChangedAt"] = now
+            existing["permissionKey"] = "any-key"
             let r = try h.runHook("hook-pre-tool.sh", input: [
                 "tool_name": "Read",
                 "tool_input": ["file_path": "/tmp/foo.txt"],
@@ -254,30 +253,15 @@ struct HookScriptTests {
             #expect(r.status?["status"] as? String == "permission")
         }
 
-        @Test("preserves recent waiting status")
-        func preservesRecentWaiting() throws {
+        @Test("does NOT overwrite waiting status")
+        func preservesWaiting() throws {
             let h = try HookTestHelper()
-            let now = Int64(Date().timeIntervalSince1970 * 1000)
             var existing = makeStatus(status: "waiting")
-            existing["statusChangedAt"] = now
             let r = try h.runHook("hook-pre-tool.sh", input: [
                 "tool_name": "Read",
                 "tool_input": ["file_path": "/tmp/foo.txt"],
             ], existingStatus: existing)
             #expect(r.status?["status"] as? String == "waiting")
-        }
-
-        @Test("overwrites stale permission status")
-        func overwritesStalePermission() throws {
-            let h = try HookTestHelper()
-            let staleTs = Int64(Date().timeIntervalSince1970 * 1000) - 5000
-            var existing = makeStatus(status: "permission")
-            existing["statusChangedAt"] = staleTs
-            let r = try h.runHook("hook-pre-tool.sh", input: [
-                "tool_name": "Read",
-                "tool_input": ["file_path": "/tmp/foo.txt"],
-            ], existingStatus: existing)
-            #expect(r.status?["status"] as? String == "working")
         }
     }
 
@@ -564,29 +548,56 @@ struct HookScriptTests {
         @Test("sets working and clears waitReason")
         func setsWorking() throws {
             let h = try HookTestHelper()
-            let r = try h.runHook("hook-post-tool.sh", input: [:], existingStatus: makeWorkingStatus())
+            let r = try h.runHook("hook-post-tool.sh", input: [
+                "tool_name": "Read",
+                "tool_input": ["file_path": "/tmp/foo.txt"],
+            ], existingStatus: makeWorkingStatus())
             #expect(r.status?["status"] as? String == "working")
             #expect(r.status?["waitReason"] is NSNull)
         }
 
-        @Test("preserves recent permission status")
-        func preservesRecentPermission() throws {
+        @Test("preserves permission when key does not match (sibling tool)")
+        func preservesPermissionSibling() throws {
             let h = try HookTestHelper()
-            let now = Int64(Date().timeIntervalSince1970 * 1000)
             var existing = makeStatus(status: "permission")
-            existing["statusChangedAt"] = now
-            let r = try h.runHook("hook-post-tool.sh", input: [:], existingStatus: existing)
+            existing["permissionKey"] = "blocked-tool-key"
+            let r = try h.runHook("hook-post-tool.sh", input: [
+                "tool_name": "Read",
+                "tool_input": ["file_path": "/tmp/foo.txt"],
+            ], existingStatus: existing)
             #expect(r.status?["status"] as? String == "permission")
         }
 
-        @Test("overwrites stale permission status")
-        func overwritesStalePermission() throws {
+        @Test("clears permission when key matches (user granted permission)")
+        func clearsPermissionMatching() throws {
             let h = try HookTestHelper()
-            let staleTs = Int64(Date().timeIntervalSince1970 * 1000) - 5000
+            // First run the permission hook to get the real key
+            let permResult = try h.runHook("hook-permission.sh", input: [
+                "tool_name": "Read",
+                "tool_input": ["file_path": "/tmp/foo.txt"],
+            ], existingStatus: makeWorkingStatus())
+            let key = permResult.status?["permissionKey"] as? String
+            #expect(key != nil)
+
+            // PostToolUse with the same tool should clear permission
             var existing = makeStatus(status: "permission")
-            existing["statusChangedAt"] = staleTs
-            let r = try h.runHook("hook-post-tool.sh", input: [:], existingStatus: existing)
+            existing["permissionKey"] = key!
+            let r = try h.runHook("hook-post-tool.sh", input: [
+                "tool_name": "Read",
+                "tool_input": ["file_path": "/tmp/foo.txt"],
+            ], existingStatus: existing)
             #expect(r.status?["status"] as? String == "working")
+        }
+
+        @Test("preserves waiting status")
+        func preservesWaiting() throws {
+            let h = try HookTestHelper()
+            var existing = makeStatus(status: "waiting")
+            let r = try h.runHook("hook-post-tool.sh", input: [
+                "tool_name": "Read",
+                "tool_input": ["file_path": "/tmp/foo.txt"],
+            ], existingStatus: existing)
+            #expect(r.status?["status"] as? String == "waiting")
         }
     }
 

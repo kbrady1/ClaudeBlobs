@@ -128,6 +128,12 @@ class ConversationTestHelper {
         try updated.write(to: file)
     }
 
+    /// Delete a status file (simulates UserPromptSubmit cleanup of subagent files).
+    func deleteStatus(_ fileId: String) throws {
+        let file = hookHelper.statusDir.appendingPathComponent("\(fileId).json")
+        try FileManager.default.removeItem(at: file)
+    }
+
     // MARK: - Private
 
     private func runStep(_ step: ConversationStep) throws {

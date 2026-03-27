@@ -12,7 +12,7 @@ resolve_agent_status_file
 ensure_status_file
 
 IS_INTERRUPT=$(echo "$INPUT" | jq -r '.is_interrupt // false')
-TS=$(date +%s000)
+TS=$(now_ms)
 
 if [ "$IS_INTERRUPT" = "true" ]; then
   FAILURE="interrupt"

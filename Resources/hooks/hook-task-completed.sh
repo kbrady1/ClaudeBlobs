@@ -11,7 +11,7 @@ debug_log_input "TaskCompleted"
 resolve_agent_status_file
 ensure_status_file
 
-TS=$(date +%s000)
+TS=$(now_ms)
 
 atomic_update "$STATUS_FILE" \
   --argjson ts "$TS" \

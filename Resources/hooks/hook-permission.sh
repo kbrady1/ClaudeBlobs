@@ -13,14 +13,16 @@ ensure_status_file
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 RAW_INPUT=$(echo "$INPUT" | jq -c '.tool_input // empty' 2>/dev/null)
-TS=$(date +%s000)
+TS=$(now_ms)
 
 TOOL_USE_STR=$(format_tool_input "$TOOL_NAME" "$RAW_INPUT")
+PERMISSION_KEY=$(printf '%s:%s' "$TOOL_NAME" "$RAW_INPUT" | md5 -q)
 
 atomic_update "$STATUS_FILE" \
   --arg status "permission" \
   --arg toolUse "$TOOL_USE_STR" \
+  --arg permKey "$PERMISSION_KEY" \
   --argjson ts "$TS" \
-  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .updatedAt = $ts'
+  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .permissionKey = $permKey | .updatedAt = $ts'
 
 debug_log_result

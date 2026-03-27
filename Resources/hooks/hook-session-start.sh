@@ -15,7 +15,7 @@ AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty')
 PID=$PPID
 TTY_NAME=$(ps -o tty= -p "$PID" 2>/dev/null | tr -d ' ')
 TTY=$([ -n "$TTY_NAME" ] && [ "$TTY_NAME" != "??" ] && echo "/dev/$TTY_NAME" || echo "")
-TS=$(date +%s000)
+TS=$(now_ms)
 CMUX_WS="${CMUX_WORKSPACE_ID:-}"
 CMUX_SF="${CMUX_SURFACE_ID:-}"
 CMUX_SOCK="${CMUX_SOCKET_PATH:-}"

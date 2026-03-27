@@ -66,7 +66,8 @@ private func postToolUse(
     sessionId: String = parentSessionId,
     agentId: String? = nil,
     agentType: String? = nil,
-    toolName: String = "Bash"
+    toolName: String = "Bash",
+    toolInput: [String: Any]? = nil
 ) -> ConversationStep {
     var input: [String: Any] = [
         "session_id": sessionId,
@@ -74,7 +75,7 @@ private func postToolUse(
         "permission_mode": "default",
         "hook_event_name": "PostToolUse",
         "tool_name": toolName,
-        "tool_input": ["command": "echo hello"],
+        "tool_input": toolInput ?? ["command": "echo hello"],
         "tool_response": ["stdout": "hello", "stderr": "", "interrupted": false],
         "tool_use_id": "toolu_\(UUID().uuidString.prefix(20))",
     ]
@@ -413,11 +414,11 @@ struct ConversationTests {
         let parent = try c.readStatus(parentSessionId)
         #expect(parent?["status"] as? String == "working")
 
-        // Now A's permission is granted (user took >2s to approve), A resumes working
-        try c.backdateStatus(subagentA)
+        // Now A's permission is granted — PostToolUse with matching tool key clears it.
+        // (PreToolUse fires before PermissionRequest, so PostToolUse is the grant signal.)
         try c.replay([
-            preToolUse(agentId: subagentA, agentType: "Explore",
-                       toolName: "Bash", toolInput: ["command": "rm -rf build/"]),
+            postToolUse(agentId: subagentA, agentType: "Explore",
+                        toolName: "Bash", toolInput: ["command": "rm -rf build/"]),
         ])
 
         // A should now be working

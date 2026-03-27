@@ -11,18 +11,30 @@ debug_log_input "PostToolUse"
 resolve_agent_status_file
 ensure_status_file
 
-TS=$(date +%s000)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
+RAW_INPUT=$(echo "$INPUT" | jq -c '.tool_input // empty' 2>/dev/null)
+TS=$(now_ms)
 
-# Don't overwrite permission/waiting if it was set in the last 2 seconds —
-# PostToolUse for a previous tool can race with PermissionRequest for the next.
-# Beyond 2s, let it through to avoid stale permission state.
-CURRENT=$(jq -r '"\(.status // ""):\(.statusChangedAt // 0)"' "$STATUS_FILE" 2>/dev/null)
-CURRENT_STATUS="${CURRENT%%:*}"
-STATUS_AGE_MS=$(( TS - ${CURRENT#*:} ))
+# Never overwrite waiting — only user-prompt should clear that.
+# For permission: only clear it if this PostToolUse is for the exact tool that
+# was blocked (matching permissionKey). The flow is:
+#   PreToolUse → PermissionRequest → [user grants] → PostToolUse
+# So PostToolUse with a matching key means permission was granted and the tool ran.
+# Sibling tools have a different key and won't clobber.
+CURRENT_STATUS=$(jq -r '.status // empty' "$STATUS_FILE" 2>/dev/null)
 
-if { [ "$CURRENT_STATUS" = "permission" ] || [ "$CURRENT_STATUS" = "waiting" ]; } && [ "$STATUS_AGE_MS" -lt 2000 ]; then
+if [ "$CURRENT_STATUS" = "waiting" ]; then
   debug_log_result
   exit 0
+fi
+
+if [ "$CURRENT_STATUS" = "permission" ]; then
+  STORED_KEY=$(jq -r '.permissionKey // empty' "$STATUS_FILE" 2>/dev/null)
+  MY_KEY=$(printf '%s:%s' "$TOOL_NAME" "$RAW_INPUT" | md5 -q)
+  if [ "$MY_KEY" != "$STORED_KEY" ]; then
+    debug_log_result
+    exit 0
+  fi
 fi
 
 atomic_update "$STATUS_FILE" \
