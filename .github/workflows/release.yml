@@ -134,9 +134,14 @@ jobs:
             COMMITS=$(git log --oneline | head -50)
           fi
 
-          # Check for annotated tag message
-          TAG_MSG=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME" 2>/dev/null || echo "")
-          TAG_MSG=$(echo "$TAG_MSG" | sed '/^$/d')
+          # Check for annotated tag message using git cat-file (reliable in CI)
+          TAG_OBJ=$(git rev-parse "$GITHUB_REF_NAME" 2>/dev/null || echo "")
+          TAG_TYPE=$(git cat-file -t "$TAG_OBJ" 2>/dev/null || echo "")
+          TAG_MSG=""
+          if [ "$TAG_TYPE" = "tag" ]; then
+            # Extract message body from annotated tag (everything after the blank line)
+            TAG_MSG=$(git cat-file -p "$TAG_OBJ" | sed '1,/^$/d')
+          fi
 
           if [ -n "$TAG_MSG" ]; then
             echo "$TAG_MSG" > "$RUNNER_TEMP/release_notes.md"
