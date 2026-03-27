@@ -24,6 +24,27 @@ struct HookScriptTests {
             #expect(r.status?["status"] as? String == "waiting")
         }
 
+        @Test("question — filler preamble with blank line before question")
+        func fillerWithBlankLineBeforeQuestion() throws {
+            let h = try HookTestHelper()
+            let msg = """
+            Good. Last question:
+
+            **Should the notification (ntfy) also be deferred until all children complete?**
+
+            Options:
+
+            - **A) Yes, defer notifications too** — consistent with the sound decision.
+            - **B) No, notify immediately** — the parent is available for input.
+
+            I'd recommend **A** — same reasoning as sound. Consistency matters here.
+            """
+            let r = try h.runHook("hook-stop.sh", input: ["last_assistant_message": msg])
+            #expect(r.status?["waitReason"] as? String == "question")
+            let lastMsg = r.status?["lastMessage"] as? String ?? ""
+            #expect(lastMsg.contains("notification") || lastMsg.contains("deferred"))
+        }
+
         @Test("done — completion in head overrides trailing question")
         func doneOverridesQuestion() throws {
             let h = try HookTestHelper()

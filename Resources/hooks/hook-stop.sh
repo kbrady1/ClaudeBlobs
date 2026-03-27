@@ -22,7 +22,7 @@ CLEAN_MSG=$(echo "$LAST_MSG" | sed 's/^#\{1,6\}[[:space:]]*//' | sed 's/\*\*//g'
 # 2. Skip filler preambles on line 1 — if line 1 is short filler, try line 2
 LINE1=$(echo "$CLEAN_MSG" | head -1 | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
 if echo "$LINE1" | grep -qiE '^(good|great|now I have|perfect|excellent|sure|okay|alright|here|let me)[,. !]'; then
-  LINE2=$(echo "$CLEAN_MSG" | sed -n '2p' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+  LINE2=$(echo "$CLEAN_MSG" | tail -n +2 | grep -m1 '[^[:space:]]' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
   if [ -n "$LINE2" ] && [ ${#LINE2} -gt 5 ]; then
     LINE1="$LINE2"
   fi
@@ -40,12 +40,15 @@ HEAD=$(echo "$LAST_MSG" | head -2)
 TAIL=$(echo "$LAST_MSG" | tail -c 500)
 WAIT_REASON="done"
 
+# If the message contains a question indicator, it's a question regardless of completion phrases
+if echo "$HEAD" | grep -qiE '(last question|next question|one more question|quick question)\b'; then
+  WAIT_REASON="question"
 # If the first 2 lines contain a completion phrase, it's done regardless of trailing "?"
-if echo "$HEAD" | grep -qiE '\b(done|all done|all set|complete|completed|finished|everything.s (set|ready|updated|in place)|changes applied)\b'; then
+elif echo "$HEAD" | grep -qiE '\b(done|all done|all set|complete|completed|finished|everything.s (set|ready|updated|in place)|changes applied)\b'; then
   WAIT_REASON="done"
 elif echo "$TAIL" | sed 's/[*`_~]//g' | grep -qE '\?\s*$'; then
   WAIT_REASON="question"
-elif echo "$TAIL" | grep -qiE '(shall I|should I|would you|do you want|want me to|ready to|like me to|proceed|go ahead|sound good|look right|make sense|let me know|what do you think|next question|give it a try|try (it|running|again|that)|take a look|test it|run it|check (if|whether|that))\b'; then
+elif echo "$TAIL" | grep -qiE '(shall I|should I|would you|do you want|want me to|ready to|like me to|proceed|go ahead|sound good|look right|make sense|let me know|what do you think|next question|give it a try|try (it|running|again|that)|take a look|test it|run it|check (if|whether|that)|I.d recommend|which (would|do|should)|option [A-Z]\b)\b'; then
   WAIT_REASON="question"
 fi
 
