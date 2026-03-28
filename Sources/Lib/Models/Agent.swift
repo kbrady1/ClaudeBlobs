@@ -253,6 +253,8 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
             return "Starting up..."
         case .compacting:
             return "Compacting context..."
+        case .delegating:
+            return cleanMessage
         }
     }
 

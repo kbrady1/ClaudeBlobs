@@ -6,6 +6,7 @@ enum AgentStatus: String, Codable, CaseIterable {
     case waiting
     case permission
     case compacting
+    case delegating
 
     var color: Color {
         color(for: .trafficLight)
@@ -17,7 +18,7 @@ enum AgentStatus: String, Codable, CaseIterable {
 
     var visibleWhenCollapsed: Bool {
         switch self {
-        case .waiting, .permission, .starting: return true
+        case .waiting, .permission, .starting, .delegating: return true
         case .working, .compacting: return false
         }
     }
@@ -26,21 +27,23 @@ enum AgentStatus: String, Codable, CaseIterable {
     /// Order: red (permission), orange (waiting), green (starting), blue (working), purple (compacting).
     var sortPriority: Int {
         switch self {
-        case .permission: return 0
-        case .waiting:    return 1
-        case .starting:   return 2
-        case .working:    return 3
-        case .compacting: return 4
+        case .permission:  return 0
+        case .waiting:     return 1
+        case .delegating:  return 2
+        case .starting:    return 3
+        case .working:     return 4
+        case .compacting:  return 5
         }
     }
 
     var displayName: String {
         switch self {
-        case .starting:   return "Starting"
-        case .working:    return "Working"
-        case .waiting:    return "Waiting"
-        case .permission: return "Needs Permission"
-        case .compacting: return "Compacting"
+        case .starting:    return "Starting"
+        case .working:     return "Working"
+        case .waiting:     return "Waiting"
+        case .permission:  return "Needs Permission"
+        case .compacting:  return "Compacting"
+        case .delegating:  return "Delegating"
         }
     }
 }

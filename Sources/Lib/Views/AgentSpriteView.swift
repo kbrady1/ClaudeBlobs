@@ -203,6 +203,9 @@ struct AgentSpriteView: View {
         if status == .permission && isAskingQuestion {
             return Color.orange
         }
+        if status == .delegating {
+            return AgentStatus.starting.color(for: theme)
+        }
         return status.color(for: theme)
     }
 
@@ -232,8 +235,9 @@ struct AgentSpriteView: View {
                     PermissionFace(frame: expressionFrame, isStale: isStale)
                 }
             case .working:    WorkingFace(frame: expressionFrame, isStale: isStale)
-            case .starting:   StartingFace(frame: expressionFrame, isStale: isStale)
-            case .compacting: CompactingFace()
+            case .starting:    StartingFace(frame: expressionFrame, isStale: isStale)
+            case .delegating:  DoneFace(frame: expressionFrame, isStale: isStale)
+            case .compacting:  CompactingFace()
             }
         }
     }
@@ -335,8 +339,9 @@ struct AgentSpriteView: View {
         case .permission: return 0.35
         case .waiting:    return isDone ? 0 : 0.8
         case .working:    return 1.2
-        case .starting:   return 0
-        case .compacting: return 0
+        case .starting:    return 0
+        case .delegating:  return 0
+        case .compacting:  return 0
         }
     }
 
@@ -397,11 +402,12 @@ struct AgentSpriteView: View {
             interval = 1.0
         } else {
             switch status {
-            case .starting:   interval = 1.8
-            case .waiting:    interval = isDone ? 2.5 : 1.5
-            case .permission: interval = 1.8
-            case .working:    interval = 1.2
-            case .compacting: interval = 1.2
+            case .starting:    interval = 1.8
+            case .waiting:     interval = isDone ? 2.5 : 1.5
+            case .permission:  interval = 1.8
+            case .working:     interval = 1.2
+            case .delegating:  interval = 2.5
+            case .compacting:  interval = 1.2
             }
         }
         expressionTimer = Timer.publish(every: interval, on: .main, in: .common)
@@ -518,6 +524,11 @@ struct AgentSpriteView: View {
         case .permission:
             // Alternate: tense mouth (0), yelling (1), extra angry (2)
             expressionFrame = (expressionFrame + 1) % 3
+        case .delegating:
+            // Same as done: mostly content (0), occasionally wink (1)
+            let roll = Int.random(in: 0..<10)
+            if roll < 7 { expressionFrame = 0 }
+            else { expressionFrame = 1; scheduleWinkReset() }
         case .working, .compacting:
             // Cycle: center (0), look left (1), look right (2), thinking mouth (3)
             expressionFrame = (expressionFrame + 1) % 4

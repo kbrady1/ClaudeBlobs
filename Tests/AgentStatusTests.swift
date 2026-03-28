@@ -23,6 +23,7 @@ struct AgentStatusTests {
         #expect(AgentStatus.waiting.visibleWhenCollapsed == true)
         #expect(AgentStatus.permission.visibleWhenCollapsed == true)
         #expect(AgentStatus.starting.visibleWhenCollapsed == true)
+        #expect(AgentStatus.delegating.visibleWhenCollapsed == true)
         #expect(AgentStatus.working.visibleWhenCollapsed == false)
         #expect(AgentStatus.compacting.visibleWhenCollapsed == false)
     }
@@ -31,6 +32,18 @@ struct AgentStatusTests {
         let status = AgentStatus.compacting
         #expect(status.displayName == "Compacting")
         #expect(status.visibleWhenCollapsed == false)
+    }
+
+    @Test func delegatingStatus() {
+        let status = AgentStatus.delegating
+        #expect(status.displayName == "Delegating")
+        #expect(status.visibleWhenCollapsed == true)
+        #expect(status.sortPriority == 2)
+    }
+
+    @Test func delegatingSortsBetweenWaitingAndWorking() {
+        #expect(AgentStatus.waiting.sortPriority < AgentStatus.delegating.sortPriority)
+        #expect(AgentStatus.delegating.sortPriority < AgentStatus.working.sortPriority)
     }
 
     @Test func speechBubbleText() {

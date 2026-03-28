@@ -30,6 +30,7 @@ final class SoundPlayer {
         case .starting:   return "green"
         case .waiting:    return agent.isDone ? "done" : "orange"
         case .permission: return "red"
+        case .delegating: return nil
         case .working, .compacting: return nil
         }
     }
