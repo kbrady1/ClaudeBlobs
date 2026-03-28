@@ -258,6 +258,42 @@ struct AgentTests {
         #expect(Agent.effectiveStatus(of: parent, children: [child]) == .permission)
     }
 
+    @Test("effectiveStatus returns delegating when parent is done but children are working")
+    func effectiveStatusDelegating() {
+        let parent = Agent.fixture(status: .waiting, waitReason: "done")
+        let child = Agent.fixture(sessionId: "child", status: .working)
+        #expect(Agent.effectiveStatus(of: parent, children: [child]) == .delegating)
+    }
+
+    @Test("effectiveStatus returns delegating when parent is done and child is starting")
+    func effectiveStatusDelegatingChildStarting() {
+        let parent = Agent.fixture(status: .waiting, waitReason: "done")
+        let child = Agent.fixture(sessionId: "child", status: .starting)
+        #expect(Agent.effectiveStatus(of: parent, children: [child]) == .delegating)
+    }
+
+    @Test("effectiveStatus does NOT return delegating when parent is waiting with question")
+    func effectiveStatusNotDelegatingOnQuestion() {
+        let parent = Agent.fixture(status: .waiting, waitReason: "question")
+        let child = Agent.fixture(sessionId: "child", status: .working)
+        #expect(Agent.effectiveStatus(of: parent, children: [child]) == .waiting)
+    }
+
+    @Test("effectiveStatus promotes child permission over delegating")
+    func effectiveStatusPermissionOverridesDelegating() {
+        let parent = Agent.fixture(status: .waiting, waitReason: "done")
+        let childA = Agent.fixture(sessionId: "child-a", status: .working)
+        let childB = Agent.fixture(sessionId: "child-b", status: .permission)
+        #expect(Agent.effectiveStatus(of: parent, children: [childA, childB]) == .permission)
+    }
+
+    @Test("effectiveStatus returns waiting-done when parent is done and all children are done")
+    func effectiveStatusNotDelegatingAllChildrenDone() {
+        let parent = Agent.fixture(status: .waiting, waitReason: "done")
+        let child = Agent.fixture(sessionId: "child", status: .waiting, waitReason: "done")
+        #expect(Agent.effectiveStatus(of: parent, children: [child]) == .waiting)
+    }
+
     @Test("mostUrgentChild returns nil when no children")
     func mostUrgentChildNone() {
         let parent = Agent.fixture()

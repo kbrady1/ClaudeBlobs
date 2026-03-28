@@ -515,13 +515,27 @@ extension Agent {
     /// Uses `AgentStatus.sortPriority` (lower = more urgent).
     static func effectiveStatus(of agent: Agent, children: [Agent]) -> AgentStatus {
         guard !children.isEmpty else { return agent.status }
+
+        // Check if any child has a more urgent status than the parent
         var best = agent.status
         for child in children {
             if child.status.sortPriority < best.sortPriority {
                 best = child.status
             }
         }
-        return best
+
+        // If a child is more urgent (e.g. permission), surface that
+        if best != agent.status { return best }
+
+        // Parent is done but children are still active → delegating
+        if agent.status == .waiting && agent.isDone {
+            let hasActiveChild = children.contains {
+                $0.status == .working || $0.status == .starting
+            }
+            if hasActiveChild { return .delegating }
+        }
+
+        return agent.status
     }
 
     /// Returns the child with the most urgent status, if any.
