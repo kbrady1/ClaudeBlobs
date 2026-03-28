@@ -373,7 +373,7 @@ final class AgentStore: ObservableObject {
             // Detect effective status changes (e.g. delegating → waiting/done)
             // and play sounds for transitions not caught by raw status changes
             for agent in loaded {
-                let kids = children(of: agent.id)
+                let kids = childrenOf(agent.id)
                 let effective = Agent.effectiveStatus(of: agent, children: kids)
                 let prev = lastSeenEffectiveStatus[agent.id]
                 lastSeenEffectiveStatus[agent.id] = effective
@@ -392,9 +392,8 @@ final class AgentStore: ObservableObject {
             }
 
             // Clean up stale entries
-            let effectiveActiveIds = Set(loaded.map(\.id))
             lastSeenEffectiveStatus = lastSeenEffectiveStatus.filter {
-                effectiveActiveIds.contains($0.key)
+                activeIds.contains($0.key)
             }
         }
     }
