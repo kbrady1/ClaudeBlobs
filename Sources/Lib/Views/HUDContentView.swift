@@ -16,6 +16,23 @@ final class HUDExpansionState: ObservableObject {
     @Published var isKeyboardExpanded = false
     @Published var selectedIndex: Int = 0
     @Published var isRenaming = false
+    @Published var permissionAgent: Agent?
+    @Published var permissionOptions: [String] = []
+    @Published var isLoadingPermission = false
+
+    var isShowingPermission: Bool { permissionAgent != nil }
+
+    func showPermission(for agent: Agent, options: [String]) {
+        permissionAgent = agent
+        permissionOptions = options
+        isLoadingPermission = false
+    }
+
+    func clearPermission() {
+        permissionAgent = nil
+        permissionOptions = []
+        isLoadingPermission = false
+    }
 
     func toggle(agentCount: Int) {
         withAnimation(.spring(duration: 0.35, bounce: 0.1)) {
@@ -86,7 +103,7 @@ struct HUDContentView: View {
                         }
                     } else {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            if isHovering || expansionState.isRenaming { return }
+                            if isHovering || expansionState.isRenaming || expansionState.isShowingPermission { return }
                             withAnimation(.spring(duration: 0.35, bounce: 0.1)) {
                                 isHoverExpanded = false
                             }
@@ -133,7 +150,29 @@ struct HUDContentView: View {
                 onDismiss: { store.dismiss($0) },
                 onRename: { agent, name in store.setCustomName(name, for: agent) },
                 onClearName: { store.clearCustomName(for: $0) },
-                onRenameStateChanged: { expansionState.isRenaming = $0 }
+                onRenameStateChanged: { expansionState.isRenaming = $0 },
+                permissionAgent: expansionState.permissionAgent,
+                permissionOptions: expansionState.permissionOptions,
+                isLoadingPermission: expansionState.isLoadingPermission,
+                onPermissionSelect: { agent, index in
+                    expansionState.clearPermission()
+                    Task.detached {
+                        let result = try await CommandExecutor.execute(
+                            command: .selectOption, agent: agent, text: nil, optionIndex: index
+                        )
+                        if !result.success {
+                            DebugLog.shared.log("Permission option select failed: \(result.error ?? "")")
+                        }
+                    }
+                },
+                onPermissionGoToAgent: { agent in
+                    expansionState.clearPermission()
+                    expansionState.collapse()
+                    onAgentClick(agent)
+                },
+                onPermissionCancel: {
+                    expansionState.clearPermission()
+                }
             )
             .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
         } else {

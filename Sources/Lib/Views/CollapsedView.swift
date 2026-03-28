@@ -69,7 +69,7 @@ struct CollapsedView: View {
         .padding(.vertical, 2)
         .background(
             Group {
-                if let backgroundStyle {
+                if let backgroundStyle, !agents.isEmpty {
                     switch backgroundStyle {
                     case .color(let color):
                         UnevenRoundedRectangle(

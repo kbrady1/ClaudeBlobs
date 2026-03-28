@@ -296,6 +296,12 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         return Agent.formatToolForDisplay(tool, imperative: true)
     }
 
+    /// Longer permission tool use for the popover preview (no truncation).
+    var permissionToolUseExpanded: String {
+        guard let tool = lastToolUse else { return "" }
+        return Agent.formatToolForDisplay(tool, imperative: true, maxCommandLength: 200)
+    }
+
     // MARK: - Text cleaning helpers
 
     static func stripMarkdown(_ text: String) -> String {
@@ -331,7 +337,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
 
     /// Formats a tool use string for human-readable display.
     /// - Parameter imperative: true for permission state ("Read X"), false for working state ("Reading X")
-    static func formatToolForDisplay(_ tool: String, imperative: Bool) -> String {
+    static func formatToolForDisplay(_ tool: String, imperative: Bool, maxCommandLength: Int = 60) -> String {
         // Internal tools that show JSON — always use friendly names
         if tool.hasPrefix("TaskUpdate:") || tool.hasPrefix("TaskCreate:") { return "Updating tasks" }
         if tool.hasPrefix("TaskGet:") || tool.hasPrefix("TaskGet") { return "Checking tasks" }
@@ -352,7 +358,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
 
         // Bash — strip paths, redirects, pipes
         if tool.hasPrefix("Bash: ") {
-            let cmd = cleanBashCommand(String(tool.dropFirst(6)))
+            let cmd = cleanBashCommand(String(tool.dropFirst(6)), maxLength: maxCommandLength)
             return imperative ? "Run: \(cmd)" : cmd
         }
         if tool == "Bash" { return "Bash" }
@@ -399,7 +405,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     }
 
     /// Cleans a bash command for display: strips paths, cd prefixes, redirects, pipes.
-    static func cleanBashCommand(_ cmd: String) -> String {
+    static func cleanBashCommand(_ cmd: String, maxLength: Int = 60) -> String {
         var c = cmd
         // Strip cd prefix to a directory
         c = c.replacingOccurrences(of: #"^cd\s+\S+\s*&&\s*"#, with: "", options: .regularExpression)
@@ -412,7 +418,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         // Strip trailing pipes to tail/head/grep
         c = c.replacingOccurrences(of: #"\s*\|\s*(?:tail|head|grep)\b.*$"#, with: "", options: .regularExpression)
         c = c.trimmingCharacters(in: .whitespaces)
-        return String(c.prefix(60))
+        return String(c.prefix(maxLength))
     }
 
     /// Extracts the first question text from AskUserQuestion JSON.

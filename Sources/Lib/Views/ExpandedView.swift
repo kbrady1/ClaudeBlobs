@@ -19,11 +19,19 @@ struct ExpandedView: View {
     var onRename: ((Agent, String) -> Void)?
     var onClearName: ((Agent) -> Void)?
     var onRenameStateChanged: ((Bool) -> Void)?
+    var permissionAgent: Agent?
+    var permissionOptions: [String] = []
+    var isLoadingPermission: Bool = false
+    var onPermissionSelect: ((Agent, Int) -> Void)?
+    var onPermissionGoToAgent: ((Agent) -> Void)?
+    var onPermissionCancel: (() -> Void)?
     @Environment(\.notchInset) private var notchInset
     @State private var renamingAgent: Agent?
     @State private var renameText: String = ""
     /// Frozen snapshot of agents while rename popover is open, preventing reorder from killing the popover.
     @State private var frozenAgents: [Agent]?
+    @State private var showPermissionHint = false
+    @State private var permissionHintTimer: Timer?
 
     private var displayAgents: [Agent] {
         frozenAgents ?? agents
@@ -85,12 +93,34 @@ struct ExpandedView: View {
                         }
                     )
                 }
+                .popover(isPresented: Binding(
+                    get: { permissionAgent?.id == agent.id },
+                    set: { if !$0 { onPermissionCancel?() } }
+                )) {
+                    PermissionOptionsPopover(
+                        agent: agent,
+                        options: permissionOptions,
+                        isLoading: isLoadingPermission,
+                        onSelect: { index in onPermissionSelect?(agent, index) },
+                        onGoToAgent: { onPermissionGoToAgent?(agent) },
+                        onCancel: { onPermissionCancel?() }
+                    )
+                }
             }
             if displayAgents.count > 9 {
                 Text("+\(agents.count - 9)")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.secondary)
                     .frame(width: 40)
+            }
+        }
+        .onAppear { showPermissionHintIfNeeded() }
+        .onChange(of: selectedIndex) { _ in showPermissionHintIfNeeded() }
+        .onChange(of: agents.map(\.status)) { _ in
+            // Auto-dismiss permission popover if agent leaves permission state
+            if let agent = permissionAgent,
+               agents.first(where: { $0.id == agent.id })?.status != .permission {
+                onPermissionCancel?()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .renameSelectedAgent)) { notification in
@@ -101,27 +131,51 @@ struct ExpandedView: View {
         .padding(12)
         .background(
             Group {
-                switch backgroundStyle {
-                case .color(let color):
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: 0,
-                        bottomLeadingRadius: 20,
-                        bottomTrailingRadius: 20,
-                        topTrailingRadius: 0
-                    )
-                    .fill(color)
-                case .material:
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: 0,
-                        bottomLeadingRadius: 20,
-                        bottomTrailingRadius: 20,
-                        topTrailingRadius: 0
-                    )
-                    .fill(.ultraThinMaterial)
+                if !displayAgents.isEmpty {
+                    switch backgroundStyle {
+                    case .color(let color):
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: 0,
+                            bottomLeadingRadius: 20,
+                            bottomTrailingRadius: 20,
+                            topTrailingRadius: 0
+                        )
+                        .fill(color)
+                    case .material:
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: 0,
+                            bottomLeadingRadius: 20,
+                            bottomTrailingRadius: 20,
+                            topTrailingRadius: 0
+                        )
+                        .fill(.ultraThinMaterial)
+                    }
                 }
             }
             .padding(.top, -notchInset)
         )
+    }
+
+    private func showPermissionHintIfNeeded() {
+        permissionHintTimer?.invalidate()
+        guard let index = selectedIndex,
+              index < displayAgents.count else {
+            showPermissionHint = false
+            return
+        }
+        let agent = displayAgents[index]
+        if agent.status == .permission && agent.isCmuxSession {
+            showPermissionHint = true
+            permissionHintTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { _ in
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        showPermissionHint = false
+                    }
+                }
+            }
+        } else {
+            showPermissionHint = false
+        }
     }
 
     private func effectiveStatus(_ agent: Agent) -> AgentStatus {
@@ -238,6 +292,15 @@ struct ExpandedView: View {
                 .frame(maxWidth: 80)
 
             ScrollingSpeechBubble(text: agent.speechBubbleText)
+                .opacity(showPermissionHint && isSelected && agent.status == .permission && agent.isCmuxSession ? 0 : 1)
+                .overlay {
+                    if showPermissionHint && isSelected && agent.status == .permission && agent.isCmuxSession {
+                        Text("⇧↵ to respond")
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundColor(.orange)
+                            .transition(.opacity)
+                    }
+                }
         }
         .frame(width: 80)
         .padding(4)

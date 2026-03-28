@@ -274,15 +274,15 @@ struct HookScriptTests {
             #expect(r.status?["status"] as? String == "permission")
         }
 
-        @Test("does NOT overwrite waiting status")
-        func preservesWaiting() throws {
+        @Test("transitions waiting to working (plan execution resumes)")
+        func transitionsWaitingToWorking() throws {
             let h = try HookTestHelper()
             var existing = makeStatus(status: "waiting")
             let r = try h.runHook("hook-pre-tool.sh", input: [
                 "tool_name": "Read",
                 "tool_input": ["file_path": "/tmp/foo.txt"],
             ], existingStatus: existing)
-            #expect(r.status?["status"] as? String == "waiting")
+            #expect(r.status?["status"] as? String == "working")
         }
     }
 
@@ -655,15 +655,15 @@ struct HookScriptTests {
             #expect(r.status?["status"] as? String == "working")
         }
 
-        @Test("preserves waiting status")
-        func preservesWaiting() throws {
+        @Test("transitions waiting to working (plan execution resumes)")
+        func transitionsWaitingToWorking() throws {
             let h = try HookTestHelper()
             var existing = makeStatus(status: "waiting")
             let r = try h.runHook("hook-post-tool.sh", input: [
                 "tool_name": "Read",
                 "tool_input": ["file_path": "/tmp/foo.txt"],
             ], existingStatus: existing)
-            #expect(r.status?["status"] as? String == "waiting")
+            #expect(r.status?["status"] as? String == "working")
         }
     }
 

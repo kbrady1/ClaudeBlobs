@@ -459,6 +459,44 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard expansionState.isKeyboardExpanded else { return false }
         // Let all key events pass through to the text field while renaming
         if expansionState.isRenaming { return false }
+
+        // When permission popover is showing, handle number keys and Escape
+        if let agent = expansionState.permissionAgent, !expansionState.permissionOptions.isEmpty {
+            // Escape — close popover (not the whole picker)
+            if event.keyCode == 53 {
+                DispatchQueue.main.async { self.expansionState.clearPermission() }
+                return true
+            }
+            let optionCount = expansionState.permissionOptions.count
+            // Number keys — select permission option or "Go to Agent"
+            if let chars = event.characters, let digit = chars.first, digit.isNumber,
+               let num = Int(String(digit)), num >= 1, num <= optionCount + 1 {
+                if num <= optionCount {
+                    // Permission option
+                    let optionIndex = num - 1
+                    DispatchQueue.main.async { self.expansionState.clearPermission() }
+                    Task.detached {
+                        let result = try await CommandExecutor.execute(
+                            command: .selectOption, agent: agent, text: nil, optionIndex: optionIndex
+                        )
+                        if !result.success {
+                            DebugLog.shared.log("Permission option failed: \(result.error ?? "unknown")")
+                        }
+                    }
+                } else {
+                    // Go to Agent (last numbered option)
+                    DispatchQueue.main.async {
+                        self.expansionState.clearPermission()
+                        self.closePicker()
+                        DeepLinker.open(agent)
+                    }
+                }
+                return true
+            }
+            // Consume all other keys while popover is open
+            return true
+        }
+
         let agentCount = min(store.sortedTopLevelAgents.count, 9)
 
         // Escape — close picker
@@ -491,6 +529,45 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if event.keyCode == 124 {
             DispatchQueue.main.async {
                 self.expansionState.cycleForward(agentCount: agentCount)
+            }
+            return true
+        }
+
+        // Shift+Enter — show permission options for selected agent
+        if event.keyCode == 36 && event.modifierFlags.contains(.shift) {
+            let index = expansionState.selectedIndex
+            let agents = store.sortedTopLevelAgents
+            if index < agents.count {
+                let agent = agents[index]
+                guard agent.status == .permission, agent.isCmuxSession else {
+                    // Not eligible — fall through to deep-link
+                    DispatchQueue.main.async {
+                        self.closePicker()
+                        DeepLinker.open(agent)
+                    }
+                    return true
+                }
+                DispatchQueue.main.async {
+                    self.expansionState.isLoadingPermission = true
+                    self.expansionState.permissionAgent = agent
+                }
+                Task.detached {
+                    let surface = agent.cmuxSurface!
+                    let socketPath = agent.cmuxSocketPath ?? "/tmp/cmux.sock"
+                    let screen = CommandExecutor.readScreen(
+                        surface: surface, workspace: agent.cmuxWorkspace, socketPath: socketPath
+                    )
+                    let options = screen.map { CommandExecutor.parsePermissionOptions(from: $0) } ?? []
+                    await MainActor.run {
+                        if options.isEmpty {
+                            self.expansionState.clearPermission()
+                            self.closePicker()
+                            DeepLinker.open(agent)
+                        } else {
+                            self.expansionState.showPermission(for: agent, options: options)
+                        }
+                    }
+                }
             }
             return true
         }
