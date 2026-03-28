@@ -17,6 +17,7 @@ final class AgentStore: ObservableObject {
 
     /// Tracks the last-seen status per session so we can unsnooze on change.
     private var lastSeenStatus: [String: AgentStatus] = [:]
+    private var lastSeenEffectiveStatus: [String: AgentStatus] = [:]
     private var peekTimer: DispatchWorkItem?
 
     var ntfyScheduler: NtfyScheduler?
@@ -282,6 +283,22 @@ final class AgentStore: ObservableObject {
         // Sort by age: oldest agents first (stable left-to-right order)
         loaded.sort { ($0.createdAt ?? $0.updatedAt) < ($1.createdAt ?? $1.updatedAt) }
 
+        // Build parent-child relationships from parentSessionId
+        var newChildren: [String: [String]] = [:]
+        for agent in loaded {
+            if let parentId = agent.parentSessionId {
+                let parentKey = "\(agent.provider.rawValue):\(parentId)"
+                newChildren[parentKey, default: []].append(agent.id)
+            }
+        }
+
+        // Helper to resolve child Agent objects from the freshly-built relationships
+        let childrenOf: (String) -> [Agent] = { parentId in
+            (newChildren[parentId] ?? []).compactMap { childId in
+                loaded.first { $0.id == childId }
+            }
+        }
+
         // Unsnooze agents whose status changed and trigger peek
         var changedIds: Set<String> = []
         for agent in loaded {
@@ -292,11 +309,14 @@ final class AgentStore: ObservableObject {
             lastSeenStatus[agent.id] = agent.status
         }
 
-        // Play sound effects for status changes
+        // Play sound effects for status changes (suppress while delegating)
         if !changedIds.isEmpty {
             let changedAgents = loaded
                 .filter { changedIds.contains($0.id) }
-            soundPlayer?.playForChanges(changedAgents)
+                .filter { Agent.effectiveStatus(of: $0, children: childrenOf($0.id)) != .delegating }
+            if !changedAgents.isEmpty {
+                soundPlayer?.playForChanges(changedAgents)
+            }
         }
 
         // Pop in briefly when status changes and hideWhileCollapsed is on
@@ -307,9 +327,13 @@ final class AgentStore: ObservableObject {
         // Schedule or cancel notifications based on agent state
         for agent in loaded {
             let isSnoozed = snoozedSessionIds.contains(agent.id)
-            let notifiable = agent.status == .permission
+            let effective = Agent.effectiveStatus(of: agent, children: childrenOf(agent.id))
+            // Suppress notifications while delegating — defer until children complete
+            let notifiable = effective != .delegating && (
+                agent.status == .permission
                 || (agent.status == .waiting && !agent.isDone)
                 || (agent.status == .waiting && agent.isDone)
+            )
             if notifiable {
                 ntfyScheduler?.scheduleIfNeeded(for: agent, isSnoozed: isSnoozed)
             } else {
@@ -340,19 +364,37 @@ final class AgentStore: ObservableObject {
             hostAppIcons.removeValue(forKey: pid)
         }
 
-        // Build parent-child relationships from parentSessionId
-        var newChildren: [String: [String]] = [:]
-        for agent in loaded {
-            if let parentId = agent.parentSessionId {
-                let parentKey = "\(agent.provider.rawValue):\(parentId)"
-                newChildren[parentKey, default: []].append(agent.id)
-            }
-        }
-
         if loaded != agents || newChildren != childSessionIds {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                 agents = loaded
                 childSessionIds = newChildren
+            }
+
+            // Detect effective status changes (e.g. delegating → waiting/done)
+            // and play sounds for transitions not caught by raw status changes
+            for agent in loaded {
+                let kids = children(of: agent.id)
+                let effective = Agent.effectiveStatus(of: agent, children: kids)
+                let prev = lastSeenEffectiveStatus[agent.id]
+                lastSeenEffectiveStatus[agent.id] = effective
+
+                if let prev, prev != effective, !changedIds.contains(agent.id) {
+                    let proxy = Agent.fixture(
+                        sessionId: agent.sessionId,
+                        pid: agent.pid,
+                        cwd: agent.cwd,
+                        status: effective,
+                        waitReason: agent.waitReason,
+                        updatedAt: agent.updatedAt
+                    )
+                    soundPlayer?.playForChanges([proxy])
+                }
+            }
+
+            // Clean up stale entries
+            let effectiveActiveIds = Set(loaded.map(\.id))
+            lastSeenEffectiveStatus = lastSeenEffectiveStatus.filter {
+                effectiveActiveIds.contains($0.key)
             }
         }
     }
