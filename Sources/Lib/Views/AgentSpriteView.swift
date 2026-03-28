@@ -48,6 +48,7 @@ struct AgentSpriteView: View {
     @State private var prominentScale: CGFloat = 1.0
     @State private var prominentWiggle: Double = 0
     @State private var prominentOffsetY: CGFloat = 0
+    @State private var delegatingRotation: Double = 0
 
     var body: some View {
         ZStack {
@@ -89,6 +90,24 @@ struct AgentSpriteView: View {
                     .fill(Color.purple)
                     .frame(width: size * 0.25, height: size * 0.25)
                     .offset(x: size * 0.35, y: -size * 0.35)
+            }
+
+            // Delegating ring — spinning blue ring around the blob
+            if status == .delegating {
+                Circle()
+                    .trim(from: 0, to: 0.7)
+                    .stroke(
+                        AgentStatus.working.color(for: theme),
+                        style: StrokeStyle(lineWidth: size * 0.08, lineCap: .round)
+                    )
+                    .frame(width: size * 1.15, height: size * 1.15)
+                    .rotationEffect(.degrees(delegatingRotation))
+                    .onAppear {
+                        withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                            delegatingRotation = 360
+                        }
+                    }
+                    .transition(.opacity)
             }
         }
         .overlay(alignment: .bottomLeading) {
@@ -135,12 +154,15 @@ struct AgentSpriteView: View {
             startExpressionTimer()
         }
         .onChange(of: status) { newStatus in
+            if newStatus != .delegating {
+                delegatingRotation = 0
+            }
             startBounceTimer()
             startCompactTimer()
             if newStatus == .starting || (newStatus == .waiting && isDone) {
                 playWave()
             }
-            if prominentStateChangesEnabled && newStatus != .working && newStatus != .compacting {
+            if prominentStateChangesEnabled && newStatus != .working && newStatus != .compacting && newStatus != .delegating {
                 playProminentPop()
             }
         }
