@@ -92,16 +92,27 @@ struct AgentSpriteView: View {
                     .offset(x: size * 0.35, y: -size * 0.35)
             }
 
-            // Delegating ring — spinning blue ring around the blob
+            // Delegating ring — glowing segment traces the blob border
             if status == .delegating {
-                Circle()
-                    .trim(from: 0, to: 0.7)
-                    .stroke(
-                        AgentStatus.working.color(for: theme),
-                        style: StrokeStyle(lineWidth: size * 0.08, lineCap: .round)
+                let lineWidth = size * 0.08
+                let ringSize = size + lineWidth
+                let workingColor = AgentStatus.working.color(for: theme)
+                RoundedRectangle(cornerRadius: size * 0.2 + lineWidth)
+                    .stroke(workingColor, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .frame(width: ringSize, height: ringSize)
+                    .mask(
+                        AngularGradient(
+                            stops: [
+                                .init(color: .clear, location: 0),
+                                .init(color: .white, location: 0.3),
+                                .init(color: .white, location: 0.7),
+                                .init(color: .clear, location: 1.0),
+                            ],
+                            center: .center,
+                            startAngle: .degrees(delegatingRotation),
+                            endAngle: .degrees(delegatingRotation + 360)
+                        )
                     )
-                    .frame(width: size * 1.15, height: size * 1.15)
-                    .rotationEffect(.degrees(delegatingRotation))
                     .onAppear {
                         withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
                             delegatingRotation = 360
