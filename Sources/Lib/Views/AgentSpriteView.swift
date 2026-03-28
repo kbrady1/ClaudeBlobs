@@ -203,9 +203,6 @@ struct AgentSpriteView: View {
         if status == .permission && isAskingQuestion {
             return Color.orange
         }
-        if status == .delegating {
-            return AgentStatus.starting.color(for: theme)
-        }
         return status.color(for: theme)
     }
 
