@@ -558,6 +558,18 @@ struct HookScriptTests {
             #expect(r.status?["status"] as? String == "waiting")
         }
 
+        @Test("permission_prompt does NOT set parent to permission (subagent owns that)")
+        func permissionPromptIgnored() throws {
+            let h = try HookTestHelper()
+            let existing = makeStatus(status: "working")
+            let r = try h.runHook("hook-notification.sh", input: [
+                "notification_type": "permission_prompt",
+                "message": "Claude needs your permission to use Bash",
+            ], existingStatus: existing)
+            // Parent must stay working — PermissionRequest hook handles the subagent file
+            #expect(r.status?["status"] as? String == "working")
+        }
+
         @Test("overwrites starting status")
         func overwritesStarting() throws {
             let h = try HookTestHelper()

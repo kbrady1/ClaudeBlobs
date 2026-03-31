@@ -23,8 +23,13 @@ TOOL_USE_STR=$(format_tool_input "$TOOL_NAME" "$RAW_INPUT")
 CURRENT_STATUS=$(jq -r '.status // empty' "$STATUS_FILE" 2>/dev/null)
 
 if [ "$CURRENT_STATUS" = "permission" ]; then
-  debug_log_result
-  exit 0
+  STORED_PERM_TOOL=$(jq -r '.permissionTool // empty' "$STATUS_FILE" 2>/dev/null)
+  # ExitPlanMode is a plan approval — if other tools are firing, the plan was
+  # already approved and we should clear the permission state.
+  if [ "$STORED_PERM_TOOL" != "ExitPlanMode" ]; then
+    debug_log_result
+    exit 0
+  fi
 fi
 
 atomic_update "$STATUS_FILE" \

@@ -23,11 +23,16 @@ TS=$(now_ms)
 CURRENT_STATUS=$(jq -r '.status // empty' "$STATUS_FILE" 2>/dev/null)
 
 if [ "$CURRENT_STATUS" = "permission" ]; then
-  STORED_KEY=$(jq -r '.permissionKey // empty' "$STATUS_FILE" 2>/dev/null)
-  MY_KEY=$(printf '%s:%s' "$TOOL_NAME" "$RAW_INPUT" | md5 -q)
-  if [ "$MY_KEY" != "$STORED_KEY" ]; then
-    debug_log_result
-    exit 0
+  STORED_PERM_TOOL=$(jq -r '.permissionTool // empty' "$STATUS_FILE" 2>/dev/null)
+  # ExitPlanMode is a plan approval — any subsequent tool activity means the
+  # plan was approved, so clear permission state immediately.
+  if [ "$STORED_PERM_TOOL" != "ExitPlanMode" ]; then
+    STORED_KEY=$(jq -r '.permissionKey // empty' "$STATUS_FILE" 2>/dev/null)
+    MY_KEY=$(printf '%s:%s' "$TOOL_NAME" "$RAW_INPUT" | md5 -q)
+    if [ "$MY_KEY" != "$STORED_KEY" ]; then
+      debug_log_result
+      exit 0
+    fi
   fi
 fi
 

@@ -16,10 +16,10 @@ NOTIFICATION_TYPE=$(echo "$INPUT" | jq -r '.notification_type // empty')
 
 case "$NOTIFICATION_TYPE" in
   permission_prompt)
-    atomic_update "$STATUS_FILE" \
-      --arg status "permission" \
-      --argjson ts "$TS" \
-      '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .updatedAt = $ts'
+    # No-op: PermissionRequest hook already sets status="permission" on the correct
+    # (subagent) file. This Notification event arrives without agent_id, so it would
+    # hit the parent session file — which has no corresponding PostToolUse to clear it,
+    # causing the parent blob to get permanently stuck in permission state.
     ;;
   idle_prompt)
     # Ignored — Stop hook already sets the correct waiting status and waitReason
