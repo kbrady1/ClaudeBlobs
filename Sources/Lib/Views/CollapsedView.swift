@@ -13,6 +13,7 @@ struct CollapsedView: View {
     var prominentStateChangesEnabled: Bool = true
     var showAppIcons: Bool = false
     var hostAppIcons: [Int: NSImage] = [:]
+    var cronSessionIds: Set<String> = []
     var backgroundStyle: BackgroundStyle?
 
     var body: some View {
@@ -43,6 +44,7 @@ struct CollapsedView: View {
                         isMcpPermission: resolved == agent.status ? agent.isMcpPermission : (urgent?.isMcpPermission ?? false),
                         isGithubPermission: resolved == agent.status ? agent.isGithubPermission : (urgent?.isGithubPermission ?? false),
                         isGithubTool: effectiveIsGithubTool(agent),
+                        isCronSession: cronSessionIds.contains(agent.id),
                         isTaskJustCompleted: agent.isTaskJustCompleted,
                         isInterrupted: agent.isInterrupted,
                         isToolFailure: agent.isToolFailure,

@@ -10,6 +10,12 @@ struct AgentStatusSource: Equatable {
 final class AgentStore: ObservableObject {
     @Published var agents: [Agent] = []
     @Published var snoozedSessionIds: Set<String> = []
+    /// Session IDs that have an active cron/loop schedule. Persisted across launches.
+    @Published var cronSessionIds: Set<String> = {
+        Set(UserDefaults.standard.stringArray(forKey: "cronSessionIds") ?? [])
+    }() {
+        didSet { UserDefaults.standard.set(Array(cronSessionIds), forKey: "cronSessionIds") }
+    }
     /// Parent session ID → child session IDs (sub-agents linked by PID ancestry)
     @Published var childSessionIds: [String: [String]] = [:]
     /// Cached host app icons per PID (resolved once per agent).
@@ -40,6 +46,7 @@ final class AgentStore: ObservableObject {
             return (!hideWorkingAgents || effective.visibleWhenCollapsed)
                 && !snoozedSessionIds.contains($0.id)
                 && !subs.contains($0.id)
+                && !cronIsQuiet($0)
         }
         if sortByPriority {
             result.sort {
@@ -63,14 +70,14 @@ final class AgentStore: ObservableObject {
         return agents.filter { !subs.contains($0.id) }
     }
 
-    /// Top-level agents sorted with snoozed ones at the end.
+    /// Top-level agents sorted with snoozed and quiet cron sessions at the end.
     var sortedTopLevelAgents: [Agent] {
         let snoozed = snoozedSessionIds
         let prioritySort = sortByPriority
         return topLevelAgents.sorted { a, b in
-            let aSnooze = snoozed.contains(a.id)
-            let bSnooze = snoozed.contains(b.id)
-            if aSnooze != bSnooze { return !aSnooze }
+            let aDemoted = snoozed.contains(a.id) || cronIsQuiet(a)
+            let bDemoted = snoozed.contains(b.id) || cronIsQuiet(b)
+            if aDemoted != bDemoted { return !aDemoted }
             if prioritySort {
                 let aP = sortKey(for: a)
                 let bP = sortKey(for: b)
@@ -102,6 +109,22 @@ final class AgentStore: ObservableObject {
     func children(of id: String) -> [Agent] {
         guard let ids = childSessionIds[id] else { return [] }
         return ids.compactMap { childId in agents.first { $0.id == childId } }
+    }
+
+    /// Whether the agent has an active cron/loop schedule.
+    func isCronSession(_ agent: Agent) -> Bool {
+        cronSessionIds.contains(agent.id)
+    }
+
+    /// Whether a cron session is in a quiet state (waiting+done, no errors) and should be auto-hidden.
+    func cronIsQuiet(_ agent: Agent) -> Bool {
+        guard cronSessionIds.contains(agent.id) else { return false }
+        let effective = effectiveStatus(of: agent)
+        // Quiet = waiting+done with no tool failure, or working/compacting/starting/delegating
+        if effective == .permission { return false }
+        if effective == .waiting && !agent.isDone { return false }
+        if agent.toolFailure != nil { return false }
+        return true
     }
 
     func snooze(_ agent: Agent) {
@@ -299,6 +322,15 @@ final class AgentStore: ObservableObject {
             }
         }
 
+        // Detect cron sessions from tool use
+        for agent in loaded {
+            if agent.isCronCreate {
+                cronSessionIds.insert(agent.id)
+            } else if agent.isCronDelete {
+                cronSessionIds.remove(agent.id)
+            }
+        }
+
         // Unsnooze agents whose status changed and trigger peek
         var changedIds: Set<String> = []
         for agent in loaded {
@@ -329,7 +361,9 @@ final class AgentStore: ObservableObject {
             let isSnoozed = snoozedSessionIds.contains(agent.id)
             let effective = Agent.effectiveStatus(of: agent, children: childrenOf(agent.id))
             // Suppress notifications while delegating — defer until children complete
-            let notifiable = effective != .delegating && (
+            // Suppress notifications for quiet cron sessions
+            let isCronQuiet = cronSessionIds.contains(agent.id) && cronIsQuiet(agent)
+            let notifiable = !isCronQuiet && effective != .delegating && (
                 agent.status == .permission
                 || (agent.status == .waiting && !agent.isDone)
                 || (agent.status == .waiting && agent.isDone)
@@ -345,6 +379,7 @@ final class AgentStore: ObservableObject {
         let activeIds = Set(loaded.map(\.id))
         let activeSessionIds = Set(loaded.map(\.sessionId))
         snoozedSessionIds = snoozedSessionIds.intersection(activeIds)
+        cronSessionIds = cronSessionIds.intersection(activeIds)
         ntfyScheduler?.cleanupGone(activeIds: activeIds)
 
         // Prune custom names for sessions that no longer exist

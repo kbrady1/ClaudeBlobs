@@ -24,6 +24,7 @@ struct AgentSpriteView: View {
     var isMcpPermission: Bool = false
     var isGithubPermission: Bool = false
     var isGithubTool: Bool = false
+    var isCronSession: Bool = false
     var isTaskJustCompleted: Bool = false
     var isInterrupted: Bool = false
     var isToolFailure: Bool = false
@@ -90,6 +91,15 @@ struct AgentSpriteView: View {
                     .fill(Color.purple)
                     .frame(width: size * 0.25, height: size * 0.25)
                     .offset(x: size * 0.35, y: -size * 0.35)
+            }
+
+            // Cron/loop clock badge (fallback when no working/permission icon is showing)
+            if isCronSession && !isSnoozed && status != .working && status != .permission && showingFailureIcon == nil {
+                Image(systemName: "clock.fill")
+                    .font(.system(size: accentFont, weight: .heavy))
+                    .foregroundColor(.white)
+                    .shadow(color: .black, radius: 2)
+                    .offset(x: size * 0.35, y: size * 0.35)
             }
 
             // Delegating ring — glowing segment traces the blob border
@@ -346,7 +356,7 @@ struct AgentSpriteView: View {
                 .shadow(color: .black, radius: 2)
                 .offset(x: offset, y: offset)
         } else {
-            Image(systemName: "ellipsis.bubble.fill")
+            Image(systemName: isCronSession ? "clock.fill" : "ellipsis.bubble.fill")
                 .font(.system(size: accentFont, weight: .heavy))
                 .foregroundColor(.white)
                 .shadow(color: .black, radius: 2)

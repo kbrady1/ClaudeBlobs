@@ -500,6 +500,16 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         return tool.hasPrefix("mcp__")
     }
 
+    /// Whether the last tool use was CronCreate (starting a loop).
+    var isCronCreate: Bool {
+        lastToolUse?.hasPrefix("CronCreate") == true
+    }
+
+    /// Whether the last tool use was CronDelete (stopping a loop).
+    var isCronDelete: Bool {
+        lastToolUse?.hasPrefix("CronDelete") == true
+    }
+
     /// Whether the permission is for a GitHub-related tool.
     var isGithubPermission: Bool {
         guard let tool = lastToolUse else { return false }
