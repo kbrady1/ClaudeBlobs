@@ -52,8 +52,11 @@ On first launch the app will ask to install hooks into your Claude Code settings
 
 ### Agent Sprites
 
-- Animated faces show agent state: **starting** (happy), **working** (focused), **waiting** (alert), **permission needed** (angry)
+- Animated faces show agent state: **starting** (happy), **working** (focused), **waiting** (alert), **permission needed** (angry), **compacting** (purple — context window shrinking), **delegating** (green ring — parent handed off to subagent)
 - Faces blink, look around, and animate based on state
+- Agents that go idle show X-eyes and eventually desaturate (configurable threshold)
+- **Sub-agents** appear as mini blobs alongside their parent; a child's status bubbles up to the parent (e.g., a child needing permission turns the parent red too)
+- **Rename** an agent by pressing **R** while it's selected in the picker, or right-click → "Rename"
 - Snooze agents to gray them out; dismiss to remove entirely
 
 Each sprite shows a small overlay icon indicating what the agent is doing:
@@ -72,12 +75,15 @@ Each sprite shows a small overlay icon indicating what the agent is doing:
 | Warning triangle | Tool error (flashes 3s) |
 | Purple badge | Push notification sent |
 | Fire | API error or outage |
+| Clock badge | Loop/cron schedule active |
+| Blue spinning ring | Delegating to subagent |
 
 ### Keyboard Navigation
 
 - **Ctrl+Option+A** — global hotkey to open the agent picker (customizable)
 - **Tab / Shift+Tab / Arrow keys** — cycle through agents
 - **Enter** — jump to the selected agent
+- **Shift+Enter** — open the permission popover for the selected agent (cmux only)
 - **Backspace** — snooze (first press) or dismiss (second press)
 - **Escape** — close the picker
 
@@ -85,36 +91,43 @@ Each sprite shows a small overlay icon indicating what the agent is doing:
 
 Clicking an agent routes you back to its source. The level of support depends on the terminal:
 
-| Terminal | Activate app | Select tab | Select surface | Method |
-|----------|:---:|:---:|:---:|--------|
-| **cmux** | :white_check_mark: | :white_check_mark: | :white_check_mark: | JSON-RPC (workspace + surface) |
-| **iTerm2** | :white_check_mark: | :white_check_mark: | | AppleScript (by TTY) |
-| **Terminal.app** | :white_check_mark: | :white_check_mark: | | AppleScript (by TTY) |
-| **Ghostty** | :white_check_mark: | :white_check_mark: | | AppleScript (by working directory) |
-| **VS Code** | :white_check_mark: | | | URL scheme |
-| **Cursor** | :white_check_mark: | | | URL scheme |
-| **Kitty** | :white_check_mark: | | | |
-| **WezTerm** | :white_check_mark: | | | |
-| **Warp** | :white_check_mark: | | | |
-| **Hyper** | :white_check_mark: | | | |
-| **Claude Desktop** | :white_check_mark: | | | |
+| Terminal | Activate app | Select tab | Select surface | Permission popover | Method |
+|----------|:---:|:---:|:---:|:---:|--------|
+| **cmux** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | JSON-RPC (workspace + surface) |
+| **iTerm2** | :white_check_mark: | :white_check_mark: | | | AppleScript (by TTY) |
+| **Terminal.app** | :white_check_mark: | :white_check_mark: | | | AppleScript (by TTY) |
+| **Ghostty** | :white_check_mark: | :white_check_mark: | | | AppleScript (by working directory) |
+| **VS Code** | :white_check_mark: | | | | URL scheme |
+| **Cursor** | :white_check_mark: | | | | URL scheme |
+| **Kitty** | :white_check_mark: | | | | |
+| **WezTerm** | :white_check_mark: | | | | |
+| **Warp** | :white_check_mark: | | | | |
+| **Hyper** | :white_check_mark: | | | | |
+| **Claude Desktop** | :white_check_mark: | | | | |
 
-cmux provides the deepest integration — it can navigate to the exact workspace, tab, and surface (split pane) where the agent is running. Any terminal not listed above still gets app-level activation via process tree detection.
+cmux provides the deepest integration — it can navigate to the exact workspace, tab, and surface (split pane) where the agent is running. With cmux, clicking a permission-state agent opens a popover showing the full tool request and a "Go to Agent" button to jump directly to the permission prompt. Any terminal not listed above still gets app-level activation via process tree detection.
 
-### Menu Bar
+### Loop / Cron Support
 
-Right-click (or click) the menu bar icon for:
+Agents that create a loop or cron schedule (via the `/loop` or `/schedule` commands) get a clock badge on their sprite. Loop sessions auto-hide when idle and quiet (done, no errors) and reappear if errors occur. Loop state persists across app restarts.
 
-- **Hide/Show Agents** — toggle the floating panel
-- **Show All Agents** — include working agents in the collapsed view
-- **Dismiss All Agents** — snooze everything at once
-- **Debug Mode** — log to `~/Library/Logs/ClaudeBlobs/debug.log`
-- **Push Notifications** — toggle ntfy.sh integration
-- **Notification Settings** — configure endpoint, topic, delay, and priorities
-- **Change Hotkey** — re-bind the global picker hotkey
-- **Reinstall Claude Code Hooks** — re-install hooks if your Claude Code settings changed
-- **Reinstall OpenCode Plugin** — copy the latest ClaudeBlobs plugin into `~/.config/opencode/plugins/`
-- **Uninstall Hooks & Quit** — clean removal of all hooks and status files
+**Tip:** Loop commands should explicitly ask the user a question or request permission when action is required — this ensures the agent surfaces in the HUD at the right time.
+
+### Sound Effects
+
+ClaudeBlobs can play per-state audio alerts: a sound when an agent starts, waits, requests permission, or finishes. Toggle and configure sounds in **Alert Settings** from the menu bar.
+
+### Customization
+
+All settings are accessible from the menu bar icon:
+
+- **Color Themes** — 7 built-in themes: Traffic Light, Ocean Depths, Sunset Boulevard, Neon Nights, Forest Floor, Candy Apple, Firecracker
+- **Push Notifications** — [ntfy.sh](https://ntfy.sh) integration with configurable endpoint, topic, delay, and per-state priorities
+- **Sound Effects** — per-state audio alerts, toggleable
+- **Idle Threshold** — how long before an idle agent shows X-eyes and desaturates
+- **Screen Placement** — show blobs on all displays, primary only, or all except primary
+- **Visibility** — hide working agents, hide when collapsed, sort by priority, prominent state change animations
+- **App Icons** — show host app icons on agent cards (always, when expanded, or never)
 
 ## How It Works
 
@@ -126,17 +139,6 @@ ClaudeBlobs collects agent state from two providers:
 The app watches both directories and renders a single combined HUD.
 
 Deep linking is determined by process ancestry — the app walks the process tree from the agent PID to find whether it belongs to a cmux session, a terminal emulator, an editor, or Claude Desktop.
-
-## Development
-
-| Command | Description |
-|---------|-------------|
-| `make build` | Release build only |
-| `make bundle` | Build + create .app bundle |
-| `make run` | Bundle + launch |
-| `make restart` | Build, kill running instance, relaunch |
-| `make stop` | Kill running instance |
-| `make install` | Copy bundle to /Applications |
 
 ## Uninstall
 

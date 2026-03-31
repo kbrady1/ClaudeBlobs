@@ -58,6 +58,6 @@ atomic_update "$STATUS_FILE" \
   --arg waitReason "$WAIT_REASON" \
   --arg rawLastMessage "$RAW_MSG" \
   --argjson ts "$TS" \
-  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .waitReason = $waitReason | .rawLastMessage = (if $rawLastMessage == "" then null else $rawLastMessage end) | .updatedAt = $ts'
+  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .waitReason = $waitReason | .rawLastMessage = (if $rawLastMessage == "" then null else $rawLastMessage end) | .toolFailure = null | .updatedAt = $ts'
 
 debug_log_result

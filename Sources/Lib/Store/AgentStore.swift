@@ -120,8 +120,9 @@ final class AgentStore: ObservableObject {
     func cronIsQuiet(_ agent: Agent) -> Bool {
         guard cronSessionIds.contains(agent.id) else { return false }
         let effective = effectiveStatus(of: agent)
-        // Quiet = waiting+done with no tool failure, or working/compacting/starting/delegating
+        // Quiet = waiting+done with no tool failure, or compacting/starting/delegating
         if effective == .permission { return false }
+        if effective == .working { return false }
         if effective == .waiting && !agent.isDone { return false }
         if agent.toolFailure != nil { return false }
         return true
