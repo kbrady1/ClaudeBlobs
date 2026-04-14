@@ -20,9 +20,11 @@ struct CollapsedView: View {
         HStack(spacing: 8) {
             ForEach(agents.prefix(10)) { agent in
                 let isHidden = hideWhileCollapsed && !peekingIds.contains(agent.id)
+                let resolved = effectiveStatus(agent)
+                let urgent = mostUrgentChild(agent)
+                let kids = childAgents[agent.id] ?? []
+                let activeKids = kids.filter { $0.status == .working || $0.status == .starting }
                 WavingEntrance(shouldWave: newAgentIds.contains(agent.id)) {
-                    let resolved = effectiveStatus(agent)
-                    let urgent = mostUrgentChild(agent)
                     AgentSpriteView(
                         status: resolved,
                         size: 18,
@@ -51,6 +53,16 @@ struct CollapsedView: View {
                         isAPIError: agent.isAPIError,
                         appIcon: showAppIcons ? hostAppIcons[agent.pid] : nil
                     )
+                    .overlay(alignment: .bottom) {
+                        if resolved == .delegating && !activeKids.isEmpty {
+                            HStack(spacing: 2) {
+                                ForEach(activeKids.prefix(3)) { _ in
+                                    BlinkingDot(color: AgentStatus.working.color(for: theme))
+                                }
+                            }
+                            .offset(y: 2)
+                        }
+                    }
                 }
                 .opacity(isHidden ? 0 : 1)
                 .animation(.easeInOut(duration: 0.3), value: isHidden)
@@ -168,6 +180,24 @@ private struct WavingEntrance<Content: View>: View {
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
                     withAnimation(.easeInOut(duration: 0.15)) { waveAngle = 0 }
+                }
+            }
+    }
+}
+
+/// A small dot that blinks on and off.
+private struct BlinkingDot: View {
+    let color: Color
+    @State private var visible = true
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 6, height: 6)
+            .opacity(visible ? 1 : 0.15)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                    visible = false
                 }
             }
     }

@@ -49,7 +49,6 @@ struct AgentSpriteView: View {
     @State private var prominentScale: CGFloat = 1.0
     @State private var prominentWiggle: Double = 0
     @State private var prominentOffsetY: CGFloat = 0
-    @State private var delegatingRotation: Double = 0
 
     var body: some View {
         ZStack {
@@ -102,34 +101,6 @@ struct AgentSpriteView: View {
                     .offset(x: size * 0.35, y: size * 0.35)
             }
 
-            // Delegating ring — glowing segment traces the blob border
-            if status == .delegating {
-                let lineWidth = size * 0.08
-                let ringSize = size + lineWidth
-                let workingColor = AgentStatus.working.color(for: theme)
-                RoundedRectangle(cornerRadius: size * 0.2 + lineWidth)
-                    .stroke(workingColor, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                    .frame(width: ringSize, height: ringSize)
-                    .mask(
-                        AngularGradient(
-                            stops: [
-                                .init(color: .clear, location: 0),
-                                .init(color: .white, location: 0.3),
-                                .init(color: .white, location: 0.7),
-                                .init(color: .clear, location: 1.0),
-                            ],
-                            center: .center,
-                            startAngle: .degrees(delegatingRotation),
-                            endAngle: .degrees(delegatingRotation + 360)
-                        )
-                    )
-                    .onAppear {
-                        withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                            delegatingRotation = 360
-                        }
-                    }
-                    .transition(.opacity)
-            }
         }
         .overlay(alignment: .bottomLeading) {
             if let appIcon {
@@ -175,9 +146,6 @@ struct AgentSpriteView: View {
             startExpressionTimer()
         }
         .onChange(of: status) { newStatus in
-            if newStatus != .delegating {
-                delegatingRotation = 0
-            }
             startBounceTimer()
             startCompactTimer()
             if newStatus == .starting || (newStatus == .waiting && isDone) {

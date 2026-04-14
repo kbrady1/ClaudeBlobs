@@ -189,7 +189,11 @@ struct ExpandedView: View {
 
     /// Whether any visible agent has child sub-agents (used for uniform card height).
     private var anyAgentHasChildren: Bool {
-        agents.prefix(9).contains { (childAgents[$0.id] ?? []).count > 1 }
+        agents.prefix(9).contains { agent in
+            let kids = childAgents[agent.id] ?? []
+            let isDelegating = effectiveStatus(agent) == .delegating
+            return isDelegating ? !kids.isEmpty : kids.count > 1
+        }
     }
 
     private func agentCard(_ agent: Agent, isSelected: Bool = false) -> some View {
@@ -235,7 +239,7 @@ struct ExpandedView: View {
                     if anyAgentHasChildren {
                         Spacer()
                             .overlay {
-                                if kids.count > 1 {
+                                if (resolved == .delegating ? !kids.isEmpty : kids.count > 1) {
                                     HStack(spacing: 2) {
                                         ForEach(kids.prefix(3)) { child in
                                             MiniAgentBlob(status: child.status, staleness: child.staleness, theme: theme)

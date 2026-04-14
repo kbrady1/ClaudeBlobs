@@ -29,10 +29,12 @@ bundle-debug: build-debug
 	rm -rf "$(DEBUG_BUNDLE_DIR)"
 	mkdir -p "$(DEBUG_BUNDLE_DIR)/Contents/MacOS"
 	mkdir -p "$(DEBUG_BUNDLE_DIR)/Contents/Resources/hooks"
+	mkdir -p "$(DEBUG_BUNDLE_DIR)/Contents/Resources/opencode-plugin"
 	cp "$(DEBUG_BUILD_DIR)/ClaudeBlobs" "$(DEBUG_BUNDLE_DIR)/Contents/MacOS/"
 	cp Resources/Info.plist "$(DEBUG_BUNDLE_DIR)/Contents/"
 	cp Resources/hooks/*.sh "$(DEBUG_BUNDLE_DIR)/Contents/Resources/hooks/"
 	chmod +x "$(DEBUG_BUNDLE_DIR)/Contents/Resources/hooks/"*.sh
+	cp Resources/opencode-plugin/claudeblobs-opencode.js "$(DEBUG_BUNDLE_DIR)/Contents/Resources/opencode-plugin/"
 	swift Resources/generate-icon.swift "$(DEBUG_BUNDLE_DIR)/Contents/Resources/AppIcon.icns"
 
 install: bundle
