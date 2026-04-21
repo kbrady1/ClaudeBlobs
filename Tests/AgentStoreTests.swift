@@ -183,4 +183,25 @@ struct AgentStoreTests {
         #expect(store.topLevelAgents.count == 1)
         #expect(store.topLevelAgents.first?.sessionId == "parent")
     }
+
+    @Test func hidesHeadlessClaudeInvocations() throws {
+        let interactive = Agent.fixture(sessionId: "interactive", pid: 1001, status: .working)
+        let headless = Agent.fixture(sessionId: "headless", pid: 2002, status: .working)
+        let subagent = Agent.fixture(sessionId: "sub", pid: 0, status: .working)
+        for agent in [interactive, headless, subagent] {
+            let data = try JSONEncoder().encode(agent)
+            try data.write(to: tmpDir.appendingPathComponent("\(agent.sessionId).json"))
+        }
+
+        let store = AgentStore(
+            statusDirectory: tmpDir,
+            enableWatcher: false,
+            isProcessAlive: { _ in true },
+            isHeadlessInvocation: { pid in pid == 2002 }
+        )
+        store.reload()
+
+        let ids = Set(store.agents.map(\.sessionId))
+        #expect(ids == ["interactive", "sub"])
+    }
 }

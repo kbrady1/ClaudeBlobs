@@ -33,6 +33,7 @@ final class AgentStore: ObservableObject {
     private var watchers: [StatusFileWatcher] = []
     private let fileManager = FileManager.default
     private let isProcessAlive: (Int) -> Bool
+    private let isHeadlessInvocation: (Int) -> Bool
 
     /// All session IDs that are children of another agent.
     private var subAgentIds: Set<String> {
@@ -203,7 +204,10 @@ final class AgentStore: ObservableObject {
         statusDirectory: URL? = nil,
         statusSources: [AgentStatusSource]? = nil,
         enableWatcher: Bool = true,
-        isProcessAlive: @escaping (Int) -> Bool = { pid in kill(Int32(pid), 0) == 0 }
+        isProcessAlive: @escaping (Int) -> Bool = { pid in kill(Int32(pid), 0) == 0 },
+        isHeadlessInvocation: @escaping (Int) -> Bool = { pid in
+            ProcessTree.isHeadlessClaudeInvocation(pid: Int32(pid))
+        }
     ) {
         if let statusSources {
             self.statusSources = statusSources
@@ -215,6 +219,7 @@ final class AgentStore: ObservableObject {
             }
         }
         self.isProcessAlive = isProcessAlive
+        self.isHeadlessInvocation = isHeadlessInvocation
 
         if enableWatcher {
             for source in self.statusSources {
@@ -269,6 +274,12 @@ final class AgentStore: ObservableObject {
                 }
             }
             return alive
+        }
+
+        // Hide headless `claude -p` invocations (e.g. Maestro heal steps spawned by another agent).
+        // pid 0 sub-agents are exempt — they're tracked via parentSessionId, not argv.
+        loaded = loaded.filter { agent in
+            agent.pid == 0 || !isHeadlessInvocation(agent.pid)
         }
 
         // Deduplicate by PID — resumed sessions create a new session ID
