@@ -31,6 +31,8 @@ struct AgentSpriteView: View {
     var isAPIError: Bool = false
     var appIcon: NSImage? = nil
     var appIconShowsBorder: Bool = false
+    /// Render the blob with a tinted glass effect (expanded view only).
+    var useGlassBlob: Bool = false
 
     @State private var animationPhase: CGFloat = 0
     @State private var expressionFrame: Int = 0
@@ -52,9 +54,7 @@ struct AgentSpriteView: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.2)
-                .fill(backgroundColor)
-                .frame(width: size, height: size)
+            blobShape
             faceView
                 .frame(width: size * 0.7, height: size * 0.5)
 
@@ -200,6 +200,21 @@ struct AgentSpriteView: View {
                 exploringTimer?.cancel()
                 showExploringAccent = false
             }
+        }
+    }
+
+    @ViewBuilder
+    private var blobShape: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.2)
+        if useGlassBlob, #available(macOS 26.0, *) {
+            shape
+                .fill(backgroundColor.opacity(0.9))
+                .frame(width: size, height: size)
+                .glassEffect(.regular.tint(backgroundColor.opacity(0.9)), in: shape)
+        } else {
+            shape
+                .fill(backgroundColor)
+                .frame(width: size, height: size)
         }
     }
 

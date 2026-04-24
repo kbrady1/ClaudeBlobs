@@ -283,7 +283,8 @@ struct ExpandedView: View {
                         isToolFailure: agent.isToolFailure,
                         isAPIError: agent.isAPIError,
                         appIcon: showAppIcons ? hostAppIcons[agent.pid] : nil,
-                        appIconShowsBorder: true
+                        appIconShowsBorder: true,
+                        useGlassBlob: true
                     )
                     .frame(width: 48, height: 44)
 
