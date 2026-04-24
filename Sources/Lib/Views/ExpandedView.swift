@@ -133,28 +133,80 @@ struct ExpandedView: View {
         .background(
             Group {
                 if !displayAgents.isEmpty {
-                    switch backgroundStyle {
-                    case .color(let color):
-                        UnevenRoundedRectangle(
+                    ZStack {
+                        let shape = UnevenRoundedRectangle(
                             topLeadingRadius: 0,
                             bottomLeadingRadius: 20,
                             bottomTrailingRadius: 20,
                             topTrailingRadius: 0
                         )
-                        .fill(color)
-                    case .material:
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: 0,
-                            bottomLeadingRadius: 20,
-                            bottomTrailingRadius: 20,
-                            topTrailingRadius: 0
-                        )
-                        .fill(.ultraThinMaterial)
+                        switch backgroundStyle {
+                        case .color(let color):
+                            shape.fill(color)
+                        case .material:
+                            shape.fill(.ultraThinMaterial)
+                        case .glass:
+                            if #available(macOS 26.0, *) {
+                                shape
+                                    .fill(.clear)
+                                    .glassEffect(.regular, in: shape)
+                            } else {
+                                shape.fill(.ultraThinMaterial)
+                            }
+                        case .glassClear:
+                            if #available(macOS 26.0, *) {
+                                shape
+                                    .fill(.clear)
+                                    .glassEffect(.clear, in: shape)
+                            } else {
+                                shape.fill(.ultraThinMaterial)
+                            }
+                        }
+                        if !backgroundStyle.isGlass {
+                            BorderShape()
+                                .stroke(borderColor, lineWidth: 1)
+                        }
                     }
                 }
             }
-            .padding(.top, -notchInset)
+            // Push background up under the notch/screen edge. For glass, add an extra
+            // few pixels so glassEffect's intrinsic top border is clipped off-screen.
+            .padding(.top, -(notchInset + (backgroundStyle.isGlass ? 4 : 0)))
         )
+    }
+
+    private var borderColor: Color {
+        switch backgroundStyle {
+        case .color(let color):
+            return ExpandedView.shadedBorderColor(from: color)
+        case .material, .glass, .glassClear:
+            return Color.white.opacity(0.15)
+        }
+    }
+
+    private static func shadedBorderColor(from color: Color) -> Color {
+        let nsColor = NSColor(color).usingColorSpace(.sRGB) ?? NSColor.black
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        nsColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+        let luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        // For very dark backgrounds, lighten more so the border is still visible.
+        // For lighter backgrounds, shade slightly darker.
+        let delta: CGFloat
+        let direction: CGFloat
+        if luminance < 0.15 {
+            delta = 0.18
+            direction = 1
+        } else if luminance < 0.5 {
+            delta = 0.12
+            direction = 1
+        } else {
+            delta = 0.12
+            direction = -1
+        }
+        let nr = max(0, min(1, r + delta * direction))
+        let ng = max(0, min(1, g + delta * direction))
+        let nb = max(0, min(1, b + delta * direction))
+        return Color(red: nr, green: ng, blue: nb)
     }
 
     private func showPermissionHintIfNeeded() {
@@ -320,6 +372,33 @@ struct ExpandedView: View {
 
 extension Notification.Name {
     static let renameSelectedAgent = Notification.Name("renameSelectedAgent")
+}
+
+/// Border that draws only on the left, right, and bottom edges (no top border).
+private struct BorderShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let radius: CGFloat = 20
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - radius))
+        path.addArc(
+            center: CGPoint(x: rect.minX + radius, y: rect.maxY - radius),
+            radius: radius,
+            startAngle: .degrees(180),
+            endAngle: .degrees(90),
+            clockwise: true
+        )
+        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.maxY))
+        path.addArc(
+            center: CGPoint(x: rect.maxX - radius, y: rect.maxY - radius),
+            radius: radius,
+            startAngle: .degrees(90),
+            endAngle: .degrees(0),
+            clockwise: true
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        return path
+    }
 }
 
 /// Popover for renaming a blob.

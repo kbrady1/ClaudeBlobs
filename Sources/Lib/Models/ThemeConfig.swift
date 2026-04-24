@@ -19,8 +19,13 @@ final class ThemeConfig: ObservableObject {
         }
     }
 
-    @Published var backgroundMaterial: Bool {
-        didSet { UserDefaults.standard.set(backgroundMaterial, forKey: "backgroundMaterial") }
+    @Published var backgroundKind: BackgroundKind {
+        didSet { UserDefaults.standard.set(backgroundKind.rawValue, forKey: "backgroundKind") }
+    }
+
+    /// When false, the background is only drawn while the HUD is expanded.
+    @Published var backgroundShownWhenCollapsed: Bool {
+        didSet { UserDefaults.standard.set(backgroundShownWhenCollapsed, forKey: "backgroundShownWhenCollapsed") }
     }
 
     @Published var prominentStateChangesDisabled: Bool {
@@ -31,7 +36,19 @@ final class ThemeConfig: ObservableObject {
         let raw = UserDefaults.standard.string(forKey: "colorTheme") ?? ""
         self.selectedTheme = ColorTheme(rawValue: raw) ?? .trafficLight
         self.backgroundEnabled = UserDefaults.standard.bool(forKey: "collapsedBackgroundEnabled")
-        self.backgroundMaterial = UserDefaults.standard.bool(forKey: "backgroundMaterial")
+        if let raw = UserDefaults.standard.string(forKey: "backgroundKind"),
+           let kind = BackgroundKind(rawValue: raw) {
+            self.backgroundKind = kind
+        } else if UserDefaults.standard.bool(forKey: "backgroundMaterial") {
+            self.backgroundKind = .material
+        } else {
+            self.backgroundKind = .color
+        }
+        if UserDefaults.standard.object(forKey: "backgroundShownWhenCollapsed") != nil {
+            self.backgroundShownWhenCollapsed = UserDefaults.standard.bool(forKey: "backgroundShownWhenCollapsed")
+        } else {
+            self.backgroundShownWhenCollapsed = true
+        }
         self.prominentStateChangesDisabled = UserDefaults.standard.bool(forKey: "prominentStateChangesDisabled")
         if let data = UserDefaults.standard.data(forKey: "collapsedBackgroundColor"),
            let nsColor = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data) {

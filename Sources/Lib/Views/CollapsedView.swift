@@ -84,26 +84,39 @@ struct CollapsedView: View {
         .background(
             Group {
                 if let backgroundStyle, !agents.isEmpty {
+                    let shape = UnevenRoundedRectangle(
+                        topLeadingRadius: 0,
+                        bottomLeadingRadius: 12,
+                        bottomTrailingRadius: 12,
+                        topTrailingRadius: 0
+                    )
                     switch backgroundStyle {
                     case .color(let color):
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: 0,
-                            bottomLeadingRadius: 12,
-                            bottomTrailingRadius: 12,
-                            topTrailingRadius: 0
-                        )
-                        .fill(color)
+                        shape.fill(color)
                     case .material:
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: 0,
-                            bottomLeadingRadius: 12,
-                            bottomTrailingRadius: 12,
-                            topTrailingRadius: 0
-                        )
-                        .fill(.ultraThinMaterial)
+                        shape.fill(.ultraThinMaterial)
+                    case .glass:
+                        if #available(macOS 26.0, *) {
+                            shape
+                                .fill(.clear)
+                                .glassEffect(.regular, in: shape)
+                        } else {
+                            shape.fill(.ultraThinMaterial)
+                        }
+                    case .glassClear:
+                        if #available(macOS 26.0, *) {
+                            shape
+                                .fill(.clear)
+                                .glassEffect(.clear, in: shape)
+                        } else {
+                            shape.fill(.ultraThinMaterial)
+                        }
                     }
                 }
             }
+            // For glass styles, push the background up so glassEffect's intrinsic
+            // top border is clipped against the panel/screen edge.
+            .padding(.top, (backgroundStyle?.isGlass == true) ? -4 : 0)
         )
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: agents.map(\.id))
     }

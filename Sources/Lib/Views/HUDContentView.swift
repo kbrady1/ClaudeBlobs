@@ -124,7 +124,12 @@ struct HUDContentView: View {
     }
 
     private var resolvedBackgroundStyle: BackgroundStyle {
-        themeConfig.backgroundMaterial ? .material : .color(themeConfig.backgroundColor)
+        switch themeConfig.backgroundKind {
+        case .color: return .color(themeConfig.backgroundColor)
+        case .material: return .material
+        case .glass: return .glass
+        case .glassClear: return .glassClear
+        }
     }
 
     @ViewBuilder
@@ -189,7 +194,7 @@ struct HUDContentView: View {
                 showAppIcons: store.appIconVisibility == .always,
                 hostAppIcons: store.hostAppIcons,
                 cronSessionIds: store.cronSessionIds,
-                backgroundStyle: themeConfig.backgroundEnabled ? resolvedBackgroundStyle : nil
+                backgroundStyle: (themeConfig.backgroundEnabled && themeConfig.backgroundShownWhenCollapsed) ? resolvedBackgroundStyle : nil
             )
             .transition(.opacity.combined(with: .scale(scale: 1.05, anchor: .top)))
         }

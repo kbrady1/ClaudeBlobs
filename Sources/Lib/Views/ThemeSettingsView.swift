@@ -3,6 +3,14 @@ import SwiftUI
 struct ThemeSettingsView: View {
     @ObservedObject var config: ThemeConfig
 
+    private var availableBackgroundKinds: [BackgroundKind] {
+        if #available(macOS 26.0, *) {
+            return BackgroundKind.allCases
+        } else {
+            return BackgroundKind.allCases.filter { $0 != .glass && $0 != .glassClear }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(ColorTheme.allCases, id: \.self) { theme in
@@ -46,13 +54,22 @@ struct ThemeSettingsView: View {
             .padding(.horizontal, 12)
 
             if config.backgroundEnabled {
-                Toggle(isOn: $config.backgroundMaterial) {
-                    Text("Material (blur)")
+                HStack {
+                    Text("Style")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Picker("", selection: $config.backgroundKind) {
+                        ForEach(availableBackgroundKinds, id: \.self) { kind in
+                            Text(kind.displayName).tag(kind)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 180)
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 4)
 
-                if !config.backgroundMaterial {
+                if config.backgroundKind == .color {
                     HStack {
                         Text("Color")
                             .foregroundColor(.secondary)
@@ -62,6 +79,12 @@ struct ThemeSettingsView: View {
                     .padding(.horizontal, 12)
                     .padding(.top, 4)
                 }
+
+                Toggle(isOn: $config.backgroundShownWhenCollapsed) {
+                    Text("Show when collapsed")
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
             }
         }
         .padding(.vertical, 8)
