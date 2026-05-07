@@ -17,6 +17,7 @@ struct ExpandedView: View {
     let onAgentClick: (Agent) -> Void
     let onSnooze: (Agent) -> Void
     let onDismiss: (Agent) -> Void
+    var onDismissChild: ((Agent) -> Void)?
     var onRename: ((Agent, String) -> Void)?
     var onClearName: ((Agent) -> Void)?
     var onRenameStateChanged: ((Bool) -> Void)?
@@ -73,7 +74,7 @@ struct ExpandedView: View {
                     agentCard(agent, isSelected: selectedIndex == index)
                 }
                 .buttonStyle(.plain)
-                .opacity(snoozedIds.contains(agent.id) ? 0.45 : cronSessionIds.contains(agent.id) && agent.isDone && agent.toolFailure == nil ? 0.45 : agent.status == .working ? 0.7 : 1.0)
+                .opacity(snoozedIds.contains(agent.id) ? 0.45 : (cronSessionIds.contains(agent.id) || agent.isScheduledWakeup) && agent.isDone && agent.toolFailure == nil ? 0.45 : agent.status == .working ? 0.7 : 1.0)
                 .contextMenu {
                     Button("Rename\u{2026}") { beginRename(agent) }
                     if customNames[agent.sessionId] != nil {
@@ -278,6 +279,7 @@ struct ExpandedView: View {
                         isGithubPermission: resolved == agent.status ? agent.isGithubPermission : (urgent?.isGithubPermission ?? false),
                         isGithubTool: agent.isGithubTool,
                         isCronSession: cronSessionIds.contains(agent.id),
+                        isScheduledWakeup: agent.isScheduledWakeup,
                         isTaskJustCompleted: agent.isTaskJustCompleted,
                         isInterrupted: agent.isInterrupted,
                         isToolFailure: agent.isToolFailure,
@@ -295,7 +297,12 @@ struct ExpandedView: View {
                                 if (resolved == .delegating ? !kids.isEmpty : kids.count > 1) {
                                     HStack(spacing: 2) {
                                         ForEach(kids.prefix(3)) { child in
-                                            MiniAgentBlob(status: child.status, staleness: child.staleness, theme: theme)
+                                            MiniAgentBlob(
+                                                status: child.status,
+                                                staleness: child.staleness,
+                                                theme: theme,
+                                                onDismiss: onDismissChild.map { dismiss in { dismiss(child) } }
+                                            )
                                         }
                                         if kids.count > 3 {
                                             Text("+\(kids.count - 3)")
@@ -429,13 +436,17 @@ private struct RenamePopover: View {
 }
 
 /// A tiny 14px blob representing a sub-agent, showing status color and simple face.
+/// When `onDismiss` is non-nil, hovering reveals an X overlay; clicking invokes the callback.
 private struct MiniAgentBlob: View {
     let status: AgentStatus
     var staleness: AgentStaleness = .active
     var theme: ColorTheme = .trafficLight
+    var onDismiss: (() -> Void)?
+
+    @State private var isHovered: Bool = false
 
     var body: some View {
-        ZStack {
+        let blob = ZStack {
             RoundedRectangle(cornerRadius: 3)
                 .fill(status.color(for: theme))
                 .frame(width: 14, height: 14)
@@ -457,7 +468,25 @@ private struct MiniAgentBlob: View {
                 Circle().fill(.black).frame(width: 3, height: 3).offset(x: -2, y: -1)
                 Circle().fill(.black).frame(width: 3, height: 3).offset(x: 2, y: -1)
             }
+
+            if isHovered && onDismiss != nil {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.black.opacity(0.55))
+                    .frame(width: 14, height: 14)
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .heavy))
+                    .foregroundColor(.white)
+            }
         }
         .saturation(staleness == .hung ? 0 : 1)
+
+        if let onDismiss {
+            Button(action: onDismiss) { blob }
+                .buttonStyle(.plain)
+                .onHover { isHovered = $0 }
+                .help("Remove sub-agent status")
+        } else {
+            blob
+        }
     }
 }

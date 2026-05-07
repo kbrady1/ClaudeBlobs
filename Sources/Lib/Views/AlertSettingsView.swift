@@ -13,51 +13,56 @@ struct AlertSettingsView: View {
         Form {
             // MARK: - Sound Effects
             Section {
-                soundRow(label: "Green (Starting)", color: .green, selection: $soundConfig.greenSound)
-                soundRow(label: "Orange (Waiting)", color: .orange, selection: $soundConfig.orangeSound)
-                soundRow(label: "Green (Done)", color: .green, selection: $soundConfig.doneSound)
-                soundRow(label: "Red (Permission)", color: .red, selection: $soundConfig.redSound)
+                Group {
+                    soundRow(label: "Green (Starting)", color: .green, selection: $soundConfig.greenSound)
+                    soundRow(label: "Orange (Waiting)", color: .orange, selection: $soundConfig.orangeSound)
+                    soundRow(label: "Green (Done)", color: .green, selection: $soundConfig.doneSound)
+                    soundRow(label: "Red (Permission)", color: .red, selection: $soundConfig.redSound)
+                }
+                .disabled(!soundConfig.isEnabled)
             } header: {
                 Toggle("Sound Effects", isOn: $soundConfig.isEnabled)
                     .font(.headline)
             }
-            .disabled(!soundConfig.isEnabled)
 
             // MARK: - Push Notifications
             Section {
-                TextField("Endpoint", text: $ntfyConfig.endpoint)
-                TextField("Topic", text: $ntfyConfig.topic, prompt: Text("Required"))
+                Group {
+                    TextField("Endpoint", text: $ntfyConfig.endpoint)
+                    TextField("Topic", text: $ntfyConfig.topic, prompt: Text("Required"))
 
-                Section("Notify When") {
-                    Toggle("Permission needed", isOn: $ntfyConfig.notifyOnPermission)
-                    Toggle("Waiting for input", isOn: $ntfyConfig.notifyOnWaiting)
-                    Toggle("Done", isOn: $ntfyConfig.notifyOnDone)
-                }
-
-                Stepper("Delay: \(ntfyConfig.delaySeconds)s", value: $ntfyConfig.delaySeconds, in: 0...300, step: 5)
-
-                Section("Priority") {
-                    Picker("Default", selection: $ntfyConfig.defaultPriority) {
-                        ForEach(priorities, id: \.self) { Text($0) }
+                    Section("Notify When") {
+                        Toggle("Permission needed", isOn: $ntfyConfig.notifyOnPermission)
+                        Toggle("Waiting for input", isOn: $ntfyConfig.notifyOnWaiting)
+                        Toggle("Done", isOn: $ntfyConfig.notifyOnDone)
                     }
-                    Picker("Permission", selection: $ntfyConfig.permissionPriority) {
-                        ForEach(priorities, id: \.self) { Text($0) }
+
+                    Stepper("Delay: \(ntfyConfig.delaySeconds)s", value: $ntfyConfig.delaySeconds, in: 0...300, step: 5)
+
+                    Section("Priority") {
+                        Picker("Default", selection: $ntfyConfig.defaultPriority) {
+                            ForEach(priorities, id: \.self) { Text($0) }
+                        }
+                        Picker("Permission", selection: $ntfyConfig.permissionPriority) {
+                            ForEach(priorities, id: \.self) { Text($0) }
+                        }
                     }
-                }
 
-                TextField("Tags", text: $ntfyConfig.tags, prompt: Text("e.g. robot"))
+                    TextField("Tags", text: $ntfyConfig.tags, prompt: Text("e.g. robot"))
 
-                Button("Send Test Notification") {
-                    NtfyClient.send(
-                        endpoint: ntfyConfig.endpoint,
-                        topic: ntfyConfig.topic,
-                        message: "Test notification from ClaudeBlobs",
-                        title: "Test",
-                        priority: ntfyConfig.defaultPriority,
-                        tags: ntfyConfig.tags
-                    )
+                    Button("Send Test Notification") {
+                        NtfyClient.send(
+                            endpoint: ntfyConfig.endpoint,
+                            topic: ntfyConfig.topic,
+                            message: "Test notification from ClaudeBlobs",
+                            title: "Test",
+                            priority: ntfyConfig.defaultPriority,
+                            tags: ntfyConfig.tags
+                        )
+                    }
+                    .disabled(ntfyConfig.topic.isEmpty)
                 }
-                .disabled(ntfyConfig.topic.isEmpty)
+                .disabled(!ntfyConfig.isEnabled)
             } header: {
                 Toggle("Push Notifications", isOn: Binding(
                     get: { ntfyConfig.isEnabled },
@@ -68,7 +73,6 @@ struct AlertSettingsView: View {
                 ))
                 .font(.headline)
             }
-            .disabled(!ntfyConfig.isEnabled)
         }
         .formStyle(.grouped)
         .frame(width: 360, height: 560)

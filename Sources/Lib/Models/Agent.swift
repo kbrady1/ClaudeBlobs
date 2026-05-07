@@ -244,6 +244,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var speechBubbleText: String {
         switch status {
         case .waiting:
+            if let wakeup = scheduledWakeupText { return wakeup }
             return cleanMessage
         case .working:
             return cleanToolUse
@@ -348,6 +349,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         if tool.hasPrefix("EnterPlanMode") { return "Planning" }
         if tool.hasPrefix("ToolSearch") { return "Looking up tools" }
         if tool.hasPrefix("Skill:") || tool.hasPrefix("Skill ") { return "Loading skill" }
+        if tool.hasPrefix("ScheduleWakeup") { return "Scheduling wakeup" }
 
         // AskUserQuestion — extract the question text
         if tool.hasPrefix("AskUserQuestion:") {
@@ -508,6 +510,54 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     /// Whether the last tool use was CronDelete (stopping a loop).
     var isCronDelete: Bool {
         lastToolUse?.hasPrefix("CronDelete") == true
+    }
+
+    /// Whether the last tool use was ScheduleWakeup (a self-paced /loop sleep).
+    var isScheduledWakeup: Bool {
+        lastToolUse?.hasPrefix("ScheduleWakeup") == true
+    }
+
+    /// Parsed `reason` and `delaySeconds` from a ScheduleWakeup tool use, if available.
+    var scheduledWakeup: (reason: String?, delaySeconds: Int?)? {
+        guard let tool = lastToolUse, tool.hasPrefix("ScheduleWakeup") else { return nil }
+        guard let colon = tool.firstIndex(of: ":") else { return (nil, nil) }
+        let jsonText = String(tool[tool.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+        guard let data = jsonText.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (nil, nil)
+        }
+        let reason = obj["reason"] as? String
+        let delay: Int?
+        if let d = obj["delaySeconds"] as? Int { delay = d }
+        else if let d = obj["delaySeconds"] as? Double { delay = Int(d) }
+        else { delay = nil }
+        return (reason, delay)
+    }
+
+    /// Speech-bubble text for a ScheduleWakeup tool use: "Wake in 4m 30s — reason".
+    var scheduledWakeupText: String? {
+        guard let parsed = scheduledWakeup else { return nil }
+        var parts: [String] = []
+        if let secs = parsed.delaySeconds {
+            parts.append("Wake in \(Agent.formatDelay(secs))")
+        }
+        if let reason = parsed.reason, !reason.isEmpty {
+            parts.append(reason)
+        }
+        if parts.isEmpty { return "Scheduled wakeup" }
+        return parts.joined(separator: " — ")
+    }
+
+    static func formatDelay(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds)s" }
+        let mins = seconds / 60
+        let secs = seconds % 60
+        if mins < 60 {
+            return secs == 0 ? "\(mins)m" : "\(mins)m \(secs)s"
+        }
+        let hours = mins / 60
+        let remMins = mins % 60
+        return remMins == 0 ? "\(hours)h" : "\(hours)h \(remMins)m"
     }
 
     /// Whether the permission is for a GitHub-related tool.

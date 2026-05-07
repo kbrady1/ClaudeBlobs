@@ -47,6 +47,7 @@ struct CollapsedView: View {
                         isGithubPermission: resolved == agent.status ? agent.isGithubPermission : (urgent?.isGithubPermission ?? false),
                         isGithubTool: effectiveIsGithubTool(agent),
                         isCronSession: cronSessionIds.contains(agent.id),
+                        isScheduledWakeup: agent.isScheduledWakeup,
                         isTaskJustCompleted: agent.isTaskJustCompleted,
                         isInterrupted: agent.isInterrupted,
                         isToolFailure: agent.isToolFailure,

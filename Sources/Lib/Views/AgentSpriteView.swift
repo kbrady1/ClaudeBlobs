@@ -25,6 +25,7 @@ struct AgentSpriteView: View {
     var isGithubPermission: Bool = false
     var isGithubTool: Bool = false
     var isCronSession: Bool = false
+    var isScheduledWakeup: Bool = false
     var isTaskJustCompleted: Bool = false
     var isInterrupted: Bool = false
     var isToolFailure: Bool = false
@@ -92,8 +93,9 @@ struct AgentSpriteView: View {
                     .offset(x: size * 0.35, y: -size * 0.35)
             }
 
-            // Cron/loop clock badge (fallback when no working/permission icon is showing)
-            if isCronSession && !isSnoozed && status != .working && status != .permission && showingFailureIcon == nil {
+            // Cron/loop clock badge (fallback when no working/permission icon is showing).
+            // Also shown for ScheduleWakeup tool uses (self-paced /loop sleeps).
+            if showsClockBadge {
                 Image(systemName: "clock.fill")
                     .font(.system(size: accentFont, weight: .heavy))
                     .foregroundColor(.white)
@@ -216,6 +218,15 @@ struct AgentSpriteView: View {
                 .fill(backgroundColor)
                 .frame(width: size, height: size)
         }
+    }
+
+    /// Whether to render the clock fallback badge. Shown for cron sessions and
+    /// ScheduleWakeup tool uses whenever nothing more urgent is on screen.
+    private var showsClockBadge: Bool {
+        guard !isSnoozed, status != .working, status != .permission, showingFailureIcon == nil else {
+            return false
+        }
+        return isCronSession || isScheduledWakeup
     }
 
     private var backgroundColor: Color {

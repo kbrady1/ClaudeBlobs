@@ -119,7 +119,9 @@ final class AgentStore: ObservableObject {
 
     /// Whether a cron session is in a quiet state (waiting+done, no errors) and should be auto-hidden.
     func cronIsQuiet(_ agent: Agent) -> Bool {
-        guard cronSessionIds.contains(agent.id) else { return false }
+        let isCron = cronSessionIds.contains(agent.id)
+        let isWakeup = agent.isScheduledWakeup
+        guard isCron || isWakeup else { return false }
         let effective = effectiveStatus(of: agent)
         // Quiet = waiting+done with no tool failure, or compacting/starting/delegating
         if effective == .permission { return false }

@@ -154,6 +154,7 @@ struct HUDContentView: View {
                 },
                 onSnooze: { store.snooze($0) },
                 onDismiss: { store.dismiss($0) },
+                onDismissChild: { store.dismiss($0) },
                 onRename: { agent, name in store.setCustomName(name, for: agent) },
                 onClearName: { store.clearCustomName(for: $0) },
                 onRenameStateChanged: { expansionState.isRenaming = $0 },
