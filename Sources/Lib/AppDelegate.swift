@@ -497,6 +497,44 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return true
         }
 
+        // When status-override popover is showing, handle 1/2/3 and Escape
+        if let target = expansionState.statusOverrideAgent {
+            // Escape — close popover only
+            if event.keyCode == 53 {
+                DispatchQueue.main.async { self.expansionState.clearStatusOverride() }
+                return true
+            }
+            // Re-fetch the current agent so we capture an up-to-date status anchor.
+            let liveAgent = store.agents.first(where: { $0.id == target.id }) ?? target
+            if let chars = event.characters, let first = chars.first {
+                switch first {
+                case "1":
+                    DispatchQueue.main.async {
+                        self.store.setStatusOverride(.waiting, for: liveAgent)
+                        self.expansionState.clearStatusOverride()
+                    }
+                    return true
+                case "2":
+                    DispatchQueue.main.async {
+                        self.store.setStatusOverride(.starting, for: liveAgent)
+                        self.expansionState.clearStatusOverride()
+                    }
+                    return true
+                case "3":
+                    if self.store.snoozedSessionIds.contains(liveAgent.id) {
+                        DispatchQueue.main.async {
+                            self.store.unsnooze(liveAgent)
+                            self.expansionState.clearStatusOverride()
+                        }
+                        return true
+                    }
+                default: break
+                }
+            }
+            // Consume all other keys while popover is open
+            return true
+        }
+
         let agentCount = min(store.sortedTopLevelAgents.count, 9)
 
         // Escape — close picker
@@ -594,6 +632,23 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let agent = agents[index]
                 DispatchQueue.main.async {
                     NotificationCenter.default.post(name: .renameSelectedAgent, object: agent.sessionId)
+                }
+            }
+            return true
+        }
+
+        // E — open status override popover for selected agent
+        if event.keyCode == 14 && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
+            let index = expansionState.selectedIndex
+            let agents = store.sortedTopLevelAgents
+            if index < agents.count {
+                let agent = agents[index]
+                DispatchQueue.main.async {
+                    if self.expansionState.statusOverrideAgent?.id == agent.id {
+                        self.expansionState.clearStatusOverride()
+                    } else {
+                        self.expansionState.showStatusOverride(for: agent)
+                    }
                 }
             }
             return true

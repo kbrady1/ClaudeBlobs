@@ -19,8 +19,10 @@ final class HUDExpansionState: ObservableObject {
     @Published var permissionAgent: Agent?
     @Published var permissionOptions: [String] = []
     @Published var isLoadingPermission = false
+    @Published var statusOverrideAgent: Agent?
 
     var isShowingPermission: Bool { permissionAgent != nil }
+    var isShowingStatusOverride: Bool { statusOverrideAgent != nil }
 
     func showPermission(for agent: Agent, options: [String]) {
         permissionAgent = agent
@@ -32,6 +34,14 @@ final class HUDExpansionState: ObservableObject {
         permissionAgent = nil
         permissionOptions = []
         isLoadingPermission = false
+    }
+
+    func showStatusOverride(for agent: Agent) {
+        statusOverrideAgent = agent
+    }
+
+    func clearStatusOverride() {
+        statusOverrideAgent = nil
     }
 
     func toggle(agentCount: Int) {
@@ -103,7 +113,10 @@ struct HUDContentView: View {
                         }
                     } else {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            if isHovering || expansionState.isRenaming || expansionState.isShowingPermission { return }
+                            if isHovering
+                                || expansionState.isRenaming
+                                || expansionState.isShowingPermission
+                                || expansionState.isShowingStatusOverride { return }
                             withAnimation(.spring(duration: 0.35, bounce: 0.1)) {
                                 isHoverExpanded = false
                             }
@@ -147,6 +160,7 @@ struct HUDContentView: View {
                 hostAppIcons: store.hostAppIcons,
                 backgroundStyle: themeConfig.backgroundEnabled ? resolvedBackgroundStyle : .color(.black),
                 cronSessionIds: store.cronSessionIds,
+                dismissedClockIds: store.dismissedClockIds,
                 customNames: store.customNames,
                 onAgentClick: { agent in
                     onAgentClick(agent)
@@ -155,9 +169,20 @@ struct HUDContentView: View {
                 onSnooze: { store.snooze($0) },
                 onDismiss: { store.dismiss($0) },
                 onDismissChild: { store.dismiss($0) },
+                onDismissClock: { store.dismissClock(for: $0) },
                 onRename: { agent, name in store.setCustomName(name, for: agent) },
                 onClearName: { store.clearCustomName(for: $0) },
                 onRenameStateChanged: { expansionState.isRenaming = $0 },
+                onStatusOverride: { agent, status in
+                    store.setStatusOverride(status, for: agent)
+                    expansionState.clearStatusOverride()
+                },
+                onUnsnooze: { agent in
+                    store.unsnooze(agent)
+                    expansionState.clearStatusOverride()
+                },
+                statusOverrideAgent: expansionState.statusOverrideAgent,
+                onStatusOverrideCancel: { expansionState.clearStatusOverride() },
                 permissionAgent: expansionState.permissionAgent,
                 permissionOptions: expansionState.permissionOptions,
                 isLoadingPermission: expansionState.isLoadingPermission,

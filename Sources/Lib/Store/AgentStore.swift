@@ -119,6 +119,7 @@ final class AgentStore: ObservableObject {
 
     /// Whether a cron session is in a quiet state (waiting+done, no errors) and should be auto-hidden.
     func cronIsQuiet(_ agent: Agent) -> Bool {
+        if dismissedClockIds.contains(agent.id) { return false }
         let isCron = cronSessionIds.contains(agent.id)
         let isWakeup = agent.isScheduledWakeup
         guard isCron || isWakeup else { return false }
@@ -136,6 +137,10 @@ final class AgentStore: ObservableObject {
         ntfyScheduler?.cancelPending(for: agent.id)
     }
 
+    func unsnooze(_ agent: Agent) {
+        snoozedSessionIds.remove(agent.id)
+    }
+
     func dismiss(_ agent: Agent) {
         ntfyScheduler?.reset(for: agent.id)
         if let statusDirectory = statusDirectory(for: agent.provider) {
@@ -150,6 +155,38 @@ final class AgentStore: ObservableObject {
         for agent in agents {
             snoozedSessionIds.insert(agent.id)
         }
+    }
+
+    /// Sessions whose clock badge has been hand-dismissed. Treated as no-longer-cron
+    /// for visibility/sort purposes and the badge is hidden.
+    @Published var dismissedClockIds: Set<String> = []
+
+    /// Dismisses the clock badge for an agent: clears any cron association and
+    /// suppresses the badge until the agent re-enters a clock-bearing state.
+    func dismissClock(for agent: Agent) {
+        cronSessionIds.remove(agent.id)
+        dismissedClockIds.insert(agent.id)
+    }
+
+    /// User-chosen status overrides per session id. Cleared when the agent
+    /// reports a different raw status than what was overridden, or when the
+    /// agent disappears.
+    @Published var statusOverrides: [String: AgentStatus] = [:]
+    /// Raw status seen at the moment the override was applied; used to detect
+    /// when the agent's own state has moved on so we can drop the override.
+    private var statusOverrideAnchors: [String: AgentStatus] = [:]
+    /// Raw status from the most recent reload (pre-override application).
+    private var rawStatusByAgentId: [String: AgentStatus] = [:]
+
+    func setStatusOverride(_ status: AgentStatus, for agent: Agent) {
+        snoozedSessionIds.remove(agent.id)
+        statusOverrides[agent.id] = status
+        statusOverrideAnchors[agent.id] = rawStatusByAgentId[agent.id] ?? agent.status
+    }
+
+    func clearStatusOverride(for agent: Agent) {
+        statusOverrides.removeValue(forKey: agent.id)
+        statusOverrideAnchors.removeValue(forKey: agent.id)
     }
 
     // MARK: - Custom Names
@@ -394,7 +431,34 @@ final class AgentStore: ObservableObject {
         let activeSessionIds = Set(loaded.map(\.sessionId))
         snoozedSessionIds = snoozedSessionIds.intersection(activeIds)
         cronSessionIds = cronSessionIds.intersection(activeIds)
+        dismissedClockIds = dismissedClockIds.intersection(activeIds)
         ntfyScheduler?.cleanupGone(activeIds: activeIds)
+
+        // Snapshot raw statuses (pre-override) so setStatusOverride can record
+        // an accurate anchor even when the user overrides on top of an override.
+        rawStatusByAgentId = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0.status) })
+
+        // Drop status overrides for agents that have moved on, then apply remaining
+        // overrides to the loaded snapshot before publishing.
+        for (id, anchor) in statusOverrideAnchors {
+            guard let current = loaded.first(where: { $0.id == id }) else {
+                statusOverrides.removeValue(forKey: id)
+                statusOverrideAnchors.removeValue(forKey: id)
+                continue
+            }
+            if current.status != anchor {
+                statusOverrides.removeValue(forKey: id)
+                statusOverrideAnchors.removeValue(forKey: id)
+            }
+        }
+        if !statusOverrides.isEmpty {
+            loaded = loaded.map { agent in
+                guard let override = statusOverrides[agent.id] else { return agent }
+                var copy = agent
+                copy.status = override
+                return copy
+            }
+        }
 
         // Prune custom names for sessions that no longer exist
         let staleNames = customNames.keys.filter { !activeSessionIds.contains($0) }

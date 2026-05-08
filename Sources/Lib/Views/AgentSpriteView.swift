@@ -34,8 +34,13 @@ struct AgentSpriteView: View {
     var appIconShowsBorder: Bool = false
     /// Render the blob with a tinted glass effect (expanded view only).
     var useGlassBlob: Bool = false
+    /// When non-nil, hovering the clock badge reveals an X; clicking invokes this.
+    var onClockDismiss: (() -> Void)?
+    /// When true, the clock badge is suppressed entirely (e.g. user dismissed it).
+    var clockDismissed: Bool = false
 
     @State private var animationPhase: CGFloat = 0
+    @State private var isHoveringClock: Bool = false
     @State private var expressionFrame: Int = 0
     @State private var expressionTimer: AnyCancellable?
     @State private var bounceTimer: AnyCancellable?
@@ -96,11 +101,7 @@ struct AgentSpriteView: View {
             // Cron/loop clock badge (fallback when no working/permission icon is showing).
             // Also shown for ScheduleWakeup tool uses (self-paced /loop sleeps).
             if showsClockBadge {
-                Image(systemName: "clock.fill")
-                    .font(.system(size: accentFont, weight: .heavy))
-                    .foregroundColor(.white)
-                    .shadow(color: .black, radius: 2)
-                    .offset(x: size * 0.35, y: size * 0.35)
+                clockBadgeOverlay
             }
 
         }
@@ -223,10 +224,39 @@ struct AgentSpriteView: View {
     /// Whether to render the clock fallback badge. Shown for cron sessions and
     /// ScheduleWakeup tool uses whenever nothing more urgent is on screen.
     private var showsClockBadge: Bool {
-        guard !isSnoozed, status != .working, status != .permission, showingFailureIcon == nil else {
+        guard !isSnoozed, !clockDismissed, status != .working, status != .permission, showingFailureIcon == nil else {
             return false
         }
         return isCronSession || isScheduledWakeup
+    }
+
+    @ViewBuilder
+    private var clockBadgeOverlay: some View {
+        let icon = ZStack {
+            if isHoveringClock && onClockDismiss != nil {
+                Circle()
+                    .fill(Color.black.opacity(0.65))
+                    .frame(width: accentFont * 1.6, height: accentFont * 1.6)
+                Image(systemName: "xmark")
+                    .font(.system(size: accentFont * 0.9, weight: .heavy))
+                    .foregroundColor(.white)
+            } else {
+                Image(systemName: "clock.fill")
+                    .font(.system(size: accentFont, weight: .heavy))
+                    .foregroundColor(.white)
+                    .shadow(color: .black, radius: 2)
+            }
+        }
+        .offset(x: size * 0.35, y: size * 0.35)
+
+        if let onClockDismiss {
+            Button(action: onClockDismiss) { icon }
+                .buttonStyle(.plain)
+                .onHover { isHoveringClock = $0 }
+                .help("Dismiss clock")
+        } else {
+            icon
+        }
     }
 
     private var backgroundColor: Color {

@@ -13,14 +13,20 @@ struct ExpandedView: View {
     var hostAppIcons: [Int: NSImage] = [:]
     var backgroundStyle: BackgroundStyle = .color(.black)
     var cronSessionIds: Set<String> = []
+    var dismissedClockIds: Set<String> = []
     var customNames: [String: String] = [:]
     let onAgentClick: (Agent) -> Void
     let onSnooze: (Agent) -> Void
     let onDismiss: (Agent) -> Void
     var onDismissChild: ((Agent) -> Void)?
+    var onDismissClock: ((Agent) -> Void)?
     var onRename: ((Agent, String) -> Void)?
     var onClearName: ((Agent) -> Void)?
     var onRenameStateChanged: ((Bool) -> Void)?
+    var onStatusOverride: ((Agent, AgentStatus) -> Void)?
+    var onUnsnooze: ((Agent) -> Void)?
+    var statusOverrideAgent: Agent?
+    var onStatusOverrideCancel: (() -> Void)?
     var permissionAgent: Agent?
     var permissionOptions: [String] = []
     var isLoadingPermission: Bool = false
@@ -106,6 +112,17 @@ struct ExpandedView: View {
                         onSelect: { index in onPermissionSelect?(agent, index) },
                         onGoToAgent: { onPermissionGoToAgent?(agent) },
                         onCancel: { onPermissionCancel?() }
+                    )
+                }
+                .popover(isPresented: Binding(
+                    get: { statusOverrideAgent?.id == agent.id },
+                    set: { if !$0 { onStatusOverrideCancel?() } }
+                )) {
+                    StatusOverridePopover(
+                        isSnoozed: snoozedIds.contains(agent.id),
+                        theme: theme,
+                        onSelect: { status in onStatusOverride?(agent, status) },
+                        onWake: { onUnsnooze?(agent) }
                     )
                 }
             }
@@ -286,7 +303,9 @@ struct ExpandedView: View {
                         isAPIError: agent.isAPIError,
                         appIcon: showAppIcons ? hostAppIcons[agent.pid] : nil,
                         appIconShowsBorder: true,
-                        useGlassBlob: true
+                        useGlassBlob: true,
+                        onClockDismiss: onDismissClock.map { dismiss in { dismiss(agent) } },
+                        clockDismissed: dismissedClockIds.contains(agent.id)
                     )
                     .frame(width: 48, height: 44)
 
@@ -406,6 +425,66 @@ private struct BorderShape: Shape {
         )
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
         return path
+    }
+}
+
+/// Popover for overriding a blob's apparent status.
+private struct StatusOverridePopover: View {
+    var isSnoozed: Bool
+    var theme: ColorTheme
+    var onSelect: (AgentStatus) -> Void
+    var onWake: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Override status")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+            HStack(spacing: 6) {
+                statusButton(.waiting, label: "Waiting", key: "1")
+                statusButton(.starting, label: "Starting", key: "2")
+                if isSnoozed {
+                    Button(action: onWake) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "sun.max.fill")
+                            Text("Wake")
+                            Text("3").font(.system(size: 9)).foregroundColor(.secondary)
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.gray.opacity(0.25))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(12)
+    }
+
+    private func statusButton(_ status: AgentStatus, label: String, key: String) -> some View {
+        Button(action: { onSelect(status) }) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(status.color(for: theme))
+                    .frame(width: 10, height: 10)
+                Text(label)
+                    .font(.system(size: 11, weight: .medium))
+                Text(key)
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.gray.opacity(0.18))
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
