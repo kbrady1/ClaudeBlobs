@@ -328,8 +328,12 @@ final class AgentStore: ObservableObject {
         // subagents, so an active child won't trip the staleness threshold.
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let stalenessThresholdMs: Int64 = 30 * 60 * 1000  // 30 minutes
+        // Tolerate duplicate sessionIds (e.g. a stray status file written under a
+        // different name): keep the more recently updated entry. PID-based dedup
+        // below will collapse the surviving duplicates.
         let parentBySessionId = Dictionary(
-            uniqueKeysWithValues: loaded.filter { $0.pid != 0 }.map { ($0.sessionId, $0) }
+            loaded.filter { $0.pid != 0 }.map { ($0.sessionId, $0) },
+            uniquingKeysWith: { $0.updatedAt >= $1.updatedAt ? $0 : $1 }
         )
         loaded = loaded.filter { agent in
             guard agent.pid == 0 else { return true }
