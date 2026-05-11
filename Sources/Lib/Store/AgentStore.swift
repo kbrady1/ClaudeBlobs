@@ -321,6 +321,56 @@ final class AgentStore: ObservableObject {
             agent.pid == 0 || !isHeadlessInvocation(agent.pid)
         }
 
+        // Sweep stale subagents (pid==0). The SubagentStop hook is not guaranteed
+        // to fire (subagent crash, parent compaction, user escape) and pid==0
+        // always passes the kill(pid, 0) liveness probe, so without this they
+        // accumulate forever. hook-post-tool.sh refreshes updatedAt for live
+        // subagents, so an active child won't trip the staleness threshold.
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let stalenessThresholdMs: Int64 = 30 * 60 * 1000  // 30 minutes
+        let parentBySessionId = Dictionary(
+            uniqueKeysWithValues: loaded.filter { $0.pid != 0 }.map { ($0.sessionId, $0) }
+        )
+        loaded = loaded.filter { agent in
+            guard agent.pid == 0 else { return true }
+            let age = nowMs - agent.updatedAt
+
+            // Orphan: parent session is gone entirely.
+            if let parentId = agent.parentSessionId, parentBySessionId[parentId] == nil {
+                if let dir = statusDirectory(for: agent.provider) {
+                    try? fileManager.removeItem(
+                        at: dir.appendingPathComponent("\(agent.sessionId).json")
+                    )
+                }
+                return false
+            }
+
+            // Parent finished after the child last updated — SubagentStop missed.
+            if let parentId = agent.parentSessionId,
+               let parent = parentBySessionId[parentId],
+               parent.status == .waiting,
+               let parentChanged = parent.statusChangedAt,
+               agent.updatedAt < parentChanged {
+                if let dir = statusDirectory(for: agent.provider) {
+                    try? fileManager.removeItem(
+                        at: dir.appendingPathComponent("\(agent.sessionId).json")
+                    )
+                }
+                return false
+            }
+
+            // Blanket staleness backstop.
+            if age > stalenessThresholdMs {
+                if let dir = statusDirectory(for: agent.provider) {
+                    try? fileManager.removeItem(
+                        at: dir.appendingPathComponent("\(agent.sessionId).json")
+                    )
+                }
+                return false
+            }
+            return true
+        }
+
         // Deduplicate by PID — resumed sessions create a new session ID
         // for the same process. Keep the most recently updated entry and
         // remove the stale status file. Skip sub-agents (pid 0) since

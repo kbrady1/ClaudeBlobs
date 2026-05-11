@@ -185,9 +185,10 @@ struct AgentStoreTests {
     }
 
     @Test func hidesHeadlessClaudeInvocations() throws {
-        let interactive = Agent.fixture(sessionId: "interactive", pid: 1001, status: .working)
-        let headless = Agent.fixture(sessionId: "headless", pid: 2002, status: .working)
-        let subagent = Agent.fixture(sessionId: "sub", pid: 0, status: .working)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let interactive = Agent.fixture(sessionId: "interactive", pid: 1001, status: .working, updatedAt: nowMs)
+        let headless = Agent.fixture(sessionId: "headless", pid: 2002, status: .working, updatedAt: nowMs)
+        let subagent = Agent.fixture(sessionId: "sub", pid: 0, status: .working, parentSessionId: "interactive", updatedAt: nowMs)
         for agent in [interactive, headless, subagent] {
             let data = try JSONEncoder().encode(agent)
             try data.write(to: tmpDir.appendingPathComponent("\(agent.sessionId).json"))

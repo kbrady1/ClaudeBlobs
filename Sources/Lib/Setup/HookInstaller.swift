@@ -6,7 +6,7 @@ struct HookInstaller {
 
     static let hookEvents = [
         "SessionStart", "UserPromptSubmit", "PreToolUse",
-        "Stop", "PermissionRequest", "Notification", "SessionEnd",
+        "Stop", "StopFailure", "PermissionRequest", "Notification", "SessionEnd",
         "SubagentStart", "SubagentStop", "PostToolUse",
         "PostToolUseFailure", "TaskCompleted", "PreCompact", "PostCompact"
     ]
@@ -16,6 +16,7 @@ struct HookInstaller {
         "UserPromptSubmit": "hook-user-prompt.sh",
         "PreToolUse": "hook-pre-tool.sh",
         "Stop": "hook-stop.sh",
+        "StopFailure": "hook-stop-failure.sh",
         "PermissionRequest": "hook-permission.sh",
         "Notification": "hook-notification.sh",
         "SessionEnd": "hook-session-end.sh",
