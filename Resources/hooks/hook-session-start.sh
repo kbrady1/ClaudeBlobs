@@ -19,6 +19,8 @@ TS=$(now_ms)
 CMUX_WS="${CMUX_WORKSPACE_ID:-}"
 CMUX_SF="${CMUX_SURFACE_ID:-}"
 CMUX_SOCK="${CMUX_SOCKET_PATH:-}"
+SUPERSET_WS="${SUPERSET_WORKSPACE_ID:-}"
+SUPERSET_PN="${SUPERSET_PANE_ID:-}"
 
 TMP=$(mktemp "${STATUS_FILE}.XXXXXX") || exit 1
 chmod 600 "$TMP"
@@ -33,6 +35,8 @@ jq -n \
   --arg cmuxWs "$CMUX_WS" \
   --arg cmuxSf "$CMUX_SF" \
   --arg cmuxSock "$CMUX_SOCK" \
+  --arg supersetWs "$SUPERSET_WS" \
+  --arg supersetPn "$SUPERSET_PN" \
   --argjson ts "$TS" \
   '{
     sessionId: $sid,
@@ -46,6 +50,8 @@ jq -n \
     cmuxWorkspace: (if $cmuxWs == "" then null else $cmuxWs end),
     cmuxSurface: (if $cmuxSf == "" then null else $cmuxSf end),
     cmuxSocketPath: (if $cmuxSock == "" then null else $cmuxSock end),
+    supersetWorkspace: (if $supersetWs == "" then null else $supersetWs end),
+    supersetPane: (if $supersetPn == "" then null else $supersetPn end),
     createdAt: $ts,
     updatedAt: $ts,
     statusChangedAt: $ts

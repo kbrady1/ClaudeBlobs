@@ -222,6 +222,25 @@ struct HookScriptTests {
             #expect(r.status?["cmuxSurface"] is NSNull)
             #expect(r.status?["cmuxSocketPath"] is NSNull)
         }
+
+        @Test("superset fields populated from env vars")
+        func supersetFieldsFromEnv() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-session-start.sh", input: [:], environment: [
+                "SUPERSET_WORKSPACE_ID": "ws-7d22",
+                "SUPERSET_PANE_ID": "pane-abc-1",
+            ])
+            #expect(r.status?["supersetWorkspace"] as? String == "ws-7d22")
+            #expect(r.status?["supersetPane"] as? String == "pane-abc-1")
+        }
+
+        @Test("superset fields null when env vars unset")
+        func supersetFieldsNull() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-session-start.sh", input: [:])
+            #expect(r.status?["supersetWorkspace"] is NSNull)
+            #expect(r.status?["supersetPane"] is NSNull)
+        }
     }
 
     // MARK: - hook-pre-tool.sh

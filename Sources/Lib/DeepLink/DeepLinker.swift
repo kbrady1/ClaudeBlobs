@@ -2,6 +2,7 @@ import AppKit
 
 enum LinkType: Equatable {
     case cmux
+    case superset
     case editor
     case terminal
     case desktop
@@ -12,6 +13,7 @@ struct DeepLinker {
 
     static func linkType(for agent: Agent) -> LinkType {
         if agent.isCmuxSession { return .cmux }
+        if agent.isSupersetSession { return .superset }
         if agent.provider == .claudeCode && isDesktopAgent(pid: Int32(agent.pid)) { return .desktop }
         if EditorLinker.findEditorAncestor(pid: Int32(agent.pid)) != nil { return .editor }
         if agent.cwd != nil || agent.provider == .openCode { return .terminal }
@@ -36,6 +38,8 @@ struct DeepLinker {
         switch type {
         case .cmux:
             CmuxLinker.activate(agent)
+        case .superset:
+            SupersetLinker.activate(agent)
         case .editor:
             if let editor = EditorLinker.findEditorAncestor(pid: Int32(agent.pid)) {
                 EditorLinker.activate(agent, editor: editor)

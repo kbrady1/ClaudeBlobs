@@ -167,6 +167,8 @@ ensure_status_file() {
   local CMUX_WS="${CMUX_WORKSPACE_ID:-}"
   local CMUX_SF="${CMUX_SURFACE_ID:-}"
   local CMUX_SOCK="${CMUX_SOCKET_PATH:-}"
+  local SUPERSET_WS="${SUPERSET_WORKSPACE_ID:-}"
+  local SUPERSET_PN="${SUPERSET_PANE_ID:-}"
   local tmp
   tmp=$(mktemp "${STATUS_FILE}.XXXXXX") || return 1
   chmod 600 "$tmp"
@@ -180,6 +182,8 @@ ensure_status_file() {
     --arg cmuxWs "$CMUX_WS" \
     --arg cmuxSf "$CMUX_SF" \
     --arg cmuxSock "$CMUX_SOCK" \
+    --arg supersetWs "$SUPERSET_WS" \
+    --arg supersetPn "$SUPERSET_PN" \
     --argjson ts "$TS" \
     '{
       sessionId: $sid,
@@ -193,6 +197,8 @@ ensure_status_file() {
       cmuxWorkspace: (if $cmuxWs == "" then null else $cmuxWs end),
       cmuxSurface: (if $cmuxSf == "" then null else $cmuxSf end),
       cmuxSocketPath: (if $cmuxSock == "" then null else $cmuxSock end),
+      supersetWorkspace: (if $supersetWs == "" then null else $supersetWs end),
+      supersetPane: (if $supersetPn == "" then null else $supersetPn end),
       createdAt: $ts,
       updatedAt: $ts,
       statusChangedAt: $ts

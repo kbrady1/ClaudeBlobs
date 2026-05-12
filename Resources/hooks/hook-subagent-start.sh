@@ -36,6 +36,8 @@ jq -n \
     cmuxWorkspace: null,
     cmuxSurface: null,
     cmuxSocketPath: null,
+    supersetWorkspace: null,
+    supersetPane: null,
     createdAt: $ts,
     updatedAt: $ts,
     statusChangedAt: $ts

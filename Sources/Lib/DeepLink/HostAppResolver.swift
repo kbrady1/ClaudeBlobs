@@ -9,9 +9,11 @@ enum HostAppResolver {
 
     private static let desktopBundleId = "com.anthropic.claudefordesktop"
 
-    /// Apps that get an icon badge but use TerminalLinker (process tree activation) for deep linking.
+    /// Apps that get an icon badge but use a non-editor linker for deep linking.
+    /// Superset is here so the app icon shows on the agent row; SupersetLinker handles the click.
     private static let iconOnlyBundleIds = [
         "com.google.android.studio",
+        SupersetLinker.bundleId,
     ]
 
     /// Returns the host app for an agent, or nil if it's running in a plain terminal.
