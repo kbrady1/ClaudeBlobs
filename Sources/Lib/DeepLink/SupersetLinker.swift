@@ -10,7 +10,15 @@ struct SupersetLinker {
             return
         }
 
-        if let url = URL(string: "superset://workspace/\(workspace)") {
+        var components = URLComponents()
+        components.scheme = "superset"
+        components.host = "v2-workspace"
+        components.path = "/\(workspace)"
+        if let terminal = agent.supersetTerminal {
+            components.queryItems = [URLQueryItem(name: "terminalId", value: terminal)]
+        }
+
+        if let url = components.url {
             NSWorkspace.shared.open(url)
             DebugLog.shared.log("SupersetLinker: opened \(url)")
         }

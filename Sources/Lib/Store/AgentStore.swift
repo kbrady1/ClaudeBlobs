@@ -523,8 +523,8 @@ final class AgentStore: ObservableObject {
 
         // Resolve host app icons for new PIDs
         let activePids = Set(loaded.map(\.pid))
-        for pid in activePids where pid != 0 && hostAppIcons[pid] == nil {
-            hostAppIcons[pid] = HostAppResolver.resolve(pid: pid)?.icon
+        for agent in loaded where agent.pid != 0 && hostAppIcons[agent.pid] == nil {
+            hostAppIcons[agent.pid] = HostAppResolver.resolve(agent: agent)?.icon
         }
         // Clean up icons for PIDs no longer present
         for pid in hostAppIcons.keys where !activePids.contains(pid) {

@@ -54,7 +54,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var cmuxSurface: String?
     var cmuxSocketPath: String?
     var supersetWorkspace: String?
-    var supersetPane: String?
+    var supersetTerminal: String?
     var parentSessionId: String?
     var waitReason: String?
     var rawLastMessage: String?
@@ -81,7 +81,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         cmuxSurface: String? = nil,
         cmuxSocketPath: String? = nil,
         supersetWorkspace: String? = nil,
-        supersetPane: String? = nil,
+        supersetTerminal: String? = nil,
         parentSessionId: String? = nil,
         waitReason: String? = nil,
         toolFailure: String? = nil,
@@ -104,7 +104,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         self.cmuxSurface = cmuxSurface
         self.cmuxSocketPath = cmuxSocketPath
         self.supersetWorkspace = supersetWorkspace
-        self.supersetPane = supersetPane
+        self.supersetTerminal = supersetTerminal
         self.parentSessionId = parentSessionId
         self.waitReason = waitReason
         self.toolFailure = toolFailure
@@ -129,7 +129,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         case cmuxSurface
         case cmuxSocketPath
         case supersetWorkspace
-        case supersetPane
+        case supersetTerminal
         case parentSessionId
         case waitReason
         case rawLastMessage
@@ -156,7 +156,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         cmuxSurface = try container.decodeIfPresent(String.self, forKey: .cmuxSurface)
         cmuxSocketPath = try container.decodeIfPresent(String.self, forKey: .cmuxSocketPath)
         supersetWorkspace = try container.decodeIfPresent(String.self, forKey: .supersetWorkspace)
-        supersetPane = try container.decodeIfPresent(String.self, forKey: .supersetPane)
+        supersetTerminal = try container.decodeIfPresent(String.self, forKey: .supersetTerminal)
         parentSessionId = try container.decodeIfPresent(String.self, forKey: .parentSessionId)
         waitReason = try container.decodeIfPresent(String.self, forKey: .waitReason)
         rawLastMessage = try container.decodeIfPresent(String.self, forKey: .rawLastMessage)
@@ -633,7 +633,7 @@ extension Agent {
         cmuxSurface: String? = nil,
         cmuxSocketPath: String? = nil,
         supersetWorkspace: String? = nil,
-        supersetPane: String? = nil,
+        supersetTerminal: String? = nil,
         parentSessionId: String? = nil,
         waitReason: String? = nil,
         rawLastMessage: String? = nil,
@@ -651,7 +651,7 @@ extension Agent {
             tty: tty,
             cmuxWorkspace: cmuxWorkspace, cmuxSurface: cmuxSurface,
             cmuxSocketPath: cmuxSocketPath,
-            supersetWorkspace: supersetWorkspace, supersetPane: supersetPane,
+            supersetWorkspace: supersetWorkspace, supersetTerminal: supersetTerminal,
             parentSessionId: parentSessionId,
             waitReason: waitReason,
             toolFailure: toolFailure,

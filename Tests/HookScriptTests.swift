@@ -228,10 +228,10 @@ struct HookScriptTests {
             let h = try HookTestHelper()
             let r = try h.runHook("hook-session-start.sh", input: [:], environment: [
                 "SUPERSET_WORKSPACE_ID": "ws-7d22",
-                "SUPERSET_PANE_ID": "pane-abc-1",
+                "SUPERSET_TERMINAL_ID": "term-abc-1",
             ])
             #expect(r.status?["supersetWorkspace"] as? String == "ws-7d22")
-            #expect(r.status?["supersetPane"] as? String == "pane-abc-1")
+            #expect(r.status?["supersetTerminal"] as? String == "term-abc-1")
         }
 
         @Test("superset fields null when env vars unset")
@@ -239,7 +239,7 @@ struct HookScriptTests {
             let h = try HookTestHelper()
             let r = try h.runHook("hook-session-start.sh", input: [:])
             #expect(r.status?["supersetWorkspace"] is NSNull)
-            #expect(r.status?["supersetPane"] is NSNull)
+            #expect(r.status?["supersetTerminal"] is NSNull)
         }
     }
 

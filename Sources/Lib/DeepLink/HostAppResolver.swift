@@ -10,15 +10,21 @@ enum HostAppResolver {
     private static let desktopBundleId = "com.anthropic.claudefordesktop"
 
     /// Apps that get an icon badge but use a non-editor linker for deep linking.
-    /// Superset is here so the app icon shows on the agent row; SupersetLinker handles the click.
     private static let iconOnlyBundleIds = [
         "com.google.android.studio",
-        SupersetLinker.bundleId,
     ]
 
     /// Returns the host app for an agent, or nil if it's running in a plain terminal.
-    static func resolve(pid: Int) -> HostApp? {
-        let pid32 = Int32(pid)
+    static func resolve(agent: Agent) -> HostApp? {
+        // Superset v2 spawns agents from a background host-service process whose
+        // PID is not exposed via NSWorkspace.runningApplications, so process-tree
+        // walking won't find Superset.app as an ancestor. Trust the env-var-derived
+        // workspace ID instead.
+        if agent.isSupersetSession, let app = icon(for: SupersetLinker.bundleId) {
+            return app
+        }
+
+        let pid32 = Int32(agent.pid)
         let runningApps = NSWorkspace.shared.runningApplications
 
         // Check Claude Desktop
@@ -41,6 +47,15 @@ enum HostAppResolver {
         }
 
         return nil
+    }
+
+    private static func icon(for bundleId: String) -> HostApp? {
+        guard let app = NSWorkspace.shared.runningApplications.first(where: {
+            $0.bundleIdentifier == bundleId
+        }), let icon = app.icon else {
+            return nil
+        }
+        return HostApp(bundleId: bundleId, icon: icon)
     }
 
     private static func findAncestorApp(pid: Int32, bundleId: String, in runningApps: [NSRunningApplication]) -> HostApp? {

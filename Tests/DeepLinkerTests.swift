@@ -13,7 +13,7 @@ struct DeepLinkerTests {
         let agent = Agent.fixture(
             cwd: "/Users/test/.superset/worktrees/proj/x",
             supersetWorkspace: "7d22d2e0-dd86-4adc-a397-f641ca6c3a92",
-            supersetPane: "pane-1-abc"
+            supersetTerminal: "term-1-abc"
         )
         #expect(DeepLinker.linkType(for: agent) == .superset)
     }
