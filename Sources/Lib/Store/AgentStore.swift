@@ -23,6 +23,9 @@ final class AgentStore: ObservableObject {
 
     /// Tracks the last-seen status per session so we can unsnooze on change.
     private var lastSeenStatus: [String: AgentStatus] = [:]
+    /// Tracks the last-seen statusChangedAt per session so a new turn into the
+    /// same alerting status (e.g. another `permission` ask) still unsnoozes.
+    private var lastSeenStatusChangedAt: [String: Int64] = [:]
     private var lastSeenEffectiveStatus: [String: AgentStatus] = [:]
     private var peekTimer: DispatchWorkItem?
 
@@ -436,14 +439,30 @@ final class AgentStore: ObservableObject {
             }
         }
 
-        // Unsnooze agents whose status changed and trigger peek
+        // Unsnooze agents whose status changed and trigger peek.
+        // Also unsnooze when a new turn lands in an alerting status
+        // (permission/waiting/starting) even if the enum value didn't change —
+        // detected via statusChangedAt advancing.
+        let alertingStatuses: Set<AgentStatus> = [.permission, .waiting, .starting]
         var changedIds: Set<String> = []
         for agent in loaded {
-            if let previous = lastSeenStatus[agent.id], previous != agent.status {
+            let prevStatus = lastSeenStatus[agent.id]
+            let statusChanged = prevStatus != nil && prevStatus != agent.status
+            let prevChangedAt = lastSeenStatusChangedAt[agent.id]
+            let turnAdvanced: Bool = {
+                guard alertingStatuses.contains(agent.status),
+                      let current = agent.statusChangedAt,
+                      let previous = prevChangedAt else { return false }
+                return current > previous
+            }()
+            if statusChanged || turnAdvanced {
                 snoozedSessionIds.remove(agent.id)
                 changedIds.insert(agent.id)
             }
             lastSeenStatus[agent.id] = agent.status
+            if let changedAt = agent.statusChangedAt {
+                lastSeenStatusChangedAt[agent.id] = changedAt
+            }
         }
 
         // Play sound effects for status changes (suppress while delegating)
@@ -486,6 +505,8 @@ final class AgentStore: ObservableObject {
         snoozedSessionIds = snoozedSessionIds.intersection(activeIds)
         cronSessionIds = cronSessionIds.intersection(activeIds)
         dismissedClockIds = dismissedClockIds.intersection(activeIds)
+        lastSeenStatus = lastSeenStatus.filter { activeIds.contains($0.key) }
+        lastSeenStatusChangedAt = lastSeenStatusChangedAt.filter { activeIds.contains($0.key) }
         ntfyScheduler?.cleanupGone(activeIds: activeIds)
 
         // Snapshot raw statuses (pre-override) so setStatusOverride can record
