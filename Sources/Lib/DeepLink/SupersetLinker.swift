@@ -15,7 +15,10 @@ struct SupersetLinker {
         components.host = "v2-workspace"
         components.path = "/\(workspace)"
         if let terminal = agent.supersetTerminal {
-            components.queryItems = [URLQueryItem(name: "terminalId", value: terminal)]
+            components.queryItems = [
+                URLQueryItem(name: "terminalId", value: terminal),
+                URLQueryItem(name: "focusRequestId", value: UUID().uuidString),
+            ]
         }
 
         if let url = components.url {

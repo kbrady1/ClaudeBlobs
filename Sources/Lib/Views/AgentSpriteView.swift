@@ -247,15 +247,17 @@ struct AgentSpriteView: View {
                     .shadow(color: .black, radius: 2)
             }
         }
-        .offset(x: size * 0.35, y: size * 0.35)
+        .frame(width: accentFont * 1.6, height: accentFont * 1.6)
 
         if let onClockDismiss {
             Button(action: onClockDismiss) { icon }
                 .buttonStyle(.plain)
                 .onHover { isHoveringClock = $0 }
                 .help("Dismiss clock")
+                .offset(x: size * 0.35, y: size * 0.35)
         } else {
             icon
+                .offset(x: size * 0.35, y: size * 0.35)
         }
     }
 
