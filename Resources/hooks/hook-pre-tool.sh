@@ -36,6 +36,6 @@ atomic_update "$STATUS_FILE" \
   --arg status "working" \
   --arg toolUse "$TOOL_USE_STR" \
   --argjson ts "$TS" \
-  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .waitReason = null | .updatedAt = $ts'
+  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .waitReason = null | .toolFailure = null | .lastMessage = null | .rawLastMessage = null | .updatedAt = $ts'
 
 debug_log_result

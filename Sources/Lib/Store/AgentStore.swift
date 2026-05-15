@@ -279,6 +279,12 @@ final class AgentStore: ObservableObject {
     func reload() {
         let decoder = JSONDecoder()
         var loaded: [Agent] = []
+        // Map agent.id -> the actual file the agent was loaded from.
+        // Necessary because two files can carry the same sessionId (e.g. an
+        // orphaned subagent file whose ensure_status_file write reused the
+        // parent's sessionId), and reconstructing "<sessionId>.json" would
+        // delete the wrong one during dedup.
+        var sourceURLByAgentId: [String: URL] = [:]
         var hadReadableSource = false
 
         for source in statusSources {
@@ -295,6 +301,7 @@ final class AgentStore: ObservableObject {
                     continue
                 }
                 agent.provider = source.provider
+                sourceURLByAgentId[agent.id] = file
                 loaded.append(agent)
             }
         }
@@ -309,10 +316,8 @@ final class AgentStore: ObservableObject {
             let alive = isProcessAlive(agent.pid)
             if !alive {
                 ntfyScheduler?.reset(for: agent.id)
-                if let statusDirectory = statusDirectory(for: agent.provider) {
-                    try? fileManager.removeItem(
-                        at: statusDirectory.appendingPathComponent("\(agent.sessionId).json")
-                    )
+                if let url = sourceURLByAgentId[agent.id] {
+                    try? fileManager.removeItem(at: url)
                 }
             }
             return alive
@@ -344,10 +349,8 @@ final class AgentStore: ObservableObject {
 
             // Orphan: parent session is gone entirely.
             if let parentId = agent.parentSessionId, parentBySessionId[parentId] == nil {
-                if let dir = statusDirectory(for: agent.provider) {
-                    try? fileManager.removeItem(
-                        at: dir.appendingPathComponent("\(agent.sessionId).json")
-                    )
+                if let url = sourceURLByAgentId[agent.id] {
+                    try? fileManager.removeItem(at: url)
                 }
                 return false
             }
@@ -358,20 +361,16 @@ final class AgentStore: ObservableObject {
                parent.status == .waiting,
                let parentChanged = parent.statusChangedAt,
                agent.updatedAt < parentChanged {
-                if let dir = statusDirectory(for: agent.provider) {
-                    try? fileManager.removeItem(
-                        at: dir.appendingPathComponent("\(agent.sessionId).json")
-                    )
+                if let url = sourceURLByAgentId[agent.id] {
+                    try? fileManager.removeItem(at: url)
                 }
                 return false
             }
 
             // Blanket staleness backstop.
             if age > stalenessThresholdMs {
-                if let dir = statusDirectory(for: agent.provider) {
-                    try? fileManager.removeItem(
-                        at: dir.appendingPathComponent("\(agent.sessionId).json")
-                    )
+                if let url = sourceURLByAgentId[agent.id] {
+                    try? fileManager.removeItem(at: url)
                 }
                 return false
             }
@@ -392,17 +391,13 @@ final class AgentStore: ObservableObject {
             let key = "\(agent.provider.rawValue):\(agent.pid)"
             if let existing = bestByPid[key] {
                 if agent.updatedAt > existing.updatedAt {
-                    if let statusDirectory = statusDirectory(for: existing.provider) {
-                        try? fileManager.removeItem(
-                            at: statusDirectory.appendingPathComponent("\(existing.sessionId).json")
-                        )
+                    if let url = sourceURLByAgentId[existing.id] {
+                        try? fileManager.removeItem(at: url)
                     }
                     bestByPid[key] = agent
                 } else {
-                    if let statusDirectory = statusDirectory(for: agent.provider) {
-                        try? fileManager.removeItem(
-                            at: statusDirectory.appendingPathComponent("\(agent.sessionId).json")
-                        )
+                    if let url = sourceURLByAgentId[agent.id] {
+                        try? fileManager.removeItem(at: url)
                     }
                 }
             } else {
