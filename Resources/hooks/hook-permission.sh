@@ -24,7 +24,7 @@ atomic_update "$STATUS_FILE" \
   --arg permKey "$PERMISSION_KEY" \
   --arg permTool "$TOOL_NAME" \
   --argjson ts "$TS" \
-  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .permissionKey = $permKey | .permissionTool = $permTool | .updatedAt = $ts'
+  '(if (.status != $status or .permissionKey != $permKey) then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .permissionKey = $permKey | .permissionTool = $permTool | .updatedAt = $ts'
 
 # When a subagent needs permission, also update the parent's lastToolUse
 # so the parent blob reflects the actual blocking permission.

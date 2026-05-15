@@ -471,6 +471,21 @@ struct HookScriptTests {
             ], existingStatus: makeWorkingStatus())
             #expect(r.status?["lastToolUse"] as? String == "Edit: main.swift")
         }
+
+        @Test("new permission request with different key advances statusChangedAt")
+        func newPermissionKeyAdvancesStatusChangedAt() throws {
+            let h = try HookTestHelper()
+            var existing = makeStatus(status: "permission")
+            existing["permissionKey"] = "old-key"
+            existing["statusChangedAt"] = 1000000
+            let r = try h.runHook("hook-permission.sh", input: [
+                "tool_name": "AskUserQuestion",
+                "tool_input": ["questions": [["question": "New question?"]]],
+            ], existingStatus: existing)
+            #expect(r.status?["status"] as? String == "permission")
+            let changedAt = r.status?["statusChangedAt"] as? Int
+            #expect(changedAt != nil && changedAt! > 1000000)
+        }
     }
 
     // MARK: - hook-post-tool-failure.sh
