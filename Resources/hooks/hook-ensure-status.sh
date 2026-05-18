@@ -145,12 +145,18 @@ format_tool_input() {
 }
 
 # Route to subagent status file when agent_id is present in input.
-# Call after STATUS_FILE is set. Overrides STATUS_FILE if the event
-# belongs to a subagent rather than the parent session.
+# Call after STATUS_FILE is set. Overrides STATUS_FILE only if the subagent
+# file already exists (created by SubagentStart). If it doesn't, the subagent
+# is either not yet started or already torn down, and recreating its file via
+# ensure_status_file would stamp the parent's session_id and PID into a file
+# named after the subagent's agent_id — a phantom that confuses AgentStore's
+# PID-based dedup and causes the real parent file to keep getting deleted.
+# In that case, leave STATUS_FILE pointing at the parent so the event is still
+# recorded somewhere live.
 resolve_agent_status_file() {
   local agent_id
   agent_id=$(echo "$INPUT" | jq -r '.agent_id // empty')
-  if [ -n "$agent_id" ]; then
+  if [ -n "$agent_id" ] && [ -f "$STATUS_DIR/$agent_id.json" ]; then
     STATUS_FILE="$STATUS_DIR/$agent_id.json"
   fi
 }
