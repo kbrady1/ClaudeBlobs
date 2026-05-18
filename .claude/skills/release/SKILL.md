@@ -32,20 +32,26 @@ Optional first argument: `patch` (default), `minor`, or `major`.
    fi
    ```
 
+   Every commit in `${LAST_TAG}..HEAD` is by definition new since the last tag — include all of them. Do not filter or drop commits based on a guess that they "already shipped." If a commit looks like it might belong to an older release, verify with `git tag --contains <sha>` before excluding.
+
 4. **Generate release notes** — categorize commits into:
    - **New Features** — commits with "add", "feat", "new", or introducing new functionality
    - **Improvements** — commits with "update", "improve", "enhance", "refactor"
    - **Bug Fixes** — commits with "fix", "bug", "patch"
    - **Other** — everything else
 
-   Format as markdown with a one-line summary at the top describing the release theme.
+   Format as markdown with a one-line summary at the top describing the release theme. Lead the summary with the most user-visible change — usually a new feature, not bug fixes.
 
-5. **Present to user** — show:
+   If the commit range contains any **New Features** and the user requested a `patch` bump (or did not specify), flag this and recommend a `minor` bump instead before proceeding.
+
+5. **Get explicit approval — REQUIRED before publishing** — show the user:
    - Proposed version: `vX.Y.Z`
    - Draft release notes
-   - Ask for approval or edits
+   - The bump type (and a recommendation to upgrade patch→minor if features are present)
 
-6. **Execute release** — on approval:
+   Then **stop and wait for explicit user approval** before running `make release`. Do not proceed on the basis of a prior "operate autonomously" instruction — releases push tags and trigger CI publishing, which is not reversible and not within the autonomous-operation scope. Ask via `AskUserQuestion` if no approval has been given yet in this turn.
+
+6. **Execute release** — only after explicit approval:
    ```bash
    NOTES_FILE=$(mktemp)
    # Write approved release notes to NOTES_FILE
