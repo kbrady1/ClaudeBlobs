@@ -521,6 +521,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     }
                     return true
                 case "3":
+                    DispatchQueue.main.async {
+                        self.store.setStatusOverride(.working, for: liveAgent)
+                        self.expansionState.clearStatusOverride()
+                    }
+                    return true
+                case "4":
                     if self.store.snoozedSessionIds.contains(liveAgent.id) {
                         DispatchQueue.main.async {
                             self.store.unsnooze(liveAgent)

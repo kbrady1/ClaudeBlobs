@@ -443,12 +443,13 @@ private struct StatusOverridePopover: View {
             HStack(spacing: 6) {
                 statusButton(.waiting, label: "Waiting", key: "1")
                 statusButton(.starting, label: "Starting", key: "2")
+                statusButton(.working, label: "Working", key: "3")
                 if isSnoozed {
                     Button(action: onWake) {
                         HStack(spacing: 4) {
                             Image(systemName: "sun.max.fill")
                             Text("Wake")
-                            Text("3").font(.system(size: 9)).foregroundColor(.secondary)
+                            Text("4").font(.system(size: 9)).foregroundColor(.secondary)
                         }
                         .font(.system(size: 11, weight: .medium))
                         .padding(.horizontal, 10)
