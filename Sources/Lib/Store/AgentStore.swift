@@ -335,7 +335,7 @@ final class AgentStore: ObservableObject {
         // accumulate forever. hook-post-tool.sh refreshes updatedAt for live
         // subagents, so an active child won't trip the staleness threshold.
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        let stalenessThresholdMs: Int64 = 30 * 60 * 1000  // 30 minutes
+        let stalenessThresholdMs: Int64 = 5 * 60 * 1000  // 5 minutes
         // Tolerate duplicate sessionIds (e.g. a stray status file written under a
         // different name): keep the more recently updated entry. PID-based dedup
         // below will collapse the surviving duplicates.
@@ -355,10 +355,14 @@ final class AgentStore: ObservableObject {
                 return false
             }
 
-            // Parent finished after the child last updated — SubagentStop missed.
+            // Parent transitioned after the child last updated — SubagentStop
+            // missed. Any parent status change (not just `waiting`) means the
+            // parent has resumed its own turn, so a still-running child is
+            // orphaned. A genuinely-active child has a newer updatedAt
+            // (hook-post-tool.sh refreshes it), so it stays protected by the
+            // updatedAt < parentChanged ordering.
             if let parentId = agent.parentSessionId,
                let parent = parentBySessionId[parentId],
-               parent.status == .waiting,
                let parentChanged = parent.statusChangedAt,
                agent.updatedAt < parentChanged {
                 if let url = sourceURLByAgentId[agent.id] {

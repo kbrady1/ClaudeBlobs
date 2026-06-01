@@ -281,16 +281,33 @@ struct HookScriptTests {
             #expect(r.status?["lastToolUse"] as? String == "Bash")
         }
 
-        @Test("does NOT overwrite permission status")
+        @Test("does NOT overwrite a pending non-exempt permission")
         func preservesPermission() throws {
             let h = try HookTestHelper()
             var existing = makeStatus(status: "permission")
+            existing["permissionTool"] = "Bash"
             existing["permissionKey"] = "any-key"
             let r = try h.runHook("hook-pre-tool.sh", input: [
                 "tool_name": "Read",
                 "tool_input": ["file_path": "/tmp/foo.txt"],
             ], existingStatus: existing)
             #expect(r.status?["status"] as? String == "permission")
+        }
+
+        @Test("clears stale AskUserQuestion permission when a later tool runs")
+        func clearsAskUserQuestionPermission() throws {
+            // AskUserQuestion blocks the turn; if any tool is now firing, it was
+            // answered. PostToolUse can't self-clear it (answers-injected key
+            // mismatch), so the next tool's PreToolUse must.
+            let h = try HookTestHelper()
+            var existing = makeStatus(status: "permission")
+            existing["permissionTool"] = "AskUserQuestion"
+            existing["permissionKey"] = "questions-only-key"
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Read",
+                "tool_input": ["file_path": "/tmp/foo.txt"],
+            ], existingStatus: existing)
+            #expect(r.status?["status"] as? String == "working")
         }
 
         @Test("transitions waiting to working (plan execution resumes)")
@@ -708,6 +725,38 @@ struct HookScriptTests {
             let r = try h.runHook("hook-post-tool.sh", input: [
                 "tool_name": "Read",
                 "tool_input": ["file_path": "/tmp/foo.txt"],
+            ], existingStatus: existing)
+            #expect(r.status?["status"] as? String == "working")
+        }
+
+        @Test("clears AskUserQuestion permission despite key mismatch (answers injected)")
+        func clearsAskUserQuestionPermission() throws {
+            // PermissionRequest stores a key for {questions}; PostToolUse for the
+            // same AskUserQuestion carries {questions, answers}, so its key never
+            // matches. The tool must still clear permission — otherwise the blob
+            // stays stuck orange while the agent keeps working.
+            let h = try HookTestHelper()
+            var existing = makeStatus(status: "permission")
+            existing["permissionTool"] = "AskUserQuestion"
+            existing["permissionKey"] = "questions-only-key"
+            let r = try h.runHook("hook-post-tool.sh", input: [
+                "tool_name": "AskUserQuestion",
+                "tool_input": ["questions": [], "answers": ["q": "a"]],
+            ], existingStatus: existing)
+            #expect(r.status?["status"] as? String == "working")
+        }
+
+        @Test("clears AskUserQuestion permission when a later tool runs")
+        func clearsAskUserQuestionOnLaterTool() throws {
+            // After answering, the agent resumes in the same turn; the next tool's
+            // PostToolUse must clear the stale AskUserQuestion permission.
+            let h = try HookTestHelper()
+            var existing = makeStatus(status: "permission")
+            existing["permissionTool"] = "AskUserQuestion"
+            existing["permissionKey"] = "questions-only-key"
+            let r = try h.runHook("hook-post-tool.sh", input: [
+                "tool_name": "Edit",
+                "tool_input": ["file_path": "/tmp/foo.swift", "old_string": "a", "new_string": "b"],
             ], existingStatus: existing)
             #expect(r.status?["status"] as? String == "working")
         }

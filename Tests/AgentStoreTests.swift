@@ -205,4 +205,55 @@ struct AgentStoreTests {
         let ids = Set(store.agents.map(\.sessionId))
         #expect(ids == ["interactive", "sub"])
     }
+
+    @Test func sweepsStaleSubagentAfterParentTransitions() throws {
+        // Reported bug: a finished subagent (SubagentStop missed) stays blue
+        // because its pid-0 file is stuck at `working`. The parent has resumed
+        // its own turn — here into `permission`, not `waiting` — after the
+        // child last updated, so the orphaned child must be pruned.
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let parent = Agent.fixture(
+            sessionId: "parent", pid: 500, status: .permission,
+            updatedAt: nowMs, statusChangedAt: nowMs
+        )
+        let staleChild = Agent.fixture(
+            sessionId: "child", pid: 0, status: .working,
+            parentSessionId: "parent", updatedAt: nowMs - 20_000
+        )
+        for agent in [parent, staleChild] {
+            let data = try JSONEncoder().encode(agent)
+            try data.write(to: tmpDir.appendingPathComponent("\(agent.sessionId).json"))
+        }
+
+        let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.reload()
+
+        let ids = Set(store.agents.map(\.sessionId))
+        #expect(ids == ["parent"])
+        #expect(store.childSessionIds[parent.id] == nil)
+    }
+
+    @Test func keepsActiveSubagentNewerThanParentTransition() throws {
+        // Guard the protection invariant: an actively-working child whose
+        // updatedAt is newer than the parent's last transition is NOT orphaned,
+        // even when the parent briefly sits in `permission`.
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let parent = Agent.fixture(
+            sessionId: "parent", pid: 600, status: .permission,
+            updatedAt: nowMs - 5_000, statusChangedAt: nowMs - 5_000
+        )
+        let activeChild = Agent.fixture(
+            sessionId: "child", pid: 0, status: .working,
+            parentSessionId: "parent", updatedAt: nowMs
+        )
+        for agent in [parent, activeChild] {
+            let data = try JSONEncoder().encode(agent)
+            try data.write(to: tmpDir.appendingPathComponent("\(agent.sessionId).json"))
+        }
+
+        let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.reload()
+
+        #expect(store.childSessionIds[parent.id] == [activeChild.id])
+    }
 }

@@ -24,9 +24,11 @@ CURRENT_STATUS=$(jq -r '.status // empty' "$STATUS_FILE" 2>/dev/null)
 
 if [ "$CURRENT_STATUS" = "permission" ]; then
   STORED_PERM_TOOL=$(jq -r '.permissionTool // empty' "$STATUS_FILE" 2>/dev/null)
-  # ExitPlanMode is a plan approval — if other tools are firing, the plan was
-  # already approved and we should clear the permission state.
-  if [ "$STORED_PERM_TOOL" != "ExitPlanMode" ]; then
+  # ExitPlanMode and AskUserQuestion block the turn until answered — if another
+  # tool is now firing, they were already answered, so clear the permission
+  # state. (AskUserQuestion can't self-clear via PostToolUse's key check; see
+  # hook-post-tool.sh.)
+  if [ "$STORED_PERM_TOOL" != "ExitPlanMode" ] && [ "$STORED_PERM_TOOL" != "AskUserQuestion" ]; then
     debug_log_result
     exit 0
   fi

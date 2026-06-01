@@ -24,9 +24,14 @@ CURRENT_STATUS=$(jq -r '.status // empty' "$STATUS_FILE" 2>/dev/null)
 
 if [ "$CURRENT_STATUS" = "permission" ]; then
   STORED_PERM_TOOL=$(jq -r '.permissionTool // empty' "$STATUS_FILE" 2>/dev/null)
-  # ExitPlanMode is a plan approval — any subsequent tool activity means the
-  # plan was approved, so clear permission state immediately.
-  if [ "$STORED_PERM_TOOL" != "ExitPlanMode" ]; then
+  # ExitPlanMode and AskUserQuestion both block the turn until the user responds,
+  # so any subsequent tool activity means they were answered — clear permission
+  # immediately. AskUserQuestion in particular can't self-clear via the key check:
+  # PermissionRequest carries tool_input {questions}, but PostToolUse carries
+  # {questions, answers} (Claude Code injects the user's choices), so its key
+  # never matches the stored one. Without this exemption the agent works on while
+  # the blob stays stuck orange.
+  if [ "$STORED_PERM_TOOL" != "ExitPlanMode" ] && [ "$STORED_PERM_TOOL" != "AskUserQuestion" ]; then
     STORED_KEY=$(jq -r '.permissionKey // empty' "$STATUS_FILE" 2>/dev/null)
     MY_KEY=$(printf '%s:%s' "$TOOL_NAME" "$RAW_INPUT" | md5 -q)
     if [ "$MY_KEY" != "$STORED_KEY" ]; then
