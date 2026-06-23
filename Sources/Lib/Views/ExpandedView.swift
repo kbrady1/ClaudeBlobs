@@ -33,6 +33,9 @@ struct ExpandedView: View {
     var onPermissionSelect: ((Agent, Int) -> Void)?
     var onPermissionGoToAgent: ((Agent) -> Void)?
     var onPermissionCancel: (() -> Void)?
+    /// Reports how many card rows are currently shown so the host panel can
+    /// resize. Called on appear and whenever the overflow rows expand.
+    var onRowCountChange: ((Int) -> Void)?
     @Environment(\.notchInset) private var notchInset
     @State private var renamingAgent: Agent?
     @State private var renameText: String = ""
@@ -40,9 +43,31 @@ struct ExpandedView: View {
     @State private var frozenAgents: [Agent]?
     @State private var showPermissionHint = false
     @State private var permissionHintTimer: Timer?
+    /// When true, overflow agents wrap onto additional rows instead of collapsing
+    /// into a "+n" indicator. Reset whenever the expanded view is recreated
+    /// (i.e. it returns to a single row each time the HUD re-expands).
+    @State private var showAllRows = false
+
+    /// Max cards on a single row before the "+n" overflow indicator appears.
+    private static let cardsPerRow = 9
 
     private var displayAgents: [Agent] {
         frozenAgents ?? agents
+    }
+
+    /// Agents grouped into rows of `cardsPerRow`, paired with each agent's
+    /// global index so selection highlighting stays correct across rows.
+    private var agentRows: [[(index: Int, agent: Agent)]] {
+        let indexed = Array(displayAgents.enumerated()).map { (index: $0.offset, agent: $0.element) }
+        return stride(from: 0, to: indexed.count, by: Self.cardsPerRow).map {
+            Array(indexed[$0..<min($0 + Self.cardsPerRow, indexed.count)])
+        }
+    }
+
+    /// How many card rows are currently rendered: a single row when collapsed,
+    /// otherwise one row per `cardsPerRow` agents.
+    private var visibleRowCount: Int {
+        showAllRows ? max(1, agentRows.count) : 1
     }
 
     private func displayName(for agent: Agent) -> String {
@@ -74,66 +99,43 @@ struct ExpandedView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ForEach(Array(displayAgents.prefix(9).enumerated()), id: \.element.id) { index, agent in
-                Button { onAgentClick(agent) } label: {
-                    agentCard(agent, isSelected: selectedIndex == index)
-                }
-                .buttonStyle(.plain)
-                .opacity(snoozedIds.contains(agent.id) ? 0.45 : (cronSessionIds.contains(agent.id) || agent.isScheduledWakeup) && agent.isDone && agent.toolFailure == nil ? 0.45 : agent.status == .working ? 0.7 : 1.0)
-                .contextMenu {
-                    Button("Rename\u{2026}") { beginRename(agent) }
-                    if customNames[agent.sessionId] != nil {
-                        Button("Clear Name") { onClearName?(agent) }
+        VStack(alignment: .leading, spacing: 12) {
+            if showAllRows {
+                ForEach(Array(agentRows.enumerated()), id: \.offset) { _, row in
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(row, id: \.agent.id) { entry in
+                            cardButton(entry.agent, index: entry.index)
+                        }
                     }
                 }
-                .popover(isPresented: Binding(
-                    get: { renamingAgent?.id == agent.id },
-                    set: { if !$0 { endRename() } }
-                )) {
-                    RenamePopover(
-                        text: $renameText,
-                        hasCustomName: customNames[agent.sessionId] != nil,
-                        onCommit: commitRename,
-                        onClear: {
-                            onClearName?(agent)
-                            endRename()
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(Array(displayAgents.prefix(Self.cardsPerRow).enumerated()), id: \.element.id) { index, agent in
+                        cardButton(agent, index: index)
+                    }
+                    if displayAgents.count > Self.cardsPerRow {
+                        Button {
+                            withAnimation(.spring(duration: 0.35, bounce: 0.1)) {
+                                showAllRows = true
+                            }
+                        } label: {
+                            Text("+\(displayAgents.count - Self.cardsPerRow)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .frame(width: 40)
+                                .contentShape(Rectangle())
                         }
-                    )
+                        .buttonStyle(.plain)
+                        .help("Show all sessions")
+                    }
                 }
-                .popover(isPresented: Binding(
-                    get: { permissionAgent?.id == agent.id },
-                    set: { if !$0 { onPermissionCancel?() } }
-                )) {
-                    PermissionOptionsPopover(
-                        agent: agent,
-                        options: permissionOptions,
-                        isLoading: isLoadingPermission,
-                        onSelect: { index in onPermissionSelect?(agent, index) },
-                        onGoToAgent: { onPermissionGoToAgent?(agent) },
-                        onCancel: { onPermissionCancel?() }
-                    )
-                }
-                .popover(isPresented: Binding(
-                    get: { statusOverrideAgent?.id == agent.id },
-                    set: { if !$0 { onStatusOverrideCancel?() } }
-                )) {
-                    StatusOverridePopover(
-                        isSnoozed: snoozedIds.contains(agent.id),
-                        theme: theme,
-                        onSelect: { status in onStatusOverride?(agent, status) },
-                        onWake: { onUnsnooze?(agent) }
-                    )
-                }
-            }
-            if displayAgents.count > 9 {
-                Text("+\(agents.count - 9)")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .frame(width: 40)
             }
         }
-        .onAppear { showPermissionHintIfNeeded() }
+        .onAppear {
+            showPermissionHintIfNeeded()
+            onRowCountChange?(visibleRowCount)
+        }
+        .onChange(of: showAllRows) { _ in onRowCountChange?(visibleRowCount) }
         .onChange(of: selectedIndex) { _ in showPermissionHintIfNeeded() }
         .onChange(of: agents.map(\.status)) { _ in
             // Auto-dismiss permission popover if agent leaves permission state
@@ -191,6 +193,61 @@ struct ExpandedView: View {
             // few pixels so glassEffect's intrinsic top border is clipped off-screen.
             .padding(.top, -(notchInset + (backgroundStyle.isGlass ? 4 : 0)))
         )
+    }
+
+    /// A single tappable agent card with its rename / permission / status-override popovers.
+    /// `index` is the agent's global position, used for selection highlighting.
+    @ViewBuilder
+    private func cardButton(_ agent: Agent, index: Int) -> some View {
+        Button { onAgentClick(agent) } label: {
+            agentCard(agent, isSelected: selectedIndex == index)
+        }
+        .buttonStyle(.plain)
+        .opacity(snoozedIds.contains(agent.id) ? 0.45 : (cronSessionIds.contains(agent.id) || agent.isScheduledWakeup) && agent.isDone && agent.toolFailure == nil ? 0.45 : agent.status == .working ? 0.7 : 1.0)
+        .contextMenu {
+            Button("Rename\u{2026}") { beginRename(agent) }
+            if customNames[agent.sessionId] != nil {
+                Button("Clear Name") { onClearName?(agent) }
+            }
+        }
+        .popover(isPresented: Binding(
+            get: { renamingAgent?.id == agent.id },
+            set: { if !$0 { endRename() } }
+        )) {
+            RenamePopover(
+                text: $renameText,
+                hasCustomName: customNames[agent.sessionId] != nil,
+                onCommit: commitRename,
+                onClear: {
+                    onClearName?(agent)
+                    endRename()
+                }
+            )
+        }
+        .popover(isPresented: Binding(
+            get: { permissionAgent?.id == agent.id },
+            set: { if !$0 { onPermissionCancel?() } }
+        )) {
+            PermissionOptionsPopover(
+                agent: agent,
+                options: permissionOptions,
+                isLoading: isLoadingPermission,
+                onSelect: { idx in onPermissionSelect?(agent, idx) },
+                onGoToAgent: { onPermissionGoToAgent?(agent) },
+                onCancel: { onPermissionCancel?() }
+            )
+        }
+        .popover(isPresented: Binding(
+            get: { statusOverrideAgent?.id == agent.id },
+            set: { if !$0 { onStatusOverrideCancel?() } }
+        )) {
+            StatusOverridePopover(
+                isSnoozed: snoozedIds.contains(agent.id),
+                theme: theme,
+                onSelect: { status in onStatusOverride?(agent, status) },
+                onWake: { onUnsnooze?(agent) }
+            )
+        }
     }
 
     private var borderColor: Color {
@@ -259,7 +316,8 @@ struct ExpandedView: View {
 
     /// Whether any visible agent has child sub-agents (used for uniform card height).
     private var anyAgentHasChildren: Bool {
-        agents.prefix(9).contains { agent in
+        let visible = showAllRows ? displayAgents : Array(displayAgents.prefix(Self.cardsPerRow))
+        return visible.contains { agent in
             let kids = childAgents[agent.id] ?? []
             let isDelegating = effectiveStatus(agent) == .delegating
             return isDelegating ? !kids.isEmpty : kids.count > 1

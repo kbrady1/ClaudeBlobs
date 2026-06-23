@@ -92,6 +92,18 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             .store(in: &cancellables)
 
+        // Grow/shrink the panels when the expanded view reveals overflow rows.
+        expansionState.$expandedRowCount
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] rows in
+                guard let self else { return }
+                for panel in self.panels {
+                    panel.setRowCount(rows)
+                }
+            }
+            .store(in: &cancellables)
+
         // Menu bar status item
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {

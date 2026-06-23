@@ -15,6 +15,9 @@ extension EnvironmentValues {
 final class HUDExpansionState: ObservableObject {
     @Published var isKeyboardExpanded = false
     @Published var selectedIndex: Int = 0
+    /// Number of card rows the expanded view is currently showing. The panel
+    /// observes this to grow/shrink its height when overflow rows are revealed.
+    @Published var expandedRowCount: Int = 1
     @Published var isRenaming = false
     @Published var permissionAgent: Agent?
     @Published var permissionOptions: [String] = []
@@ -132,7 +135,11 @@ struct HUDContentView: View {
             knownAgentIds = currentIds
         }
         .onChange(of: isExpanded) { expanded in
-            if !expanded { newAgentIds = [] }
+            if !expanded {
+                newAgentIds = []
+                // Collapsing always returns to a single row next time it opens.
+                expansionState.expandedRowCount = 1
+            }
         }
     }
 
@@ -204,6 +211,9 @@ struct HUDContentView: View {
                 },
                 onPermissionCancel: {
                     expansionState.clearPermission()
+                },
+                onRowCountChange: { rows in
+                    expansionState.expandedRowCount = rows
                 }
             )
             .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
