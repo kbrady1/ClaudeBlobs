@@ -585,6 +585,11 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
 }
 
 extension Agent {
+    /// True when this agent represents a background sub-agent spawned by a
+    /// Workflow run. Such children are managed entirely by the workflow engine,
+    /// so their parent is blocked waiting on them even mid-turn.
+    var isWorkflowSubagent: Bool { agentType == "workflow-subagent" }
+
     /// Returns the most urgent status among this agent and its children.
     /// Uses `AgentStatus.sortPriority` (lower = more urgent).
     static func effectiveStatus(of agent: Agent, children: [Agent]) -> AgentStatus {
@@ -601,12 +606,23 @@ extension Agent {
         // If a child is more urgent (e.g. permission), surface that
         if best != agent.status { return best }
 
+        let hasActiveChild = children.contains {
+            $0.status == .working || $0.status == .starting
+        }
+
+        // A running Workflow blocks the parent on its background sub-agents for
+        // the whole run, so the parent sits in `waiting` without being "done".
+        // Treat an in-progress workflow with active sub-agents as delegating.
+        let hasActiveWorkflowChild = children.contains {
+            $0.isWorkflowSubagent && ($0.status == .working || $0.status == .starting)
+        }
+        if agent.status == .waiting && hasActiveWorkflowChild {
+            return .delegating
+        }
+
         // Parent is done but children are still active → delegating
-        if agent.status == .waiting && agent.isDone {
-            let hasActiveChild = children.contains {
-                $0.status == .working || $0.status == .starting
-            }
-            if hasActiveChild { return .delegating }
+        if agent.status == .waiting && agent.isDone && hasActiveChild {
+            return .delegating
         }
 
         return agent.status

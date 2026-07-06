@@ -294,6 +294,37 @@ struct AgentTests {
         #expect(Agent.effectiveStatus(of: parent, children: [child]) == .waiting)
     }
 
+    @Test("effectiveStatus returns delegating for in-progress workflow even when parent is not done")
+    func effectiveStatusDelegatingForWorkflow() {
+        // A session running a Workflow is blocked mid-turn (waiting, not "done")
+        // while its background workflow sub-agents do the work.
+        let parent = Agent.fixture(status: .waiting)
+        let child = Agent.fixture(sessionId: "child", agentType: "workflow-subagent", status: .working)
+        #expect(Agent.effectiveStatus(of: parent, children: [child]) == .delegating)
+    }
+
+    @Test("effectiveStatus delegates for a waiting workflow parent with a starting sub-agent")
+    func effectiveStatusDelegatingForWorkflowStartingChild() {
+        let parent = Agent.fixture(status: .waiting)
+        let child = Agent.fixture(sessionId: "child", agentType: "workflow-subagent", status: .starting)
+        #expect(Agent.effectiveStatus(of: parent, children: [child]) == .delegating)
+    }
+
+    @Test("effectiveStatus promotes child permission over workflow delegating")
+    func effectiveStatusPermissionOverridesWorkflowDelegating() {
+        let parent = Agent.fixture(status: .waiting)
+        let childA = Agent.fixture(sessionId: "child-a", agentType: "workflow-subagent", status: .working)
+        let childB = Agent.fixture(sessionId: "child-b", agentType: "workflow-subagent", status: .permission)
+        #expect(Agent.effectiveStatus(of: parent, children: [childA, childB]) == .permission)
+    }
+
+    @Test("effectiveStatus does not delegate when all workflow children are done")
+    func effectiveStatusNotDelegatingWorkflowChildrenDone() {
+        let parent = Agent.fixture(status: .waiting)
+        let child = Agent.fixture(sessionId: "child", agentType: "workflow-subagent", status: .waiting, waitReason: "done")
+        #expect(Agent.effectiveStatus(of: parent, children: [child]) == .waiting)
+    }
+
     @Test("mostUrgentChild returns nil when no children")
     func mostUrgentChildNone() {
         let parent = Agent.fixture()
