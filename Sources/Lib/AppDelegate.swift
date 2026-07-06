@@ -47,6 +47,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
+        // Force dark mode for every window and hosted SwiftUI view, regardless
+        // of the system appearance. Set before any window/view is created.
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+
         store = AgentStore()
         expansionState = HUDExpansionState()
         ntfyConfig = NtfyConfig()
