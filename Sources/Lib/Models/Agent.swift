@@ -531,6 +531,17 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         lastToolUse?.hasPrefix("ScheduleWakeup") == true
     }
 
+    /// Whether the last tool use was Monitor (starting a background watch/poll,
+    /// e.g. watching a PR or tailing a log for events).
+    var isMonitorStart: Bool {
+        lastToolUse?.hasPrefix("Monitor") == true
+    }
+
+    /// Whether the last tool use was TaskStop (may have ended an active Monitor).
+    var isTaskStop: Bool {
+        lastToolUse?.hasPrefix("TaskStop") == true
+    }
+
     /// Parsed `reason` and `delaySeconds` from a ScheduleWakeup tool use, if available.
     var scheduledWakeup: (reason: String?, delaySeconds: Int?)? {
         guard let tool = lastToolUse, tool.hasPrefix("ScheduleWakeup") else { return nil }

@@ -26,6 +26,7 @@ struct AgentSpriteView: View {
     var isGithubTool: Bool = false
     var isCronSession: Bool = false
     var isScheduledWakeup: Bool = false
+    var isMonitorActive: Bool = false
     var isTaskJustCompleted: Bool = false
     var isInterrupted: Bool = false
     var isToolFailure: Bool = false
@@ -221,13 +222,14 @@ struct AgentSpriteView: View {
         }
     }
 
-    /// Whether to render the clock fallback badge. Shown for cron sessions and
-    /// ScheduleWakeup tool uses whenever nothing more urgent is on screen.
+    /// Whether to render the clock fallback badge. Shown for cron sessions,
+    /// ScheduleWakeup tool uses, and active Monitor tasks whenever nothing more
+    /// urgent is on screen.
     private var showsClockBadge: Bool {
         guard !isSnoozed, !clockDismissed, status != .working, status != .permission, showingFailureIcon == nil else {
             return false
         }
-        return isCronSession || isScheduledWakeup
+        return isCronSession || isScheduledWakeup || isMonitorActive
     }
 
     @ViewBuilder
@@ -382,7 +384,7 @@ struct AgentSpriteView: View {
                 .shadow(color: .black, radius: 2)
                 .offset(x: offset, y: offset)
         } else {
-            Image(systemName: isCronSession ? "clock.fill" : "ellipsis.bubble.fill")
+            Image(systemName: (isCronSession || isMonitorActive) ? "clock.fill" : "ellipsis.bubble.fill")
                 .font(.system(size: accentFont, weight: .heavy))
                 .foregroundColor(.white)
                 .shadow(color: .black, radius: 2)

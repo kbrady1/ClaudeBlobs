@@ -208,6 +208,31 @@ struct AgentTests {
         #expect(npmInstall.isGithubPermission == false)
     }
 
+    @Test func isMonitorStart() {
+        let started = Agent.fixture(lastToolUse: "Monitor: {\"command\":\"tail -f log\",\"description\":\"watch-pr\",\"persistent\":true}")
+        #expect(started.isMonitorStart == true)
+
+        let bare = Agent.fixture(lastToolUse: "Monitor")
+        #expect(bare.isMonitorStart == true)
+
+        let other = Agent.fixture(lastToolUse: "Bash: tail -f log")
+        #expect(other.isMonitorStart == false)
+
+        let none = Agent.fixture(lastToolUse: nil)
+        #expect(none.isMonitorStart == false)
+    }
+
+    @Test func isTaskStop() {
+        let stopped = Agent.fixture(lastToolUse: "TaskStop: {\"task_id\":\"br91rejjo\"}")
+        #expect(stopped.isTaskStop == true)
+
+        let other = Agent.fixture(lastToolUse: "Monitor: {\"persistent\":true}")
+        #expect(other.isTaskStop == false)
+
+        let none = Agent.fixture(lastToolUse: nil)
+        #expect(none.isTaskStop == false)
+    }
+
     @Test func isTaskJustCompleted() {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let recent = Agent.fixture(taskCompletedAt: now - 1000)

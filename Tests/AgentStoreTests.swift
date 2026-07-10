@@ -256,4 +256,34 @@ struct AgentStoreTests {
 
         #expect(store.childSessionIds[parent.id] == [activeChild.id])
     }
+
+    @Test func monitorToolUseTracksSessionAndGoesQuietWhenDone() throws {
+        let sessionId = "monitor-\(UUID().uuidString)"
+        var agent = Agent.fixture(
+            sessionId: sessionId, pid: 700, status: .waiting,
+            lastToolUse: "Monitor: {\"command\":\"tail -f log\",\"persistent\":true}",
+            waitReason: "done"
+        )
+        try JSONEncoder().encode(agent).write(to: tmpDir.appendingPathComponent("\(sessionId).json"))
+
+        let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.reload()
+
+        let loaded = try #require(store.agents.first)
+        #expect(store.monitorSessionIds.contains(loaded.id))
+        #expect(store.cronIsQuiet(loaded) == true)
+        #expect(store.collapsedAgents.isEmpty) // quiet monitor session is auto-hidden
+
+        // A later tool call overwrites lastToolUse, but the session should
+        // remain tracked as having an active monitor until TaskStop fires.
+        agent.lastToolUse = "Edit: file.swift"
+        try JSONEncoder().encode(agent).write(to: tmpDir.appendingPathComponent("\(sessionId).json"))
+        store.reload()
+        #expect(store.monitorSessionIds.contains(loaded.id))
+
+        agent.lastToolUse = "TaskStop: {\"task_id\":\"abc\"}"
+        try JSONEncoder().encode(agent).write(to: tmpDir.appendingPathComponent("\(sessionId).json"))
+        store.reload()
+        #expect(!store.monitorSessionIds.contains(loaded.id))
+    }
 }

@@ -16,6 +16,15 @@ final class AgentStore: ObservableObject {
     }() {
         didSet { UserDefaults.standard.set(Array(cronSessionIds), forKey: "cronSessionIds") }
     }
+    /// Session IDs that have an active background Monitor task. Persisted across
+    /// launches. Unlike ScheduleWakeup, a Monitor call is typically followed by
+    /// more tool calls in the same turn, so `lastToolUse` won't still read
+    /// "Monitor" once the agent settles — this has to be tracked like a loop.
+    @Published var monitorSessionIds: Set<String> = {
+        Set(UserDefaults.standard.stringArray(forKey: "monitorSessionIds") ?? [])
+    }() {
+        didSet { UserDefaults.standard.set(Array(monitorSessionIds), forKey: "monitorSessionIds") }
+    }
     /// Parent session ID → child session IDs (sub-agents linked by PID ancestry)
     @Published var childSessionIds: [String: [String]] = [:]
     /// Cached host app icons per PID (resolved once per agent).
@@ -125,7 +134,8 @@ final class AgentStore: ObservableObject {
         if dismissedClockIds.contains(agent.id) { return false }
         let isCron = cronSessionIds.contains(agent.id)
         let isWakeup = agent.isScheduledWakeup
-        guard isCron || isWakeup else { return false }
+        let isMonitor = monitorSessionIds.contains(agent.id)
+        guard isCron || isWakeup || isMonitor else { return false }
         let effective = effectiveStatus(of: agent)
         // Quiet = waiting+done with no tool failure, or compacting/starting/delegating
         if effective == .permission { return false }
@@ -168,6 +178,7 @@ final class AgentStore: ObservableObject {
     /// suppresses the badge until the agent re-enters a clock-bearing state.
     func dismissClock(for agent: Agent) {
         cronSessionIds.remove(agent.id)
+        monitorSessionIds.remove(agent.id)
         dismissedClockIds.insert(agent.id)
     }
 
@@ -436,6 +447,11 @@ final class AgentStore: ObservableObject {
             } else if agent.isCronDelete {
                 cronSessionIds.remove(agent.id)
             }
+            if agent.isMonitorStart {
+                monitorSessionIds.insert(agent.id)
+            } else if agent.isTaskStop {
+                monitorSessionIds.remove(agent.id)
+            }
         }
 
         // Unsnooze agents whose status changed and trigger peek.
@@ -484,9 +500,10 @@ final class AgentStore: ObservableObject {
             let isSnoozed = snoozedSessionIds.contains(agent.id)
             let effective = Agent.effectiveStatus(of: agent, children: childrenOf(agent.id))
             // Suppress notifications while delegating — defer until children complete
-            // Suppress notifications for quiet cron sessions
-            let isCronQuiet = cronSessionIds.contains(agent.id) && cronIsQuiet(agent)
-            let notifiable = !isCronQuiet && effective != .delegating && (
+            // Suppress notifications for quiet cron/monitor sessions
+            let isQuietBackgroundTask = (cronSessionIds.contains(agent.id) || monitorSessionIds.contains(agent.id))
+                && cronIsQuiet(agent)
+            let notifiable = !isQuietBackgroundTask && effective != .delegating && (
                 agent.status == .permission
                 || (agent.status == .waiting && !agent.isDone)
                 || (agent.status == .waiting && agent.isDone)
@@ -503,6 +520,7 @@ final class AgentStore: ObservableObject {
         let activeSessionIds = Set(loaded.map(\.sessionId))
         snoozedSessionIds = snoozedSessionIds.intersection(activeIds)
         cronSessionIds = cronSessionIds.intersection(activeIds)
+        monitorSessionIds = monitorSessionIds.intersection(activeIds)
         dismissedClockIds = dismissedClockIds.intersection(activeIds)
         lastSeenStatus = lastSeenStatus.filter { activeIds.contains($0.key) }
         lastSeenStatusChangedAt = lastSeenStatusChangedAt.filter { activeIds.contains($0.key) }
