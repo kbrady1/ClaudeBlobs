@@ -29,4 +29,27 @@ enum AppleScriptRunner {
             }
         }
     }
+
+    /// Like `run`, but returns the script's result as a string instead of a
+    /// success bool. Returns nil if the script raised an error.
+    static func runReturningString(_ source: String) async -> String? {
+        DebugLog.shared.log("AppleScriptRunner: executing script:\n\(source)")
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                var error: NSDictionary?
+                guard let script = NSAppleScript(source: source) else {
+                    DebugLog.shared.log("AppleScriptRunner: failed to create NSAppleScript")
+                    continuation.resume(returning: nil)
+                    return
+                }
+                let result = script.executeAndReturnError(&error)
+                if let error {
+                    DebugLog.shared.log("AppleScriptRunner error: \(error)")
+                    continuation.resume(returning: nil)
+                } else {
+                    continuation.resume(returning: result.stringValue)
+                }
+            }
+        }
+    }
 }

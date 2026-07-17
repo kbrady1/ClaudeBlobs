@@ -428,10 +428,16 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func closePicker() {
+    /// Closes the agent picker. `restoreFocus` should be false when the caller
+    /// is about to deep-link to a specific agent right after — otherwise
+    /// restoring the app that was frontmost before the picker opened races
+    /// the deep link's own activation of the agent's terminal, and can win,
+    /// leaving the wrong app in front even though the deep link "succeeded".
+    private func closePicker(restoreFocus: Bool = true) {
         expansionState.collapse()
-        // Restore focus to the previously active app
-        previousApp?.activate()
+        if restoreFocus {
+            previousApp?.activate()
+        }
         previousApp = nil
     }
 
@@ -503,7 +509,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     // Go to Agent (last numbered option)
                     DispatchQueue.main.async {
                         self.expansionState.clearPermission()
-                        self.closePicker()
+                        self.closePicker(restoreFocus: false)
                         DeepLinker.open(agent)
                     }
                 }
@@ -602,7 +608,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard agent.status == .permission, agent.isCmuxSession else {
                     // Not eligible — fall through to deep-link
                     DispatchQueue.main.async {
-                        self.closePicker()
+                        self.closePicker(restoreFocus: false)
                         DeepLinker.open(agent)
                     }
                     return true
@@ -621,7 +627,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     await MainActor.run {
                         if options.isEmpty {
                             self.expansionState.clearPermission()
-                            self.closePicker()
+                            self.closePicker(restoreFocus: false)
                             DeepLinker.open(agent)
                         } else {
                             self.expansionState.showPermission(for: agent, options: options)
@@ -639,7 +645,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if index < agents.count {
                 DispatchQueue.main.async {
                     DebugLog.shared.log("Hotkey select agent \(index): \(agents[index].sessionId)")
-                    self.closePicker()
+                    self.closePicker(restoreFocus: false)
                     DeepLinker.open(agents[index])
                 }
             }

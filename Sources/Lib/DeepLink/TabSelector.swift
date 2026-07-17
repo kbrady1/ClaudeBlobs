@@ -23,11 +23,16 @@ enum TabSelector {
         if bundleId == GhosttyLinker.bundleId, let cwd = agent.cwd {
             Task {
                 let selected = await GhosttyLinker.selectTab(cwd: cwd, title: agent.sessionTitle)
-                if !selected {
-                    DebugLog.shared.log("TabSelector: Ghostty tab selection failed, falling back to activate")
-                    app.unhide()
-                    app.activate()
-                }
+                DebugLog.shared.log("TabSelector: Ghostty selectTab returned \(selected); frontmost before explicit activate=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil")")
+                // Ghostty's own AppleScript commands are supposed to raise its
+                // window, but that hasn't proven reliable when triggered by an
+                // Apple Event from this app. Always explicitly activate via
+                // NSRunningApplication too — the same mechanism the other
+                // terminal fallbacks below already rely on — rather than
+                // trusting Ghostty's self-activation alone.
+                app.unhide()
+                app.activate()
+                DebugLog.shared.log("TabSelector: frontmost after explicit activate=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil")")
             }
             return
         }

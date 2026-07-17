@@ -38,11 +38,15 @@ struct TerminalLinker {
            let ghostty = runningApps.first(where: { $0.bundleIdentifier == GhosttyLinker.bundleId }) {
             Task {
                 let selected = await GhosttyLinker.selectTab(cwd: cwd, title: agent.sessionTitle)
+                DebugLog.shared.log("TerminalLinker: Ghostty selectTab returned \(selected); frontmost before explicit activate=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil")")
                 if !selected {
                     DebugLog.shared.log("TerminalLinker: Ghostty fallback tab selection failed")
-                    ghostty.unhide()
-                    ghostty.activate()
                 }
+                // See TabSelector's Ghostty branch: don't rely on Ghostty's own
+                // AppleScript commands to raise its window reliably.
+                ghostty.unhide()
+                ghostty.activate()
+                DebugLog.shared.log("TerminalLinker: frontmost after explicit activate=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil")")
             }
             return
         }
