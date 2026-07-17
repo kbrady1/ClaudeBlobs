@@ -14,7 +14,6 @@ struct CollapsedView: View {
     var showAppIcons: Bool = false
     var hostAppIcons: [Int: NSImage] = [:]
     var cronSessionIds: Set<String> = []
-    var monitorSessionIds: Set<String> = []
     var backgroundStyle: BackgroundStyle?
 
     var body: some View {
@@ -49,7 +48,7 @@ struct CollapsedView: View {
                         isGithubTool: effectiveIsGithubTool(agent),
                         isCronSession: cronSessionIds.contains(agent.id),
                         isScheduledWakeup: agent.isScheduledWakeup,
-                        isMonitorActive: monitorSessionIds.contains(agent.id),
+                        isMonitorActive: agent.isMonitorActive,
                         isTaskJustCompleted: agent.isTaskJustCompleted,
                         isInterrupted: agent.isInterrupted,
                         isToolFailure: agent.isToolFailure,

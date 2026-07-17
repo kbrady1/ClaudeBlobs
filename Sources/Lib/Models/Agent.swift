@@ -59,6 +59,16 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     var waitReason: String?
     var rawLastMessage: String?
     var toolFailure: String?
+    /// Whether a Monitor task is currently active for this session. Set/cleared
+    /// directly by the hooks (on Monitor / TaskStop) so it survives `lastToolUse`
+    /// being overwritten by later tool calls in the same turn.
+    var monitorActive: Bool = false
+    /// Hard deadline (epoch ms) for a non-persistent Monitor call, computed from
+    /// its `timeout_ms` at call time. A non-persistent Monitor self-terminates at
+    /// this point whether or not the agent ever calls TaskStop, so `monitorActive`
+    /// alone can't be trusted past it. Nil for persistent Monitors (no timeout)
+    /// or when no Monitor is active.
+    var monitorExpiresAt: Int64?
     var taskCompletedAt: Int64?
     var createdAt: Int64?
     var updatedAt: Int64
@@ -85,6 +95,8 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         parentSessionId: String? = nil,
         waitReason: String? = nil,
         toolFailure: String? = nil,
+        monitorActive: Bool = false,
+        monitorExpiresAt: Int64? = nil,
         taskCompletedAt: Int64? = nil,
         createdAt: Int64? = nil,
         updatedAt: Int64,
@@ -108,6 +120,8 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         self.parentSessionId = parentSessionId
         self.waitReason = waitReason
         self.toolFailure = toolFailure
+        self.monitorActive = monitorActive
+        self.monitorExpiresAt = monitorExpiresAt
         self.taskCompletedAt = taskCompletedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -134,6 +148,8 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         case waitReason
         case rawLastMessage
         case toolFailure
+        case monitorActive
+        case monitorExpiresAt
         case taskCompletedAt
         case createdAt
         case updatedAt
@@ -161,6 +177,8 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         waitReason = try container.decodeIfPresent(String.self, forKey: .waitReason)
         rawLastMessage = try container.decodeIfPresent(String.self, forKey: .rawLastMessage)
         toolFailure = try container.decodeIfPresent(String.self, forKey: .toolFailure)
+        monitorActive = try container.decodeIfPresent(Bool.self, forKey: .monitorActive) ?? false
+        monitorExpiresAt = try container.decodeIfPresent(Int64.self, forKey: .monitorExpiresAt)
         taskCompletedAt = try container.decodeIfPresent(Int64.self, forKey: .taskCompletedAt)
         createdAt = try container.decodeIfPresent(Int64.self, forKey: .createdAt)
         updatedAt = try container.decode(Int64.self, forKey: .updatedAt)
@@ -459,6 +477,17 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         AgentStaleness(updatedAt: updatedAt)
     }
 
+    /// Whether a Monitor task should still be considered active. A persistent
+    /// Monitor (no `monitorExpiresAt`) stays active until TaskStop clears
+    /// `monitorActive`. A non-persistent Monitor self-terminates at its timeout
+    /// with no obligation on the agent to call TaskStop, so once that deadline
+    /// passes the flag alone can't be trusted — treat it as inactive.
+    var isMonitorActive: Bool {
+        guard monitorActive else { return false }
+        guard let expiresAt = monitorExpiresAt else { return true }
+        return Int64(Date().timeIntervalSince1970 * 1000) < expiresAt
+    }
+
     var isTaskJustCompleted: Bool {
         guard let ts = taskCompletedAt else { return false }
         let ageMs = Int64(Date().timeIntervalSince1970 * 1000) - ts
@@ -529,17 +558,6 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     /// Whether the last tool use was ScheduleWakeup (a self-paced /loop sleep).
     var isScheduledWakeup: Bool {
         lastToolUse?.hasPrefix("ScheduleWakeup") == true
-    }
-
-    /// Whether the last tool use was Monitor (starting a background watch/poll,
-    /// e.g. watching a PR or tailing a log for events).
-    var isMonitorStart: Bool {
-        lastToolUse?.hasPrefix("Monitor") == true
-    }
-
-    /// Whether the last tool use was TaskStop (may have ended an active Monitor).
-    var isTaskStop: Bool {
-        lastToolUse?.hasPrefix("TaskStop") == true
     }
 
     /// Parsed `reason` and `delaySeconds` from a ScheduleWakeup tool use, if available.
@@ -665,6 +683,8 @@ extension Agent {
         waitReason: String? = nil,
         rawLastMessage: String? = nil,
         toolFailure: String? = nil,
+        monitorActive: Bool = false,
+        monitorExpiresAt: Int64? = nil,
         taskCompletedAt: Int64? = nil,
         createdAt: Int64? = nil,
         updatedAt: Int64 = 1000,
@@ -682,6 +702,8 @@ extension Agent {
             parentSessionId: parentSessionId,
             waitReason: waitReason,
             toolFailure: toolFailure,
+            monitorActive: monitorActive,
+            monitorExpiresAt: monitorExpiresAt,
             taskCompletedAt: taskCompletedAt,
             createdAt: createdAt, updatedAt: updatedAt,
             statusChangedAt: statusChangedAt

@@ -167,7 +167,6 @@ struct HUDContentView: View {
                 hostAppIcons: store.hostAppIcons,
                 backgroundStyle: themeConfig.backgroundEnabled ? resolvedBackgroundStyle : .color(.black),
                 cronSessionIds: store.cronSessionIds,
-                monitorSessionIds: store.monitorSessionIds,
                 dismissedClockIds: store.dismissedClockIds,
                 customNames: store.customNames,
                 onAgentClick: { agent in
@@ -231,7 +230,6 @@ struct HUDContentView: View {
                 showAppIcons: store.appIconVisibility == .always,
                 hostAppIcons: store.hostAppIcons,
                 cronSessionIds: store.cronSessionIds,
-                monitorSessionIds: store.monitorSessionIds,
                 backgroundStyle: (themeConfig.backgroundEnabled && themeConfig.backgroundShownWhenCollapsed) ? resolvedBackgroundStyle : nil
             )
             .transition(.opacity.combined(with: .scale(scale: 1.05, anchor: .top)))

@@ -17,6 +17,29 @@ TS=$(now_ms)
 
 TOOL_USE_STR=$(format_tool_input "$TOOL_NAME" "$RAW_INPUT")
 
+# Monitor/TaskStop flip a durable flag instead of relying on lastToolUse, which
+# gets overwritten by the very next tool call in the same turn.
+#
+# A non-persistent Monitor (the default) self-terminates at its timeout_ms with
+# no obligation on the agent to ever call TaskStop — that's expected, not a
+# missed cleanup step. So we record a hard expiry (now + timeout_ms) alongside
+# the flag; the app treats the flag as stale once that deadline passes. A
+# persistent Monitor has no timeout and stays active until an explicit
+# TaskStop, so it gets no expiry.
+MONITOR_ACTIVE_FILTER="."
+if [ "$TOOL_NAME" = "Monitor" ]; then
+  IS_PERSISTENT=$(echo "$RAW_INPUT" | jq -r 'if .persistent == true then "true" else "false" end' 2>/dev/null)
+  if [ "$IS_PERSISTENT" = "true" ]; then
+    MONITOR_ACTIVE_FILTER=".monitorActive = true | .monitorExpiresAt = null"
+  else
+    TIMEOUT_MS=$(echo "$RAW_INPUT" | jq -r '.timeout_ms // 300000' 2>/dev/null)
+    case "$TIMEOUT_MS" in ''|*[!0-9]*) TIMEOUT_MS=300000 ;; esac
+    MONITOR_ACTIVE_FILTER=".monitorActive = true | .monitorExpiresAt = $((TS + TIMEOUT_MS))"
+  fi
+elif [ "$TOOL_NAME" = "TaskStop" ]; then
+  MONITOR_ACTIVE_FILTER=".monitorActive = false | .monitorExpiresAt = null"
+fi
+
 # Never overwrite permission — PreToolUse fires BEFORE PermissionRequest for
 # the same tool, so it can never be the signal that permission was granted.
 # That signal is PostToolUse.
@@ -38,6 +61,6 @@ atomic_update "$STATUS_FILE" \
   --arg status "working" \
   --arg toolUse "$TOOL_USE_STR" \
   --argjson ts "$TS" \
-  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .waitReason = null | .toolFailure = null | .lastMessage = null | .rawLastMessage = null | .updatedAt = $ts'
+  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .waitReason = null | .toolFailure = null | .lastMessage = null | .rawLastMessage = null | .updatedAt = $ts | '"$MONITOR_ACTIVE_FILTER"
 
 debug_log_result

@@ -257,12 +257,13 @@ struct AgentStoreTests {
         #expect(store.childSessionIds[parent.id] == [activeChild.id])
     }
 
-    @Test func monitorToolUseTracksSessionAndGoesQuietWhenDone() throws {
+    @Test func monitorActiveFlagGoesQuietWhenDoneAndSurvivesLaterToolUse() throws {
         let sessionId = "monitor-\(UUID().uuidString)"
         var agent = Agent.fixture(
             sessionId: sessionId, pid: 700, status: .waiting,
             lastToolUse: "Monitor: {\"command\":\"tail -f log\",\"persistent\":true}",
-            waitReason: "done"
+            waitReason: "done",
+            monitorActive: true
         )
         try JSONEncoder().encode(agent).write(to: tmpDir.appendingPathComponent("\(sessionId).json"))
 
@@ -270,20 +271,48 @@ struct AgentStoreTests {
         store.reload()
 
         let loaded = try #require(store.agents.first)
-        #expect(store.monitorSessionIds.contains(loaded.id))
+        #expect(loaded.monitorActive)
         #expect(store.cronIsQuiet(loaded) == true)
         #expect(store.collapsedAgents.isEmpty) // quiet monitor session is auto-hidden
 
-        // A later tool call overwrites lastToolUse, but the session should
-        // remain tracked as having an active monitor until TaskStop fires.
+        // A later tool call overwrites lastToolUse, but monitorActive is a
+        // durable flag set directly by the hook, so it survives independently
+        // of lastToolUse until TaskStop clears it.
         agent.lastToolUse = "Edit: file.swift"
         try JSONEncoder().encode(agent).write(to: tmpDir.appendingPathComponent("\(sessionId).json"))
         store.reload()
-        #expect(store.monitorSessionIds.contains(loaded.id))
+        #expect(store.agents.first?.monitorActive == true)
 
         agent.lastToolUse = "TaskStop: {\"task_id\":\"abc\"}"
+        agent.monitorActive = false
         try JSONEncoder().encode(agent).write(to: tmpDir.appendingPathComponent("\(sessionId).json"))
         store.reload()
-        #expect(!store.monitorSessionIds.contains(loaded.id))
+        #expect(store.agents.first?.monitorActive == false)
+    }
+
+    @Test func expiredNonPersistentMonitorIsNotTreatedAsActive() throws {
+        // A non-persistent Monitor self-terminates at its timeout with no
+        // obligation on the agent to call TaskStop. If the app trusted the raw
+        // monitorActive flag forever, a session like this would stay demoted
+        // and clock-badged indefinitely even though the watch is long over.
+        let sessionId = "monitor-expired-\(UUID().uuidString)"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let agent = Agent.fixture(
+            sessionId: sessionId, pid: 701, status: .waiting,
+            lastMessage: "Deploy finished — success",
+            waitReason: "done",
+            monitorActive: true,
+            monitorExpiresAt: nowMs - 60000
+        )
+        try JSONEncoder().encode(agent).write(to: tmpDir.appendingPathComponent("\(sessionId).json"))
+
+        let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.reload()
+
+        let loaded = try #require(store.agents.first)
+        #expect(loaded.monitorActive) // raw flag is still (stale) true
+        #expect(loaded.isMonitorActive == false) // but the expiry says otherwise
+        #expect(store.cronIsQuiet(loaded) == false) // so it's not demoted as a quiet background task
+        #expect(!store.collapsedAgents.isEmpty) // and shows up normally
     }
 }

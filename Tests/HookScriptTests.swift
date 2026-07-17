@@ -320,6 +320,67 @@ struct HookScriptTests {
             ], existingStatus: existing)
             #expect(r.status?["status"] as? String == "working")
         }
+
+        @Test("persistent Monitor sets monitorActive with no expiry")
+        func persistentMonitorSetsMonitorActive() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Monitor",
+                "tool_input": ["command": "tail -f log", "persistent": true],
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["monitorActive"] as? Bool == true)
+            #expect(r.status?["monitorExpiresAt"] == nil || r.status?["monitorExpiresAt"] is NSNull)
+
+            // A later, unrelated tool call must not clear the flag — this is
+            // exactly the case that was silently dropped when the app tried to
+            // catch "Monitor" as a transient lastToolUse value instead.
+            let r2 = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Edit",
+                "tool_input": ["file_path": "/tmp/foo.swift"],
+            ], existingStatus: r.status!)
+            #expect(r2.status?["monitorActive"] as? Bool == true)
+            #expect(r2.status?["lastToolUse"] as? String == "Edit: foo.swift")
+        }
+
+        @Test("non-persistent Monitor sets monitorActive with an expiry from timeout_ms")
+        func nonPersistentMonitorSetsExpiry() throws {
+            let h = try HookTestHelper()
+            let before = Int64(Date().timeIntervalSince1970 * 1000)
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Monitor",
+                "tool_input": ["command": "until grep -q Ready log; do sleep 1; done", "timeout_ms": 60000],
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["monitorActive"] as? Bool == true)
+            let expiresAt = try #require(r.status?["monitorExpiresAt"] as? Int64 ?? (r.status?["monitorExpiresAt"] as? Int).map(Int64.init))
+            #expect(expiresAt >= before + 60000)
+            #expect(expiresAt <= before + 60000 + 5000) // generous slack for test runtime
+        }
+
+        @Test("non-persistent Monitor without timeout_ms defaults to 300000ms")
+        func nonPersistentMonitorDefaultsTimeout() throws {
+            let h = try HookTestHelper()
+            let before = Int64(Date().timeIntervalSince1970 * 1000)
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Monitor",
+                "tool_input": ["command": "tail -f log"],
+            ], existingStatus: makeWorkingStatus())
+            let expiresAt = try #require(r.status?["monitorExpiresAt"] as? Int64 ?? (r.status?["monitorExpiresAt"] as? Int).map(Int64.init))
+            #expect(expiresAt >= before + 300000)
+        }
+
+        @Test("TaskStop clears monitorActive and monitorExpiresAt")
+        func taskStopClearsMonitorActive() throws {
+            let h = try HookTestHelper()
+            var existing = makeWorkingStatus()
+            existing["monitorActive"] = true
+            existing["monitorExpiresAt"] = 9999999999999
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "TaskStop",
+                "tool_input": ["task_id": "abc"],
+            ], existingStatus: existing)
+            #expect(r.status?["monitorActive"] as? Bool == false)
+            #expect(r.status?["monitorExpiresAt"] == nil || r.status?["monitorExpiresAt"] is NSNull)
+        }
     }
 
     // MARK: - hook-pre-tool.sh — JSON tool_input formatting

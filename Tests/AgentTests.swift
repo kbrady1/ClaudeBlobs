@@ -208,29 +208,64 @@ struct AgentTests {
         #expect(npmInstall.isGithubPermission == false)
     }
 
-    @Test func isMonitorStart() {
-        let started = Agent.fixture(lastToolUse: "Monitor: {\"command\":\"tail -f log\",\"description\":\"watch-pr\",\"persistent\":true}")
-        #expect(started.isMonitorStart == true)
-
-        let bare = Agent.fixture(lastToolUse: "Monitor")
-        #expect(bare.isMonitorStart == true)
-
-        let other = Agent.fixture(lastToolUse: "Bash: tail -f log")
-        #expect(other.isMonitorStart == false)
-
-        let none = Agent.fixture(lastToolUse: nil)
-        #expect(none.isMonitorStart == false)
+    @Test func monitorActiveDefaultsFalseWhenAbsentFromJSON() throws {
+        let json = """
+        {
+            "session_id": "abc-123",
+            "pid": 55555,
+            "cwd": null,
+            "status": "waiting",
+            "updated_at": 9999,
+            "last_tool_use": "Edit: file.swift"
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let agent = try decoder.decode(Agent.self, from: Data(json.utf8))
+        #expect(agent.monitorActive == false)
     }
 
-    @Test func isTaskStop() {
-        let stopped = Agent.fixture(lastToolUse: "TaskStop: {\"task_id\":\"br91rejjo\"}")
-        #expect(stopped.isTaskStop == true)
+    @Test func monitorActiveDecodesWhenPresentInJSON() throws {
+        let json = """
+        {
+            "session_id": "abc-123",
+            "pid": 55555,
+            "cwd": null,
+            "status": "waiting",
+            "updated_at": 9999,
+            "monitor_active": true
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let agent = try decoder.decode(Agent.self, from: Data(json.utf8))
+        #expect(agent.monitorActive == true)
+    }
 
-        let other = Agent.fixture(lastToolUse: "Monitor: {\"persistent\":true}")
-        #expect(other.isTaskStop == false)
+    @Test func isMonitorActiveIsTrueWithNoExpiry() {
+        // Persistent Monitors carry no monitorExpiresAt — flag alone governs.
+        let agent = Agent.fixture(monitorActive: true, monitorExpiresAt: nil)
+        #expect(agent.isMonitorActive == true)
+    }
 
-        let none = Agent.fixture(lastToolUse: nil)
-        #expect(none.isTaskStop == false)
+    @Test func isMonitorActiveIsFalseWhenFlagUnset() {
+        let agent = Agent.fixture(monitorActive: false)
+        #expect(agent.isMonitorActive == false)
+    }
+
+    @Test func isMonitorActiveIsFalsePastExpiry() {
+        // A non-persistent Monitor that has already timed out — the agent never
+        // had to call TaskStop, so the flag alone would wrongly read "active"
+        // forever without the expiry check.
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let agent = Agent.fixture(monitorActive: true, monitorExpiresAt: now - 1000)
+        #expect(agent.isMonitorActive == false)
+    }
+
+    @Test func isMonitorActiveIsTrueBeforeExpiry() {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let agent = Agent.fixture(monitorActive: true, monitorExpiresAt: now + 60000)
+        #expect(agent.isMonitorActive == true)
     }
 
     @Test func isTaskJustCompleted() {

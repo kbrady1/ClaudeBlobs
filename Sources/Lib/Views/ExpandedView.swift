@@ -13,7 +13,6 @@ struct ExpandedView: View {
     var hostAppIcons: [Int: NSImage] = [:]
     var backgroundStyle: BackgroundStyle = .color(.black)
     var cronSessionIds: Set<String> = []
-    var monitorSessionIds: Set<String> = []
     var dismissedClockIds: Set<String> = []
     var customNames: [String: String] = [:]
     let onAgentClick: (Agent) -> Void
@@ -204,7 +203,7 @@ struct ExpandedView: View {
             agentCard(agent, isSelected: selectedIndex == index)
         }
         .buttonStyle(.plain)
-        .opacity(snoozedIds.contains(agent.id) ? 0.45 : (cronSessionIds.contains(agent.id) || monitorSessionIds.contains(agent.id) || agent.isScheduledWakeup) && agent.isDone && agent.toolFailure == nil ? 0.45 : agent.status == .working ? 0.7 : 1.0)
+        .opacity(snoozedIds.contains(agent.id) ? 0.45 : (cronSessionIds.contains(agent.id) || agent.isMonitorActive || agent.isScheduledWakeup) && agent.isDone && agent.toolFailure == nil ? 0.45 : agent.status == .working ? 0.7 : 1.0)
         .contextMenu {
             Button("Rename\u{2026}") { beginRename(agent) }
             if customNames[agent.sessionId] != nil {
@@ -356,7 +355,7 @@ struct ExpandedView: View {
                         isGithubTool: agent.isGithubTool,
                         isCronSession: cronSessionIds.contains(agent.id),
                         isScheduledWakeup: agent.isScheduledWakeup,
-                        isMonitorActive: monitorSessionIds.contains(agent.id),
+                        isMonitorActive: agent.isMonitorActive,
                         isTaskJustCompleted: agent.isTaskJustCompleted,
                         isInterrupted: agent.isInterrupted,
                         isToolFailure: agent.isToolFailure,
