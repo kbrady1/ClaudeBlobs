@@ -563,6 +563,27 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return true
         }
 
+        // When the snooze-duration popover is showing, handle 1-6 and Escape
+        if let target = expansionState.snoozeAgent {
+            // Escape — close popover only
+            if event.keyCode == 53 {
+                DispatchQueue.main.async { self.expansionState.clearSnooze() }
+                return true
+            }
+            let liveAgent = store.agents.first(where: { $0.id == target.id }) ?? target
+            if let chars = event.characters, let digit = chars.first, digit.isNumber,
+               let num = Int(String(digit)), num >= 1, num <= SnoozeDuration.allCases.count {
+                let duration = SnoozeDuration.allCases[num - 1]
+                DispatchQueue.main.async {
+                    self.store.snooze(liveAgent, for: duration)
+                    self.expansionState.clearSnooze()
+                }
+                return true
+            }
+            // Consume all other keys while popover is open
+            return true
+        }
+
         let agentCount = min(store.sortedTopLevelAgents.count, 9)
 
         // Escape — close picker
@@ -682,7 +703,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return true
         }
 
-        // Delete/Backspace — snooze or dismiss selected agent
+        // Delete/Backspace — ask for a snooze duration, or dismiss if already snoozed
         if event.keyCode == 51 {
             let index = expansionState.selectedIndex
             let agents = store.sortedTopLevelAgents
@@ -693,8 +714,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         DebugLog.shared.log("Hotkey dismiss agent \(index): \(agent.sessionId)")
                         self.store.dismiss(agent)
                     } else {
-                        DebugLog.shared.log("Hotkey snooze agent \(index): \(agent.sessionId)")
-                        self.store.snooze(agent)
+                        DebugLog.shared.log("Hotkey show snooze picker for agent \(index): \(agent.sessionId)")
+                        self.expansionState.showSnooze(for: agent)
                     }
                 }
             }
