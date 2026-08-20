@@ -23,9 +23,11 @@ final class HUDExpansionState: ObservableObject {
     @Published var permissionOptions: [String] = []
     @Published var isLoadingPermission = false
     @Published var statusOverrideAgent: Agent?
+    @Published var snoozeAgent: Agent?
 
     var isShowingPermission: Bool { permissionAgent != nil }
     var isShowingStatusOverride: Bool { statusOverrideAgent != nil }
+    var isShowingSnooze: Bool { snoozeAgent != nil }
 
     func showPermission(for agent: Agent, options: [String]) {
         permissionAgent = agent
@@ -45,6 +47,14 @@ final class HUDExpansionState: ObservableObject {
 
     func clearStatusOverride() {
         statusOverrideAgent = nil
+    }
+
+    func showSnooze(for agent: Agent) {
+        snoozeAgent = agent
+    }
+
+    func clearSnooze() {
+        snoozeAgent = nil
     }
 
     func toggle(agentCount: Int) {
@@ -158,6 +168,7 @@ struct HUDContentView: View {
             ExpandedView(
                 agents: store.sortedTopLevelAgents,
                 snoozedIds: store.snoozedSessionIds,
+                snoozeUntil: store.snoozeUntil,
                 notifiedIds: ntfyScheduler.notifiedSessionIds,
                 childAgents: resolvedChildren,
                 selectedIndex: expansionState.isKeyboardExpanded ? expansionState.selectedIndex : nil,
@@ -173,7 +184,13 @@ struct HUDContentView: View {
                     onAgentClick(agent)
                     expansionState.collapse()
                 },
-                onSnooze: { store.snooze($0) },
+                onRequestSnooze: { agent in expansionState.showSnooze(for: agent) },
+                onSnooze: { agent, duration in
+                    store.snooze(agent, for: duration)
+                    expansionState.clearSnooze()
+                },
+                snoozePickerAgent: expansionState.snoozeAgent,
+                onSnoozePickerCancel: { expansionState.clearSnooze() },
                 onDismiss: { store.dismiss($0) },
                 onDismissChild: { store.dismiss($0) },
                 onDismissClock: { store.dismissClock(for: $0) },

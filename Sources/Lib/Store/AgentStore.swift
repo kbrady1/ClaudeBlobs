@@ -10,6 +10,9 @@ struct AgentStatusSource: Equatable {
 final class AgentStore: ObservableObject {
     @Published var agents: [Agent] = []
     @Published var snoozedSessionIds: Set<String> = []
+    /// Wake time for timed snoozes. Absent for indefinite snoozes and unsnoozed agents.
+    @Published var snoozeUntil: [String: Date] = [:]
+    private var snoozeTimers: [String: DispatchWorkItem] = [:]
     /// Session IDs that have an active cron/loop schedule. Persisted across launches.
     @Published var cronSessionIds: Set<String> = {
         Set(UserDefaults.standard.stringArray(forKey: "cronSessionIds") ?? [])
@@ -136,13 +139,34 @@ final class AgentStore: ObservableObject {
         return true
     }
 
-    func snooze(_ agent: Agent) {
+    func snooze(_ agent: Agent, for duration: SnoozeDuration = .indefinite) {
+        snoozeTimers[agent.id]?.cancel()
+        snoozeTimers.removeValue(forKey: agent.id)
         snoozedSessionIds.insert(agent.id)
         ntfyScheduler?.cancelPending(for: agent.id)
+
+        guard let wakeDate = duration.wakeDate() else {
+            snoozeUntil.removeValue(forKey: agent.id)
+            return
+        }
+        snoozeUntil[agent.id] = wakeDate
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.snoozeTimers.removeValue(forKey: agent.id)
+            // Only auto-wake if this is still the same snooze (not replaced/cleared since).
+            guard self.snoozeUntil[agent.id] == wakeDate else { return }
+            self.unsnooze(agent)
+        }
+        snoozeTimers[agent.id] = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, wakeDate.timeIntervalSinceNow), execute: workItem)
     }
 
     func unsnooze(_ agent: Agent) {
         snoozedSessionIds.remove(agent.id)
+        snoozeUntil.removeValue(forKey: agent.id)
+        snoozeTimers[agent.id]?.cancel()
+        snoozeTimers.removeValue(forKey: agent.id)
     }
 
     func dismiss(_ agent: Agent) {
@@ -456,7 +480,9 @@ final class AgentStore: ObservableObject {
                 return current > previous
             }()
             if statusChanged || turnAdvanced {
-                snoozedSessionIds.remove(agent.id)
+                if snoozedSessionIds.contains(agent.id) {
+                    unsnooze(agent)
+                }
                 changedIds.insert(agent.id)
             }
             lastSeenStatus[agent.id] = agent.status
@@ -504,6 +530,11 @@ final class AgentStore: ObservableObject {
         let activeIds = Set(loaded.map(\.id))
         let activeSessionIds = Set(loaded.map(\.sessionId))
         snoozedSessionIds = snoozedSessionIds.intersection(activeIds)
+        for staleId in snoozeUntil.keys where !activeIds.contains(staleId) {
+            snoozeTimers[staleId]?.cancel()
+            snoozeTimers.removeValue(forKey: staleId)
+        }
+        snoozeUntil = snoozeUntil.filter { activeIds.contains($0.key) }
         cronSessionIds = cronSessionIds.intersection(activeIds)
         dismissedClockIds = dismissedClockIds.intersection(activeIds)
         lastSeenStatus = lastSeenStatus.filter { activeIds.contains($0.key) }

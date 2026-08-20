@@ -315,4 +315,38 @@ struct AgentStoreTests {
         #expect(store.cronIsQuiet(loaded) == false) // so it's not demoted as a quiet background task
         #expect(!store.collapsedAgents.isEmpty) // and shows up normally
     }
+
+    @Test func indefiniteSnoozeHasNoWakeDate() throws {
+        let agent = Agent.fixture(sessionId: "snooze-indef", status: .waiting)
+        let data = try JSONEncoder().encode(agent)
+        try data.write(to: tmpDir.appendingPathComponent("snooze-indef.json"))
+
+        let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.reload()
+        let loaded = try #require(store.agents.first)
+
+        store.snooze(loaded, for: .indefinite)
+        #expect(store.snoozedSessionIds.contains(loaded.id))
+        #expect(store.snoozeUntil[loaded.id] == nil)
+    }
+
+    @Test func timedSnoozeRecordsWakeDate() throws {
+        let agent = Agent.fixture(sessionId: "snooze-timed", status: .waiting)
+        let data = try JSONEncoder().encode(agent)
+        try data.write(to: tmpDir.appendingPathComponent("snooze-timed.json"))
+
+        let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.reload()
+        let loaded = try #require(store.agents.first)
+
+        store.snooze(loaded, for: .thirtyMinutes)
+        #expect(store.snoozedSessionIds.contains(loaded.id))
+        let wakeDate = try #require(store.snoozeUntil[loaded.id])
+        #expect(wakeDate.timeIntervalSinceNow > 29 * 60)
+        #expect(wakeDate.timeIntervalSinceNow <= 30 * 60)
+
+        store.unsnooze(loaded)
+        #expect(!store.snoozedSessionIds.contains(loaded.id))
+        #expect(store.snoozeUntil[loaded.id] == nil)
+    }
 }

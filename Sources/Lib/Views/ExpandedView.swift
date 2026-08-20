@@ -4,6 +4,7 @@ import AppKit
 struct ExpandedView: View {
     let agents: [Agent]
     let snoozedIds: Set<String>
+    var snoozeUntil: [String: Date] = [:]
     var notifiedIds: Set<String> = []
     var childAgents: [String: [Agent]] = [:]
     let selectedIndex: Int?
@@ -16,7 +17,10 @@ struct ExpandedView: View {
     var dismissedClockIds: Set<String> = []
     var customNames: [String: String] = [:]
     let onAgentClick: (Agent) -> Void
-    let onSnooze: (Agent) -> Void
+    var onRequestSnooze: ((Agent) -> Void)?
+    let onSnooze: (Agent, SnoozeDuration) -> Void
+    var snoozePickerAgent: Agent?
+    var onSnoozePickerCancel: (() -> Void)?
     let onDismiss: (Agent) -> Void
     var onDismissChild: ((Agent) -> Void)?
     var onDismissClock: ((Agent) -> Void)?
@@ -306,6 +310,14 @@ struct ExpandedView: View {
         }
     }
 
+    private func snoozeHelpText(for agent: Agent) -> String {
+        guard let wakeDate = snoozeUntil[agent.id] else { return "Snoozed indefinitely" }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return "Snoozed until \(formatter.string(from: wakeDate))"
+    }
+
     private func effectiveStatus(_ agent: Agent) -> AgentStatus {
         Agent.effectiveStatus(of: agent, children: childAgents[agent.id] ?? [])
     }
@@ -397,7 +409,7 @@ struct ExpandedView: View {
 
                 if !snoozedIds.contains(agent.id) {
                     Button {
-                        onSnooze(agent)
+                        onRequestSnooze?(agent)
                     } label: {
                         Image(systemName: "moon.fill")
                             .font(.system(size: 8))
@@ -410,6 +422,15 @@ struct ExpandedView: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .help("Snooze\u{2026}")
+                    .popover(isPresented: Binding(
+                        get: { snoozePickerAgent?.id == agent.id },
+                        set: { if !$0 { onSnoozePickerCancel?() } }
+                    )) {
+                        SnoozeDurationPopover { duration in
+                            onSnooze(agent, duration)
+                        }
+                    }
                 } else {
                     Button {
                         onDismiss(agent)
@@ -425,6 +446,7 @@ struct ExpandedView: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .help(snoozeHelpText(for: agent))
                 }
             }
 
@@ -545,6 +567,41 @@ private struct StatusOverridePopover: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Popover for choosing how long to snooze a blob.
+private struct SnoozeDurationPopover: View {
+    var onSelect: (SnoozeDuration) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Snooze for\u{2026}")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(SnoozeDuration.allCases.enumerated()), id: \.element) { index, duration in
+                    Button {
+                        onSelect(duration)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(duration.label)
+                                .font(.system(size: 11, weight: .medium))
+                            Spacer()
+                            Text("\(index + 1)")
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .frame(width: 160)
+        .padding(12)
     }
 }
 
