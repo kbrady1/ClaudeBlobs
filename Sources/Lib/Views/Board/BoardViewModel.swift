@@ -129,7 +129,7 @@ final class BoardViewModel: ObservableObject {
     }
 
     private func loadConductorProposal(_ item: ConductorItem) {
-        conductorDraft = item.assessment?.action.text ?? ""
+        conductorDraft = item.assessment?.action.kind == .reply ? (item.assessment?.action.text ?? "") : ""
         conductorDraftDirty = false
         conductorChoices = [:]
         if let option = item.assessment?.action.option, item.assessment?.action.kind == .choose {
@@ -222,17 +222,23 @@ final class BoardViewModel: ObservableObject {
         let kind = item.assessment?.action.kind ?? .open
         let text = conductorDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         let questions = agent.pendingQuestions ?? []
-        let choices = questions.indices.compactMap { conductorChoices[$0] }
-        guard !conductorSending else { return }
-        if !questions.isEmpty, !conductorChoices.isEmpty || !text.isEmpty {
-            let answered = questions.indices.prefix { conductorChoices[$0] != nil }.count
-            // A typed reply answers everything that is left.
-            let covered = text.isEmpty ? answered : questions.count
-            guard choices.count == answered, covered >= questions.count else {
-                conductorStatus = "Choose an option for every question"
-                return
+        // Per-question answers: a chosen option, or the typed text through the
+        // question's "Type something" slot (the UI appends it after the options).
+        var selections: [SessionMessenger.Selection] = []
+        if !questions.isEmpty {
+            let typed = conductorDraftDirty || questions.indices.contains { conductorChoices[$0] == nil } ? text : ""
+            for (index, question) in questions.enumerated() {
+                if let option = conductorChoices[index] {
+                    selections.append(.option(option))
+                } else if !typed.isEmpty {
+                    selections.append(.typed(optionIndex: question.options.count + 1, text: typed))
+                } else {
+                    conductorStatus = "Choose an option for every question, or type an answer"
+                    return
+                }
             }
         }
+        guard !conductorSending else { return }
         if kind == .approve, text.isEmpty, questions.isEmpty, agent.isPlanApproval {
             conductorStatus = "Plan approvals need a look — open the session"
             return
@@ -242,10 +248,8 @@ final class BoardViewModel: ObservableObject {
         Task { @MainActor in
             defer { conductorSending = false }
             let result: Result<Void, Error>
-            if !questions.isEmpty && (!choices.isEmpty || !text.isEmpty) {
-                // Free text goes through the last question's "Type something" option when it has one.
-                let freeTextOption = text.isEmpty ? nil : questions.last?.freeTextOptionIndex.map { $0 + 1 }
-                result = await SessionMessenger.answer(choices: choices, freeText: text.isEmpty ? nil : text, freeTextOption: freeTextOption, questionCount: questions.count, to: agent)
+            if !selections.isEmpty {
+                result = await SessionMessenger.answer(selections: selections, to: agent)
             } else if kind == .approve && text.isEmpty {
                 // The proposal was scored on a snapshot; never approve a prompt the model did not see.
                 guard agent.status == .permission,

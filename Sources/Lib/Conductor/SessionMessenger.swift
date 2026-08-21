@@ -41,22 +41,33 @@ enum SessionMessenger {
         case submit          // press Enter on the final review step
     }
 
-    /// AskUserQuestion ignores digit keys: the highlight starts on option 1,
-    /// ↓ moves it, Enter commits the question and advances. A multi-question
-    /// prompt ends on a review step that needs one more Enter. Free text goes
-    /// through the "Type something" option (`freeTextOption`, 1-based).
-    static func answerSteps(choices: [Int], freeText: String?, freeTextOption: Int?, questionCount: Int) -> [AnswerStep] {
-        var steps: [AnswerStep] = choices.map { .select($0) }
-        if let freeText, !freeText.isEmpty {
-            if let freeTextOption { steps.append(.select(freeTextOption)) }
-            steps.append(.text(freeText))
+    /// One answer per pending question, in order.
+    enum Selection: Equatable {
+        case option(Int)                       // 1-based option
+        case typed(optionIndex: Int, text: String)  // choose "Type something" (1-based), then type
+    }
+
+    /// The highlight starts on option 1, ↓ moves it, Enter commits the
+    /// question and advances. A multi-question prompt ends on a review step
+    /// ("Submit answers" highlighted) that needs one more Enter. Text is only
+    /// ever typed inside a question's "Type something" field — never on the
+    /// review step, where letters move the highlight (e.g. onto Cancel).
+    static func answerSteps(selections: [Selection]) -> [AnswerStep] {
+        var steps: [AnswerStep] = []
+        for selection in selections {
+            switch selection {
+            case .option(let n): steps.append(.select(n))
+            case .typed(let n, let text):
+                steps.append(.select(n))
+                steps.append(.text(text))
+            }
         }
-        if questionCount > 1 && !steps.isEmpty { steps.append(.submit) }
+        if selections.count > 1 && !steps.isEmpty { steps.append(.submit) }
         return steps
     }
 
-    static func answer(choices: [Int], freeText: String?, freeTextOption: Int?, questionCount: Int, to agent: Agent) async -> Result<Void, Error> {
-        let steps = answerSteps(choices: choices, freeText: freeText, freeTextOption: freeTextOption, questionCount: questionCount)
+    static func answer(selections: [Selection], to agent: Agent) async -> Result<Void, Error> {
+        let steps = answerSteps(selections: selections)
         guard !steps.isEmpty else { return .failure(MessengerError.failed("Nothing to send")) }
         if channel(for: agent) == .superset {
             // The superset CLI pastes text, and the question menu ignores pasted

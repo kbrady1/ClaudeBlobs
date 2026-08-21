@@ -260,12 +260,13 @@ struct ConductorStoreTests {
 
     @Test func answerStepsNavigateWithArrows() {
         typealias S = SessionMessenger.AnswerStep
-        #expect(SessionMessenger.answerSteps(choices: [3], freeText: nil, freeTextOption: nil, questionCount: 1) == [S.select(3)])
-        #expect(SessionMessenger.answerSteps(choices: [1, 2, 1], freeText: nil, freeTextOption: nil, questionCount: 3)
+        #expect(SessionMessenger.answerSteps(selections: [.option(3)]) == [S.select(3)])
+        #expect(SessionMessenger.answerSteps(selections: [.option(1), .option(2), .option(1)])
                 == [S.select(1), .select(2), .select(1), .submit])
-        #expect(SessionMessenger.answerSteps(choices: [], freeText: "hi", freeTextOption: 3, questionCount: 1)
-                == [S.select(3), .text("hi")])
-        #expect(SessionMessenger.answerSteps(choices: [], freeText: nil, freeTextOption: nil, questionCount: 2).isEmpty)
+        // Typed text goes through that question's "Type something" slot, then the review Enter.
+        #expect(SessionMessenger.answerSteps(selections: [.option(2), .typed(optionIndex: 3, text: "hi")])
+                == [S.select(2), .select(3), .text("hi"), .submit])
+        #expect(SessionMessenger.answerSteps(selections: []).isEmpty)
     }
 
     @Test func shellQuoting() {
@@ -294,7 +295,7 @@ struct SessionMessengerTests {
     }
 
     @Test func answerWithNothingToSendFails() async {
-        let result = await SessionMessenger.answer(choices: [], freeText: "", freeTextOption: nil, questionCount: 1, to: Agent.fixture())
+        let result = await SessionMessenger.answer(selections: [], to: Agent.fixture())
         guard case .failure(let error) = result else { Issue.record("expected failure"); return }
         #expect(error.localizedDescription == "Nothing to send")
     }
