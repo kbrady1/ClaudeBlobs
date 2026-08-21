@@ -226,7 +226,8 @@ final class BoardViewModel: ObservableObject {
         guard !conductorSending else { return }
         if !questions.isEmpty, !conductorChoices.isEmpty || !text.isEmpty {
             let answered = questions.indices.prefix { conductorChoices[$0] != nil }.count
-            let covered = text.isEmpty ? answered : answered + 1
+            // A typed reply answers everything that is left.
+            let covered = text.isEmpty ? answered : questions.count
             guard choices.count == answered, covered >= questions.count else {
                 conductorStatus = "Choose an option for every question"
                 return
@@ -244,7 +245,7 @@ final class BoardViewModel: ObservableObject {
             if !questions.isEmpty && (!choices.isEmpty || !text.isEmpty) {
                 // Free text goes through the last question's "Type something" option when it has one.
                 let freeTextOption = text.isEmpty ? nil : questions.last?.freeTextOptionIndex.map { $0 + 1 }
-                result = await SessionMessenger.answer(choices: choices, freeText: text.isEmpty ? nil : text, freeTextOption: freeTextOption, to: agent)
+                result = await SessionMessenger.answer(choices: choices, freeText: text.isEmpty ? nil : text, freeTextOption: freeTextOption, questionCount: questions.count, to: agent)
             } else if kind == .approve && text.isEmpty {
                 // The proposal was scored on a snapshot; never approve a prompt the model did not see.
                 guard agent.status == .permission,
@@ -264,6 +265,10 @@ final class BoardViewModel: ObservableObject {
                 conductorStatus = "Sent to \(store.displayName(for: agent))"
                 conductor.skip(sessionId: agent.sessionId)
                 releaseConductorFocus()
+                if !questions.isEmpty, SessionMessenger.channel(for: agent) == .superset {
+                    // Answering focused the terminal; come back unless the board closes on deep link.
+                    if closesAfterDeepLink { onClose?() } else { NSApp.activate(ignoringOtherApps: true) }
+                }
             case .failure(let error):
                 conductorStatus = "Send failed: \(error.localizedDescription)"
             }

@@ -258,6 +258,16 @@ struct ConductorStoreTests {
         #expect(reloaded.skipped["s"] != nil)
     }
 
+    @Test func answerStepsNavigateWithArrows() {
+        typealias S = SessionMessenger.AnswerStep
+        #expect(SessionMessenger.answerSteps(choices: [3], freeText: nil, freeTextOption: nil, questionCount: 1) == [S.select(3)])
+        #expect(SessionMessenger.answerSteps(choices: [1, 2, 1], freeText: nil, freeTextOption: nil, questionCount: 3)
+                == [S.select(1), .select(2), .select(1), .submit])
+        #expect(SessionMessenger.answerSteps(choices: [], freeText: "hi", freeTextOption: 3, questionCount: 1)
+                == [S.select(3), .text("hi")])
+        #expect(SessionMessenger.answerSteps(choices: [], freeText: nil, freeTextOption: nil, questionCount: 2).isEmpty)
+    }
+
     @Test func shellQuoting() {
         #expect(SessionMessenger.shellQuote("it's ok") == "'it'\\''s ok'")
     }
@@ -284,7 +294,7 @@ struct SessionMessengerTests {
     }
 
     @Test func answerWithNothingToSendFails() async {
-        let result = await SessionMessenger.answer(choices: [], freeText: "", freeTextOption: nil, to: Agent.fixture())
+        let result = await SessionMessenger.answer(choices: [], freeText: "", freeTextOption: nil, questionCount: 1, to: Agent.fixture())
         guard case .failure(let error) = result else { Issue.record("expected failure"); return }
         #expect(error.localizedDescription == "Nothing to send")
     }

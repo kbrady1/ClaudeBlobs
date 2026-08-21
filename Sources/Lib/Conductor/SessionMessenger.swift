@@ -1,4 +1,6 @@
 import Foundation
+import AppKit
+import ApplicationServices
 
 enum SessionMessenger {
     enum Channel: String {
@@ -32,19 +34,87 @@ enum SessionMessenger {
         }
     }
 
-    /// Claude shows questions one at a time, so the sends are spaced 600ms apart.
-    static func answer(choices: [Int], freeText: String?, freeTextOption: Int?, to agent: Agent) async -> Result<Void, Error> {
-        var steps: [String] = choices.map(String.init)
+    /// One committed action in an AskUserQuestion answer sequence.
+    enum AnswerStep: Equatable {
+        case select(Int)     // move the highlight to a 1-based option and press Enter
+        case text(String)    // type text and press Enter
+        case submit          // press Enter on the final review step
+    }
+
+    /// AskUserQuestion ignores digit keys: the highlight starts on option 1,
+    /// ↓ moves it, Enter commits the question and advances. A multi-question
+    /// prompt ends on a review step that needs one more Enter. Free text goes
+    /// through the "Type something" option (`freeTextOption`, 1-based).
+    static func answerSteps(choices: [Int], freeText: String?, freeTextOption: Int?, questionCount: Int) -> [AnswerStep] {
+        var steps: [AnswerStep] = choices.map { .select($0) }
         if let freeText, !freeText.isEmpty {
-            if let freeTextOption { steps.append(String(freeTextOption)) }
-            steps.append(freeText)
+            if let freeTextOption { steps.append(.select(freeTextOption)) }
+            steps.append(.text(freeText))
         }
+        if questionCount > 1 && !steps.isEmpty { steps.append(.submit) }
+        return steps
+    }
+
+    static func answer(choices: [Int], freeText: String?, freeTextOption: Int?, questionCount: Int, to agent: Agent) async -> Result<Void, Error> {
+        let steps = answerSteps(choices: choices, freeText: freeText, freeTextOption: freeTextOption, questionCount: questionCount)
         guard !steps.isEmpty else { return .failure(MessengerError.failed("Nothing to send")) }
+        if channel(for: agent) == .superset {
+            // The superset CLI pastes text, and the question menu ignores pasted
+            // input. Focus the terminal and press real keys instead.
+            guard isAccessibilityTrusted(prompt: true) else { return .failure(MessengerError.accessibilityDenied) }
+            SupersetLinker.activate(agent)
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
         for (index, step) in steps.enumerated() {
-            if index > 0 { try? await Task.sleep(nanoseconds: 600_000_000) }
-            if case .failure(let error) = await send(text: step, to: agent) { return .failure(error) }
+            if index > 0 { try? await Task.sleep(nanoseconds: 450_000_000) }
+            if case .failure(let error) = await perform(step, in: agent) { return .failure(error) }
         }
         return .success(())
+    }
+
+    static func isAccessibilityTrusted(prompt: Bool) -> Bool {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: prompt] as CFDictionary
+        return AXIsProcessTrustedWithOptions(options)
+    }
+
+    private static func perform(_ step: AnswerStep, in agent: Agent) async -> Result<Void, Error> {
+        switch (channel(for: agent), step) {
+        case (.superset?, .select(let option)):
+            return await pressKeys(Array(repeating: 125, count: max(0, option - 1)) + [36])
+        case (.superset?, .text(let text)):
+            return await typeText(text)
+        case (.superset?, .submit):
+            return await pressKeys([36])
+        case (.cmux?, .select(let option)):
+            for _ in 0..<max(0, option - 1) {
+                guard CommandExecutor.sendKey("down", agent: agent) else { return .failure(MessengerError.failed("cmux send-key down failed")) }
+            }
+            return cmuxResult(CommandExecutor.sendKey("enter", agent: agent), "send-key enter")
+        case (.cmux?, .text(let text)):
+            guard CommandExecutor.sendText(text, agent: agent) else { return .failure(MessengerError.failed("cmux send failed")) }
+            return cmuxResult(CommandExecutor.sendKey("enter", agent: agent), "send-key enter")
+        case (.cmux?, .submit):
+            return cmuxResult(CommandExecutor.sendKey("enter", agent: agent), "send-key enter")
+        case (nil, _):
+            return .failure(MessengerError.noChannel)
+        }
+    }
+
+    /// Key codes: 125 = ↓, 36 = Return. Sent to the frontmost app.
+    private static func pressKeys(_ codes: [Int]) async -> Result<Void, Error> {
+        let body = codes.map { "key code \($0)\ndelay 0.15" }.joined(separator: "\n")
+        let ok = await AppleScriptRunner.run("tell application \"System Events\"\n\(body)\nend tell")
+        return ok ? .success(()) : .failure(MessengerError.failed("Key press failed"))
+    }
+
+    private static func typeText(_ text: String) async -> Result<Void, Error> {
+        let escaped = text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let ok = await AppleScriptRunner.run("tell application \"System Events\"\nkeystroke \"\(escaped)\"\ndelay 0.15\nkey code 36\nend tell")
+        return ok ? .success(()) : .failure(MessengerError.failed("Typing failed"))
+    }
+
+    private static func cmuxResult(_ ok: Bool, _ what: String) -> Result<Void, Error> {
+        ok ? .success(()) : .failure(MessengerError.failed("cmux \(what) failed"))
     }
 
     static func approve(_ agent: Agent) async -> Result<Void, Error> {
@@ -98,11 +168,13 @@ enum SessionMessenger {
 
 enum MessengerError: Error, LocalizedError {
     case noChannel
+    case accessibilityDenied
     case failed(String)
 
     var errorDescription: String? {
         switch self {
         case .noChannel: return "This session has no superset or cmux channel to send to"
+        case .accessibilityDenied: return "Allow ClaudeBlobs under System Settings → Privacy & Security → Accessibility, then retry"
         case .failed(let message): return String(message.prefix(200))
         }
     }

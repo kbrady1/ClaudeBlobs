@@ -93,6 +93,22 @@ enum CommandExecutor {
         return lastGroup.firstIndex(where: \.hasCursor) ?? 0
     }
 
+    /// Types text into a cmux agent's surface without pressing Enter.
+    static func sendText(_ text: String, agent: Agent) -> Bool {
+        guard let surface = agent.cmuxSurface else { return false }
+        let socketPath = agent.cmuxSocketPath ?? "/tmp/cmux.sock"
+        let args = cmuxBase(socketPath: socketPath) + ["send"] + surfaceArgs(surface, workspace: agent.cmuxWorkspace) + [text]
+        return runProcessWithStatus(args).status == 0
+    }
+
+    /// Sends one named key (e.g. "down", "enter") to a cmux agent's surface.
+    static func sendKey(_ key: String, agent: Agent) -> Bool {
+        guard let surface = agent.cmuxSurface else { return false }
+        let socketPath = agent.cmuxSocketPath ?? "/tmp/cmux.sock"
+        let args = cmuxBase(socketPath: socketPath) + ["send-key"] + surfaceArgs(surface, workspace: agent.cmuxWorkspace) + [key]
+        return runProcessWithStatus(args).status == 0
+    }
+
     /// Execute a command against a cmux agent.
     static func execute(
         command: CommandType,
