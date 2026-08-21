@@ -14,6 +14,11 @@ final class BoardViewModel: ObservableObject {
     @Published var selectedRow: Int = 0
     @Published var tagEditorAgentId: String?
     @Published var snoozePickerAgentId: String?
+    /// Highlighted row in whichever snooze menu is open, so arrows work the
+    /// same way here as they do in the HUD.
+    @Published var snoozeIndex: Int = 0
+    /// The Conductor's snooze menu, opened by the Snooze button or Z.
+    @Published var isConductorSnoozeShown = false
     @Published var isTagManagerShown = false
     @Published var isHelpShown = false
     @Published var tagEditorIndex: Int = 0
@@ -204,7 +209,16 @@ final class BoardViewModel: ObservableObject {
         releaseConductorFocus()
     }
 
-    func conductorSnooze(_ duration: SnoozeDuration = .oneHour) {
+    /// Opens the snooze menu on the focused session. Matches the HUD, where
+    /// Z opens the menu rather than snoozing straight away.
+    func showConductorSnooze() {
+        guard focusedConductorItem != nil else { return }
+        snoozeIndex = 0
+        isConductorSnoozeShown = true
+    }
+
+    func conductorSnooze(_ duration: SnoozeDuration) {
+        isConductorSnoozeShown = false
         guard let item = focusedConductorItem, let agent = agent(id: item.card.id) else { return }
         store.snooze(agent, for: duration)
         releaseConductorFocus()
@@ -399,7 +413,30 @@ final class BoardViewModel: ObservableObject {
 
     func toggleSnoozePicker(for card: BoardCard) {
         tagEditorAgentId = nil
+        snoozeIndex = 0
         snoozePickerAgentId = snoozePickerAgentId == card.id ? nil : card.id
+    }
+
+    /// Arrows / J K move the highlight, Return picks it, 1–N picks directly.
+    /// Returns true when the key was consumed by the menu.
+    private func handleSnoozeMenuKey(_ event: NSEvent, chars: String, select: (SnoozeDuration) -> Void) -> Bool {
+        let options = SnoozeDuration.allCases
+        switch event.keyCode {
+        case Key.up: snoozeIndex = max(0, snoozeIndex - 1); return true
+        case Key.down: snoozeIndex = min(options.count - 1, snoozeIndex + 1); return true
+        case Key.returnKey: select(options[min(snoozeIndex, options.count - 1)]); return true
+        default: break
+        }
+        switch chars {
+        case "k": snoozeIndex = max(0, snoozeIndex - 1); return true
+        case "j": snoozeIndex = min(options.count - 1, snoozeIndex + 1); return true
+        default: break
+        }
+        if let digit = chars.first, let num = Int(String(digit)), num >= 1, num <= options.count {
+            select(options[num - 1])
+            return true
+        }
+        return false
     }
 
     func snooze(_ card: BoardCard, for duration: SnoozeDuration) {
@@ -511,6 +548,11 @@ final class BoardViewModel: ObservableObject {
             return true
         }
         if mode == .conductor {
+            if isConductorSnoozeShown {
+                if event.keyCode == Key.escape { isConductorSnoozeShown = false; return true }
+                _ = handleSnoozeMenuKey(event, chars: chars, select: { self.conductorSnooze($0) })
+                return true
+            }
             switch event.keyCode {
             case Key.escape: mode = .board; return true
             case Key.returnKey:
@@ -530,7 +572,7 @@ final class BoardViewModel: ObservableObject {
             case "k": moveConductorFocus(by: -1)
             case "j": moveConductorFocus(by: 1)
             case "s": conductorSkip()
-            case "z": conductorSnooze()
+            case "z": showConductorSnooze()
             case "i": isInstructionsShown = true
             case "r": conductor.reassessAll()
             case "b": mode = .board
@@ -546,10 +588,8 @@ final class BoardViewModel: ObservableObject {
         }
         if let id = snoozePickerAgentId {
             if event.keyCode == Key.escape { snoozePickerAgentId = nil; return true }
-            if let digit = chars.first, let num = Int(String(digit)),
-               num >= 1, num <= SnoozeDuration.allCases.count,
-               let card = card(id: id) {
-                snooze(card, for: SnoozeDuration.allCases[num - 1])
+            if let card = card(id: id), handleSnoozeMenuKey(event, chars: chars, select: { self.snooze(card, for: $0) }) {
+                return true
             }
             return true
         }

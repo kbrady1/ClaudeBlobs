@@ -170,6 +170,7 @@ struct HUDContentView: View {
             ExpandedView(
                 agents: store.sortedTopLevelAgents,
                 snoozedIds: store.snoozedSessionIds,
+                inFlightIds: store.conductorDemotedIds,
                 snoozeUntil: store.snoozeUntil,
                 notifiedIds: ntfyScheduler.notifiedSessionIds,
                 childAgents: resolvedChildren,
@@ -250,6 +251,7 @@ struct HUDContentView: View {
                 showAppIcons: store.appIconVisibility == .always,
                 hostAppIcons: store.hostAppIcons,
                 cronSessionIds: store.cronSessionIds,
+                inFlightIds: store.conductorDemotedIds,
                 backgroundStyle: (themeConfig.backgroundEnabled && themeConfig.backgroundShownWhenCollapsed) ? resolvedBackgroundStyle : nil
             )
             .transition(.opacity.combined(with: .scale(scale: 1.05, anchor: .top)))

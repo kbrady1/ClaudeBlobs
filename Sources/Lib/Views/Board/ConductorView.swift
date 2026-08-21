@@ -25,6 +25,25 @@ struct ConductorView: View {
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 }
+                if !conductor.inFlight.isEmpty {
+                    Button {
+                        conductor.showInFlight.toggle()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: conductor.showInFlight ? "eye" : "eye.slash")
+                                .font(.system(size: 9))
+                            Text("\(conductor.inFlight.count) in flight")
+                                .font(.system(size: 10))
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.white.opacity(conductor.showInFlight ? 0.12 : 0.05)))
+                        .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .focusable(false)
+                    .help("Sessions still running work — a background task, a monitor, a build, a pull request waiting on CI. Click to show them in the queue.")
+                }
                 Spacer()
                 if let status = viewModel.conductorStatus {
                     Text(status)
@@ -47,7 +66,9 @@ struct ConductorView: View {
                         .foregroundColor(ChartStyle.green)
                     Text("Nothing is waiting on you.")
                         .font(.system(size: 13, weight: .medium))
-                    Text("Sessions in Needs Attention and Idle show up here, ranked.")
+                    Text(conductor.inFlight.isEmpty
+                         ? "Sessions in Needs Attention and Idle show up here, ranked."
+                         : "\(conductor.inFlight.count) session\(conductor.inFlight.count == 1 ? " is" : "s are") still running work.")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 }
@@ -74,6 +95,9 @@ struct ConductorView: View {
                             onSkip: { viewModel.conductorSkip() },
                             onUnskip: { conductor.unskip(sessionId: focused.agent.sessionId) },
                             onSnooze: { viewModel.conductorSnooze($0) },
+                            isSnoozeShown: $viewModel.isConductorSnoozeShown,
+                            snoozeIndex: viewModel.snoozeIndex,
+                            onRequestSnooze: { viewModel.showConductorSnooze() },
                             onSend: { viewModel.conductorSend() }
                         )
                         .frame(height: max(240, geo.size.height - 150))
@@ -171,11 +195,13 @@ private struct ConductorHeroCard: View {
     let isSending: Bool
     let onDraftEdited: () -> Void
     let onChoose: (Int, Int) -> Void
-    @State private var isSnoozeShown = false
     let onOpen: () -> Void
     let onSkip: () -> Void
     let onUnskip: () -> Void
     let onSnooze: (SnoozeDuration) -> Void
+    @Binding var isSnoozeShown: Bool
+    let snoozeIndex: Int
+    let onRequestSnooze: () -> Void
     let onSend: () -> Void
 
     private var agent: Agent { item.agent }
@@ -222,6 +248,9 @@ private struct ConductorHeroCard: View {
                         .tracking(1)
                     if item.isSkipped {
                         Text("skipped").font(.system(size: 10)).foregroundColor(.secondary)
+                    }
+                    if item.isInFlight {
+                        Text("still running").font(.system(size: 10)).foregroundColor(.secondary)
                     }
                     ForEach(tags) { tag in TagChip(tag: tag, source: .confirmed) }
                 }
@@ -369,10 +398,9 @@ private struct ConductorHeroCard: View {
             } else {
                 actionButton("Skip", symbol: "forward.fill", key: "S", action: onSkip)
             }
-            actionButton("Snooze", symbol: "moon.fill", key: "Z") { isSnoozeShown = true }
+            actionButton("Snooze", symbol: "moon.fill", key: "Z") { onRequestSnooze() }
                 .popover(isPresented: $isSnoozeShown, arrowEdge: .bottom) {
-                    BoardSnoozePopover { duration in
-                        isSnoozeShown = false
+                    SnoozeDurationPopover(highlightedIndex: snoozeIndex) { duration in
                         onSnooze(duration)
                     }
                 }
@@ -409,6 +437,10 @@ private struct ConductorHeroCard: View {
         if let raw = agent.rawLastMessage, !raw.isEmpty { return raw }
         if let message = agent.lastMessage, !message.isEmpty { return message }
         if agent.isAskingQuestion, let tool = agent.lastToolUse, let q = Agent.extractAskQuestion(from: String(tool.dropFirst("AskUserQuestion:".count))) { return q }
+        // The agent asked without writing anything first, so the question below
+        // is all the context there is. Say so instead of "Waiting for permission."
+        if hasQuestions || agent.isAskingQuestion { return "_The agent asked the question below and wrote nothing else this turn._" }
+        if agent.isPlanApproval { return "_The agent is waiting for plan approval — open the session to read the plan._" }
         return item.card.effectiveStatus == .permission ? "Waiting for permission." : "No message."
     }
 
@@ -542,6 +574,9 @@ private struct ConductorQueueCard: View {
                 if item.isSkipped {
                     Text("skipped").font(.system(size: 9)).foregroundColor(.secondary)
                 }
+                if item.isInFlight {
+                    Image(systemName: "hourglass").font(.system(size: 9)).foregroundColor(.secondary)
+                }
                 Text(BoardModel.formatElapsed(item.waitSeconds))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.secondary)
@@ -552,7 +587,7 @@ private struct ConductorQueueCard: View {
         .frame(width: 260, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(isFocused ? 0.1 : 0.05)))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(isFocused ? Color.white.opacity(0.7) : accent.opacity(0.25), lineWidth: isFocused ? 1.5 : 1))
-        .opacity(item.isSkipped ? 0.55 : 1)
+        .opacity(item.isSkipped || item.isInFlight ? 0.55 : 1)
         .contentShape(Rectangle())
     }
 }
@@ -597,6 +632,10 @@ struct ConductorInstructionsView: View {
                     .controlSize(.small)
                     .font(.system(size: 11))
             }
+            Toggle("Show sessions that are still running work", isOn: $conductor.showInFlight)
+                .toggleStyle(.checkbox)
+                .controlSize(.small)
+                .font(.system(size: 11))
             Text("Tell the Conductor how you want waiting sessions prioritized and when a reply is obvious enough to propose. Changing the instructions re-scores every session.")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)

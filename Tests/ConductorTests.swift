@@ -82,6 +82,54 @@ struct ConductorStoreTests {
         #expect(badChoose?.action.kind == .open)
     }
 
+    @Test func parsesInFlightFlag() {
+        #expect(ConductorStore.parseResponse(#"{"score": 20, "inFlight": true, "reason": "CI still running", "action": {"kind": "open"}}"#)?.inFlight == true)
+        #expect(ConductorStore.parseResponse(#"{"score": 20, "inFlight": "true", "action": {"kind": "open"}}"#)?.inFlight == true)
+        // Absent or false means the developer is needed.
+        #expect(ConductorStore.parseResponse(#"{"score": 20, "action": {"kind": "open"}}"#)?.inFlight == false)
+        #expect(ConductorStore.parseResponse(#"{"score": 20, "inFlight": false, "action": {"kind": "open"}}"#)?.inFlight == false)
+    }
+
+    @Test func promptAsksForTheInFlightFlag() {
+        let prompt = ConductorStore.buildPrompt(card: card("s", status: .waiting, waitReason: "done"), tags: [], instructions: "x", waitSeconds: 0, repo: nil)
+        #expect(prompt.contains(#""inFlight""#))
+        #expect(prompt.contains("a pull request waiting on CI"))
+    }
+
+    @Test func inFlightSessionsLeaveTheQueueUnlessShown() async throws {
+        let store = ConductorStore(fileURL: tmpURL(), settleSeconds: 0) { prompt in
+            let running = prompt.contains("Pushed the PR")
+            return #"{"score": 40, "inFlight": \#(running), "reason": "r", "action": {"kind": "open"}}"#
+        }
+        let running = card("running", status: .waiting, waitReason: "done", message: "Pushed the PR; waiting on CI.")
+        let needsMe = card("needs-me", status: .waiting, waitReason: "done", message: "Which name do you prefer?")
+        await MainActor.run { store.refresh(cards: [running, needsMe], tagsFor: { _ in [] }) }
+        try await waitUntil { store.assessments.count == 2 }
+        await MainActor.run {
+            #expect(store.queue.map(\.agent.sessionId) == ["needs-me"])
+            #expect(store.inFlight.map(\.agent.sessionId) == ["running"])
+            #expect(store.inFlightSessionIds == [running.id])
+            #expect(store.ranks.count == 2)
+            // Showing them puts them back, behind everything that needs the developer.
+            store.showInFlight = true
+            #expect(store.queue.map(\.agent.sessionId) == ["needs-me", "running"])
+            #expect(store.queue.last?.isInFlight == true)
+        }
+    }
+
+    @Test func permissionRequestsAreNeverInFlight() async throws {
+        let store = ConductorStore(fileURL: tmpURL(), settleSeconds: 0) { _ in
+            #"{"score": 40, "inFlight": true, "reason": "r", "action": {"kind": "open"}}"#
+        }
+        let asking = card("asking", status: .permission)
+        await MainActor.run { store.refresh(cards: [asking], tagsFor: { _ in [] }) }
+        try await waitUntil { store.assessments["asking"] != nil }
+        await MainActor.run {
+            #expect(store.queue.map(\.agent.sessionId) == ["asking"])
+            #expect(store.inFlight.isEmpty)
+        }
+    }
+
     @Test func promptEnumeratesPendingQuestions() {
         let agent = Agent.fixture(sessionId: "q", pid: 1, status: .permission, lastToolUse: "AskUserQuestion: {...}", pendingQuestions: [
             AskQuestion(question: "Stop it now?", header: "Stop leaked sandbox", options: [
@@ -249,6 +297,7 @@ struct ConductorStoreTests {
         do {
             let store = ConductorStore(fileURL: url, settleSeconds: 0) { _ in "{}" }
             store.aiEnabled = false
+            store.showInFlight = true
             store.refresh(cards: [card("s")], tagsFor: { _ in [] })
             store.skip(sessionId: "s")
             #expect(store.skipped["s"] != nil)
@@ -256,6 +305,7 @@ struct ConductorStoreTests {
         let reloaded = ConductorStore(fileURL: url) { _ in "{}" }
         #expect(reloaded.aiEnabled == false)
         #expect(reloaded.skipped["s"] != nil)
+        #expect(reloaded.showInFlight == true)
     }
 
     @Test func answerStepsNavigateWithArrows() {

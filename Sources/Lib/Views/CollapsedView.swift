@@ -14,6 +14,8 @@ struct CollapsedView: View {
     var showAppIcons: Bool = false
     var hostAppIcons: [Int: NSImage] = [:]
     var cronSessionIds: Set<String> = []
+    /// Sessions the Conductor says are still running work; dimmed, not hidden.
+    var inFlightIds: Set<String> = []
     var backgroundStyle: BackgroundStyle?
 
     var body: some View {
@@ -66,7 +68,7 @@ struct CollapsedView: View {
                         }
                     }
                 }
-                .opacity(isHidden ? 0 : 1)
+                .opacity(isHidden ? 0 : (inFlightIds.contains(agent.id) ? 0.45 : 1))
                 .animation(.easeInOut(duration: 0.3), value: isHidden)
                 .transition(
                     .asymmetric(

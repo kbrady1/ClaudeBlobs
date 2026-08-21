@@ -154,29 +154,50 @@ format_tool_input() {
   fi
 }
 
-# Extract the assistant's text content immediately preceding the most recent
-# tool_use entry in a transcript, walking backward until the previous user
-# entry (a real user turn or a tool result). Used to recover context for
-# blocking tools (AskUserQuestion, ExitPlanMode) whose PreToolUse hook fires
-# before any Stop event would otherwise capture last_assistant_message.
+# Extract the assistant's text from the current turn of a transcript: walk
+# backward from the end, collecting assistant text and stepping over tool
+# plumbing (assistant tool_use entries and the user entries that carry their
+# tool_result), and stop at the last real user turn. Used to recover context
+# for blocking tools (AskUserQuestion, ExitPlanMode) whose PreToolUse hook
+# fires before any Stop event would otherwise capture last_assistant_message.
+#
+# Stopping at the first user entry instead would lose everything whenever the
+# agent ran a tool between its reasoning and the question, which is the common
+# case. Keeps the last 6 text blocks / 12000 characters.
 # Usage: extract_preceding_text TRANSCRIPT_PATH
 extract_preceding_text() {
   local transcript_path="$1"
   [ -n "$transcript_path" ] && [ -f "$transcript_path" ] || { echo ""; return; }
   jq -s -r '
+    def text_of($content):
+      if ($content | type) == "string" then $content
+      else ($content // []) | map(select(.type == "text") | .text) | join("")
+      end;
+    def is_real_turn($content):
+      if ($content | type) == "string" then true
+      else (($content // []) | map(select(.type == "tool_result")) | length) == 0
+      end;
     [ .[] | select(.type=="user" or .type=="assistant") ] as $rows
     | (reduce range(($rows|length)-1; -1; -1) as $i ({texts: [], done: false};
         if .done then .
         else
           $rows[$i] as $item
-          | if $item.type == "user" then .done = true
+          | ($item.message.content) as $content
+          | if $item.type == "user" then
+              (if is_real_turn($content) then .done = true else . end)
             else
-              (($item.message.content // []) | map(select(.type=="text") | .text) | join("")) as $t
+              text_of($content) as $t
               | if ($t | length) > 0 then .texts = [$t] + .texts else . end
             end
         end))
-    | .texts | join("\n\n")
+    | .texts | .[-6:] | join("\n\n") | .[-12000:]
   ' "$transcript_path" 2>/dev/null
+}
+
+# The last paragraph of recovered text — the reasoning closest to the question.
+# Usage: last_paragraph "$PRECEDING_TEXT"
+last_paragraph() {
+  printf '%s' "$1" | awk 'BEGIN{RS="\n\n"} NF {last=$0} END {print last}'
 }
 
 # Strip markdown and extract a clean first sentence from a message. Shared by

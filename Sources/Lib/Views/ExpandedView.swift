@@ -4,6 +4,9 @@ import AppKit
 struct ExpandedView: View {
     let agents: [Agent]
     let snoozedIds: Set<String>
+    /// Sessions the Conductor says are still running work. Dimmed like a
+    /// snoozed blob, but they keep their real status colour.
+    var inFlightIds: Set<String> = []
     var snoozeUntil: [String: Date] = [:]
     var notifiedIds: Set<String> = []
     var childAgents: [String: [Agent]] = [:]
@@ -208,7 +211,8 @@ struct ExpandedView: View {
             agentCard(agent, isSelected: selectedIndex == index)
         }
         .buttonStyle(.plain)
-        .opacity(snoozedIds.contains(agent.id) ? 0.45 : (cronSessionIds.contains(agent.id) || agent.isMonitorActive || agent.isScheduledWakeup) && agent.isDone && agent.toolFailure == nil ? 0.45 : agent.status == .working ? 0.7 : 1.0)
+        .help(inFlightIds.contains(agent.id) ? "Still running work — nothing to do here yet" : "")
+        .opacity(snoozedIds.contains(agent.id) || inFlightIds.contains(agent.id) ? 0.45 : (cronSessionIds.contains(agent.id) || agent.isMonitorActive || agent.isScheduledWakeup) && agent.isDone && agent.toolFailure == nil ? 0.45 : agent.status == .working ? 0.7 : 1.0)
         .contextMenu {
             Button("Rename\u{2026}") { beginRename(agent) }
             if customNames[agent.sessionId] != nil {
@@ -312,7 +316,7 @@ struct ExpandedView: View {
     }
 
     private func snoozeHelpText(for agent: Agent) -> String {
-        guard let wakeDate = snoozeUntil[agent.id] else { return "Snoozed indefinitely" }
+        guard let wakeDate = snoozeUntil[agent.id] else { return "Snoozed until the next message" }
         let formatter = DateFormatter()
         formatter.dateStyle = .none
         formatter.timeStyle = .short
@@ -568,46 +572,6 @@ private struct StatusOverridePopover: View {
             )
         }
         .buttonStyle(.plain)
-    }
-}
-
-/// Popover for choosing how long to snooze a blob.
-private struct SnoozeDurationPopover: View {
-    var highlightedIndex: Int = 0
-    var onSelect: (SnoozeDuration) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Snooze for\u{2026}")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(Array(SnoozeDuration.allCases.enumerated()), id: \.element) { index, duration in
-                    Button {
-                        onSelect(duration)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(duration.label)
-                                .font(.system(size: 11, weight: .medium))
-                            Spacer()
-                            Text("\(index + 1)")
-                                .font(.system(size: 9))
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(highlightedIndex == index ? Color.white.opacity(0.12) : Color.clear)
-                        )
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .frame(width: 160)
-        .padding(12)
     }
 }
 

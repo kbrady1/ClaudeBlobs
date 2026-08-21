@@ -56,20 +56,55 @@ final class AgentStore: ObservableObject {
                 && !subs.contains($0.id)
                 && !cronIsQuiet($0)
         }
-        if sortByPriority {
-            result.sort {
-                let p0 = sortKey(for: $0)
-                let p1 = sortKey(for: $1)
-                if p0 != p1 {
-                    return p0 < p1
-                }
-                // Within same priority: sort by when the agent entered this status
-                let a = $0.statusChangedAt ?? $0.updatedAt
-                let b = $1.statusChangedAt ?? $1.updatedAt
-                return a > b
-            }
+        if usesConductorOrder {
+            result.sort { conductorPrecedes($0, $1) }
+        } else if sortByPriority {
+            result.sort { priorityPrecedes($0, $1) }
         }
         return result
+    }
+
+    /// Sessions the HUD should render as not-actionable-yet (dimmed).
+    var conductorDemotedIds: Set<String> {
+        conductorHUDEnabled ? conductorInFlightIds : []
+    }
+
+    /// The Conductor only orders the HUD once it has ranked something.
+    private var usesConductorOrder: Bool { conductorHUDEnabled && !conductorRanks.isEmpty }
+
+    /// True when the Conductor says work is still running in this session and
+    /// the HUD is following the Conductor. Such a session is not actionable
+    /// yet, so the HUD sorts it to the end and dims it rather than hiding it.
+    func isConductorDemoted(_ agent: Agent) -> Bool {
+        conductorHUDEnabled && conductorInFlightIds.contains(agent.id)
+    }
+
+    /// Existing HUD order: effective status priority, newest first within a tier.
+    private func priorityPrecedes(_ a: Agent, _ b: Agent) -> Bool {
+        let p0 = sortKey(for: a)
+        let p1 = sortKey(for: b)
+        if p0 != p1 { return p0 < p1 }
+        // Within same priority: sort by when the agent entered this status
+        return (a.statusChangedAt ?? a.updatedAt) > (b.statusChangedAt ?? b.updatedAt)
+    }
+
+    /// Conductor order: ranked sessions first, highest rank first. The
+    /// Conductor ranks only sessions waiting on the developer, so everything
+    /// else keeps the priority order behind them.
+    private func conductorPrecedes(_ a: Agent, _ b: Agent) -> Bool {
+        let demotedA = isConductorDemoted(a)
+        let demotedB = isConductorDemoted(b)
+        if demotedA != demotedB { return !demotedA }
+        let rankA = conductorRanks[a.id]
+        let rankB = conductorRanks[b.id]
+        switch (rankA, rankB) {
+        case let (.some(x), .some(y)):
+            if x != y { return x > y }
+            return priorityPrecedes(a, b)
+        case (.some, .none): return true
+        case (.none, .some): return false
+        case (.none, .none): return priorityPrecedes(a, b)
+        }
     }
 
     /// Top-level agents for expanded view (excludes sub-agents).
@@ -82,20 +117,13 @@ final class AgentStore: ObservableObject {
     var sortedTopLevelAgents: [Agent] {
         let snoozed = snoozedSessionIds
         let prioritySort = sortByPriority
+        let conductorSort = usesConductorOrder
         return topLevelAgents.sorted { a, b in
-            let aDemoted = snoozed.contains(a.id) || cronIsQuiet(a)
-            let bDemoted = snoozed.contains(b.id) || cronIsQuiet(b)
+            let aDemoted = snoozed.contains(a.id) || cronIsQuiet(a) || isConductorDemoted(a)
+            let bDemoted = snoozed.contains(b.id) || cronIsQuiet(b) || isConductorDemoted(b)
             if aDemoted != bDemoted { return !aDemoted }
-            if prioritySort {
-                let aP = sortKey(for: a)
-                let bP = sortKey(for: b)
-                if aP != bP {
-                    return aP < bP
-                }
-                let aT = a.statusChangedAt ?? a.updatedAt
-                let bT = b.statusChangedAt ?? b.updatedAt
-                return aT > bT
-            }
+            if conductorSort { return conductorPrecedes(a, b) }
+            if prioritySort { return priorityPrecedes(a, b) }
             return false
         }
     }
@@ -265,6 +293,17 @@ final class AgentStore: ObservableObject {
     @Published var sortByPriority: Bool = UserDefaults.standard.bool(forKey: "sortByPriority") {
         didSet { UserDefaults.standard.set(sortByPriority, forKey: "sortByPriority") }
     }
+
+    /// When true the HUD borrows the Conductor's order and drops the sessions
+    /// the Conductor marked in flight.
+    @Published var conductorHUDEnabled: Bool = UserDefaults.standard.bool(forKey: "conductorHUDEnabled") {
+        didSet { UserDefaults.standard.set(conductorHUDEnabled, forKey: "conductorHUDEnabled") }
+    }
+
+    /// Conductor rank per session id, mirrored from `ConductorStore`.
+    @Published var conductorRanks: [String: Double] = [:]
+    /// Session ids the Conductor marked in flight, mirrored from `ConductorStore`.
+    @Published var conductorInFlightIds: Set<String> = []
 
     @Published var isPeeking: Bool = false
     @Published var peekingIds: Set<String> = []

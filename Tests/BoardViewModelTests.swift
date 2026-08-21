@@ -49,6 +49,50 @@ struct BoardViewModelTests {
         #expect(!vm.handleKey(key("4", mods: [.command]), isEditingText: true))
     }
 
+    @Test func conductorSnoozeOpensAnArrowNavigableMenu() {
+        let (vm, conductor) = makeModel()
+        vm.mode = .conductor
+        let c = card("a")
+        vm.store.agents = [c.agent]
+        conductor.refresh(cards: [c], tagsFor: { _ in [] })
+        // Z opens the menu instead of snoozing straight away, like the HUD.
+        #expect(vm.handleKey(key("z"), isEditingText: false))
+        #expect(vm.isConductorSnoozeShown)
+        #expect(vm.snoozeIndex == 0)
+        #expect(vm.store.snoozedSessionIds.isEmpty)
+
+        // Down / J move the highlight; the menu swallows every key.
+        #expect(vm.handleKey(key("", code: 125), isEditingText: false))
+        #expect(vm.snoozeIndex == 1)
+        #expect(vm.handleKey(key("j"), isEditingText: false))
+        #expect(vm.snoozeIndex == 2)
+        #expect(vm.handleKey(key("", code: 126), isEditingText: false))
+        #expect(vm.snoozeIndex == 1)
+
+        // Return picks the highlighted duration and closes the menu.
+        #expect(vm.handleKey(key("\r", code: 36), isEditingText: false))
+        #expect(!vm.isConductorSnoozeShown)
+        #expect(vm.store.snoozedSessionIds == [c.agent.id])
+        // Index 1 is a timed duration, so the snooze has a wake date.
+        #expect(vm.store.snoozeUntil[c.agent.id] != nil)
+    }
+
+    @Test func conductorSnoozeMenuEscapeClosesWithoutSnoozing() {
+        let (vm, conductor) = makeModel()
+        vm.mode = .conductor
+        conductor.refresh(cards: [card("a")], tagsFor: { _ in [] })
+        #expect(vm.handleKey(key("z"), isEditingText: false))
+        #expect(vm.handleKey(key("\u{1B}", code: 53), isEditingText: false))
+        #expect(!vm.isConductorSnoozeShown)
+        #expect(vm.store.snoozedSessionIds.isEmpty)
+        #expect(vm.mode == .conductor)
+    }
+
+    @Test func snoozeMenuStartsOnUntilNextMessage() {
+        #expect(SnoozeDuration.allCases.first == .indefinite)
+        #expect(SnoozeDuration.indefinite.label == "Until next message")
+    }
+
     @Test func escapeSemanticsPerMode() {
         let (vm, _) = makeModel()
         var closed = false

@@ -167,6 +167,38 @@ struct AgentStoreTests {
         #expect(store.collapsedAgents.map(\.sessionId) == ["y", "x"])
     }
 
+    @Test func conductorOrderRanksTheHUDAndDemotesInFlight() throws {
+        let working = Agent.fixture(sessionId: "a", pid: 300, status: .working, createdAt: 1000, updatedAt: 1000)
+        let low = Agent.fixture(sessionId: "b", pid: 301, status: .waiting, createdAt: 2000, updatedAt: 2000)
+        let high = Agent.fixture(sessionId: "c", pid: 302, status: .permission, createdAt: 3000, updatedAt: 3000)
+        let running = Agent.fixture(sessionId: "d", pid: 303, status: .waiting, createdAt: 4000, updatedAt: 4000)
+
+        for agent in [working, low, high, running] {
+            let data = try JSONEncoder().encode(agent)
+            try data.write(to: tmpDir.appendingPathComponent("\(agent.sessionId).json"))
+        }
+
+        let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.hideWorkingAgents = false
+        store.sortByPriority = false
+        store.conductorHUDEnabled = false
+        store.reload()
+        store.conductorRanks = [high.id: 90, low.id: 20, running.id: 80]
+        store.conductorInFlightIds = [running.id]
+
+        // Off by default: the Conductor's numbers change nothing.
+        #expect(store.collapsedAgents.map(\.sessionId) == ["a", "b", "c", "d"])
+
+        store.conductorHUDEnabled = true
+        // Ranked first, highest rank first; the unranked working session
+        // trails, and the in-flight session sits last however high it ranks.
+        #expect(store.collapsedAgents.map(\.sessionId) == ["c", "b", "a", "d"])
+        #expect(store.sortedTopLevelAgents.map(\.sessionId) == ["c", "b", "a", "d"])
+        #expect(store.conductorDemotedIds == [running.id])
+        store.conductorHUDEnabled = false
+        #expect(store.conductorDemotedIds.isEmpty)
+    }
+
     @Test func buildsChildRelationshipsFromParentSessionId() throws {
         let parent = Agent.fixture(sessionId: "parent", pid: 200, status: .working, updatedAt: 1000)
         let child = Agent.fixture(sessionId: "child", pid: 201, status: .working, parentSessionId: "parent", updatedAt: 1000)

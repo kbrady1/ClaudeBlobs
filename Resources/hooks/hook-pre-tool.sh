@@ -30,7 +30,7 @@ if [ "$TOOL_NAME" = "AskUserQuestion" ] || [ "$TOOL_NAME" = "ExitPlanMode" ]; th
   PRECEDING_TEXT=$(extract_preceding_text "$TRANSCRIPT_PATH")
   if [ -n "$PRECEDING_TEXT" ]; then
     CONTEXT_RAW_MESSAGE=$(printf '%s' "$PRECEDING_TEXT" | jq -Rrs '.[:12000]')
-    CONTEXT_LAST_MESSAGE=$(first_sentence_from_message "$PRECEDING_TEXT")
+    CONTEXT_LAST_MESSAGE=$(first_sentence_from_message "$(last_paragraph "$PRECEDING_TEXT")")
   fi
 fi
 

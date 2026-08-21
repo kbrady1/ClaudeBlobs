@@ -310,6 +310,88 @@ struct HookScriptTests {
             #expect(r.status?["status"] as? String == "working")
         }
 
+        // Rows: a real user turn, then the assistant reasons, runs a tool, and
+        // only then asks. The tool_result between them is a `user` row — the
+        // recovery must step over it, not stop there.
+        private func transcript(in helper: HookTestHelper, rows: [String]) throws -> String {
+            let url = helper.tempHome.appendingPathComponent("transcript-\(UUID().uuidString).jsonl")
+            try rows.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+            return url.path
+        }
+
+        private func userTurn(_ text: String) -> String {
+            #"{"type":"user","message":{"content":"\#(text)"}}"#
+        }
+        private func assistantText(_ text: String) -> String {
+            #"{"type":"assistant","message":{"content":[{"type":"text","text":"\#(text)"}]}}"#
+        }
+        private func assistantToolUse(_ name: String) -> String {
+            #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"\#(name)","input":{}}]}}"#
+        }
+        private func toolResult(_ text: String) -> String {
+            #"{"type":"user","message":{"content":[{"type":"tool_result","content":"\#(text)"}]}}"#
+        }
+
+        @Test("AskUserQuestion recovers reasoning across intervening tool calls")
+        func recoversContextAcrossToolCalls() throws {
+            let h = try HookTestHelper()
+            let path = try transcript(in: h, rows: [
+                userTurn("Review PR 321."),
+                assistantText("The polling cap is a correct fix, but the action it prescribes is ambiguous."),
+                assistantToolUse("Bash"),
+                toolResult("diff output"),
+                assistantText("Confirmed - line 140 exists as quoted. One finding this round."),
+                assistantToolUse("AskUserQuestion"),
+            ])
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "AskUserQuestion",
+                "tool_input": ["questions": [["question": "Post this finding as a PR comment?", "header": "Inline comment", "options": [["label": "Post it"]]]]],
+                "transcript_path": path,
+            ], existingStatus: makeWorkingStatus())
+            let raw = r.status?["rawLastMessage"] as? String ?? ""
+            // Both paragraphs of the turn survive, in order.
+            #expect(raw.contains("The polling cap is a correct fix"))
+            #expect(raw.contains("Confirmed - line 140 exists"))
+            // The summary comes from the paragraph closest to the question.
+            #expect((r.status?["lastMessage"] as? String ?? "").contains("Confirmed - line 140 exists"))
+        }
+
+        @Test("recovery stops at the previous user turn")
+        func recoveryStopsAtUserTurn() throws {
+            let h = try HookTestHelper()
+            let path = try transcript(in: h, rows: [
+                userTurn("First task."),
+                assistantText("Text from an earlier turn that must not leak."),
+                userTurn("Second task."),
+                assistantText("Reasoning for the question."),
+                assistantToolUse("AskUserQuestion"),
+            ])
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "AskUserQuestion",
+                "tool_input": ["questions": [["question": "Which one?", "options": [["label": "A"]]]]],
+                "transcript_path": path,
+            ], existingStatus: makeWorkingStatus())
+            let raw = r.status?["rawLastMessage"] as? String ?? ""
+            #expect(raw.contains("Reasoning for the question."))
+            #expect(!raw.contains("must not leak"))
+        }
+
+        @Test("no recoverable text leaves lastMessage null")
+        func noRecoverableTextLeavesNull() throws {
+            let h = try HookTestHelper()
+            let path = try transcript(in: h, rows: [
+                userTurn("Go."),
+                assistantToolUse("AskUserQuestion"),
+            ])
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "AskUserQuestion",
+                "tool_input": ["questions": [["question": "Which one?", "options": [["label": "A"]]]]],
+                "transcript_path": path,
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["lastMessage"] is NSNull)
+            #expect(r.status?["rawLastMessage"] is NSNull)
+        }
+
         @Test("transitions waiting to working (plan execution resumes)")
         func transitionsWaitingToWorking() throws {
             let h = try HookTestHelper()
@@ -886,6 +968,88 @@ struct HookScriptTests {
                 "tool_input": ["file_path": "/tmp/foo.txt"],
             ], existingStatus: existing)
             #expect(r.status?["status"] as? String == "working")
+        }
+
+        // Rows: a real user turn, then the assistant reasons, runs a tool, and
+        // only then asks. The tool_result between them is a `user` row — the
+        // recovery must step over it, not stop there.
+        private func transcript(in helper: HookTestHelper, rows: [String]) throws -> String {
+            let url = helper.tempHome.appendingPathComponent("transcript-\(UUID().uuidString).jsonl")
+            try rows.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+            return url.path
+        }
+
+        private func userTurn(_ text: String) -> String {
+            #"{"type":"user","message":{"content":"\#(text)"}}"#
+        }
+        private func assistantText(_ text: String) -> String {
+            #"{"type":"assistant","message":{"content":[{"type":"text","text":"\#(text)"}]}}"#
+        }
+        private func assistantToolUse(_ name: String) -> String {
+            #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"\#(name)","input":{}}]}}"#
+        }
+        private func toolResult(_ text: String) -> String {
+            #"{"type":"user","message":{"content":[{"type":"tool_result","content":"\#(text)"}]}}"#
+        }
+
+        @Test("AskUserQuestion recovers reasoning across intervening tool calls")
+        func recoversContextAcrossToolCalls() throws {
+            let h = try HookTestHelper()
+            let path = try transcript(in: h, rows: [
+                userTurn("Review PR 321."),
+                assistantText("The polling cap is a correct fix, but the action it prescribes is ambiguous."),
+                assistantToolUse("Bash"),
+                toolResult("diff output"),
+                assistantText("Confirmed - line 140 exists as quoted. One finding this round."),
+                assistantToolUse("AskUserQuestion"),
+            ])
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "AskUserQuestion",
+                "tool_input": ["questions": [["question": "Post this finding as a PR comment?", "header": "Inline comment", "options": [["label": "Post it"]]]]],
+                "transcript_path": path,
+            ], existingStatus: makeWorkingStatus())
+            let raw = r.status?["rawLastMessage"] as? String ?? ""
+            // Both paragraphs of the turn survive, in order.
+            #expect(raw.contains("The polling cap is a correct fix"))
+            #expect(raw.contains("Confirmed - line 140 exists"))
+            // The summary comes from the paragraph closest to the question.
+            #expect((r.status?["lastMessage"] as? String ?? "").contains("Confirmed - line 140 exists"))
+        }
+
+        @Test("recovery stops at the previous user turn")
+        func recoveryStopsAtUserTurn() throws {
+            let h = try HookTestHelper()
+            let path = try transcript(in: h, rows: [
+                userTurn("First task."),
+                assistantText("Text from an earlier turn that must not leak."),
+                userTurn("Second task."),
+                assistantText("Reasoning for the question."),
+                assistantToolUse("AskUserQuestion"),
+            ])
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "AskUserQuestion",
+                "tool_input": ["questions": [["question": "Which one?", "options": [["label": "A"]]]]],
+                "transcript_path": path,
+            ], existingStatus: makeWorkingStatus())
+            let raw = r.status?["rawLastMessage"] as? String ?? ""
+            #expect(raw.contains("Reasoning for the question."))
+            #expect(!raw.contains("must not leak"))
+        }
+
+        @Test("no recoverable text leaves lastMessage null")
+        func noRecoverableTextLeavesNull() throws {
+            let h = try HookTestHelper()
+            let path = try transcript(in: h, rows: [
+                userTurn("Go."),
+                assistantToolUse("AskUserQuestion"),
+            ])
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "AskUserQuestion",
+                "tool_input": ["questions": [["question": "Which one?", "options": [["label": "A"]]]]],
+                "transcript_path": path,
+            ], existingStatus: makeWorkingStatus())
+            #expect(r.status?["lastMessage"] is NSNull)
+            #expect(r.status?["rawLastMessage"] is NSNull)
         }
 
         @Test("transitions waiting to working (plan execution resumes)")

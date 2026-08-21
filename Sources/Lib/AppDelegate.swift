@@ -45,6 +45,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hideWhileCollapsedMenuItem: NSMenuItem!
     private var hideWorkingMenuItem: NSMenuItem!
     private var sortByPriorityMenuItem: NSMenuItem!
+    private var conductorHUDMenuItem: NSMenuItem!
     private var prominentStateChangesMenuItem: NSMenuItem!
     private var hotkeyRef: EventHotKeyRef?
     private var globalHotkeyMonitor: Any?
@@ -76,6 +77,16 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         historyStore.start(agentStore: store, tagStore: tagStore)
         conductorStore = ConductorStore()
         conductorStore.start(agentStore: store, tagStore: tagStore)
+        // Mirror the Conductor's order into the store so the HUD view and the
+        // keyboard handler read the same list.
+        conductorStore.$ranks
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.store.conductorRanks = $0 }
+            .store(in: &cancellables)
+        conductorStore.$inFlightSessionIds
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.store.conductorInFlightIds = $0 }
+            .store(in: &cancellables)
         boardController = BoardWindowController(
             viewModel: BoardViewModel(
                 store: store, tagStore: tagStore, themeConfig: themeConfig, inference: tagInference,
@@ -154,6 +165,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sortByPriorityMenuItem.target = self
         sortByPriorityMenuItem.state = store.sortByPriority ? .on : .off
         agentDisplayMenu.addItem(sortByPriorityMenuItem)
+
+        conductorHUDMenuItem = NSMenuItem(title: "Use Conductor Order", action: #selector(toggleConductorHUD), keyEquivalent: "")
+        conductorHUDMenuItem.target = self
+        conductorHUDMenuItem.state = store.conductorHUDEnabled ? .on : .off
+        conductorHUDMenuItem.toolTip = "Sort the HUD by the Conductor's ranking and hide sessions it marked as still running"
+        agentDisplayMenu.addItem(conductorHUDMenuItem)
 
         prominentStateChangesMenuItem = NSMenuItem(title: "Prominent State Changes", action: #selector(toggleProminentStateChanges), keyEquivalent: "")
         prominentStateChangesMenuItem.target = self
@@ -997,6 +1014,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleSortByPriority() {
         store.sortByPriority.toggle()
         sortByPriorityMenuItem.state = store.sortByPriority ? .on : .off
+    }
+
+    @objc private func toggleConductorHUD() {
+        store.conductorHUDEnabled.toggle()
+        conductorHUDMenuItem.state = store.conductorHUDEnabled ? .on : .off
     }
 
     @objc private func toggleProminentStateChanges() {

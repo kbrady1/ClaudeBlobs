@@ -370,7 +370,7 @@ private struct BoardColumnView: View {
                                 get: { viewModel.snoozePickerAgentId == card.id },
                                 set: { if !$0 { viewModel.snoozePickerAgentId = nil } }
                             ), arrowEdge: .trailing) {
-                                BoardSnoozePopover { duration in
+                                SnoozeDurationPopover(highlightedIndex: viewModel.snoozeIndex) { duration in
                                     viewModel.snooze(card, for: duration)
                                 }
                             }
@@ -494,7 +494,8 @@ private struct BoardHelpOverlay: View {
         ("  1–9", "…toggle the nth tag (adds or confirms; removes when confirmed)"),
         ("  C", "…confirm every inferred tag on the card"),
         ("  R", "…run tag inference again"),
-        ("S", "Snooze the selected card (1–6 picks a duration); unsnooze when snoozed"),
+        ("S", "Snooze the selected card; unsnooze when snoozed"),
+        ("  ↑ ↓ / Return", "…move the highlight and pick a duration (1–6 picks directly)"),
         ("U", "Unsnooze the selected card"),
         ("Delete", "Snooze; when already snoozed, dismiss the session"),
         ("1–9", "Toggle the nth tag in the filter bar"),
@@ -502,7 +503,7 @@ private struct BoardHelpOverlay: View {
         ("0", "Clear the filter"),
         ("C", "Collapse the selected column into the right-hand strip (click a tile to expand)"),
         ("⌘1 / ⌘2 / ⌘3", "Switch to Board / Conductor / Stats (Esc returns to the board)"),
-        ("Conductor", "↑ ↓ focus · Return open · ⌘Return send · 1–9 pick option · ⌥1–9 pick and send · S skip · Z snooze 1h · I instructions · R re-analyze"),
+        ("Conductor", "↑ ↓ focus · Return open · ⌘Return send · 1–9 pick option · ⌥1–9 pick and send · S skip · Z snooze (↑ ↓ / Return, 1–6) · I instructions · R re-analyze"),
         ("Stats", "1 / 2 set the stats window; 3 / 4 / 5 set the history range"),
         ("M", "Manage tags (add, edit descriptions, delete)"),
         ("Esc", "Close popover, then close the board"),
@@ -537,38 +538,3 @@ private struct BoardHelpOverlay: View {
     }
 }
 
-// MARK: - Snooze popover
-
-struct BoardSnoozePopover: View {
-    let onSelect: (SnoozeDuration) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Snooze for")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
-                .padding(.bottom, 2)
-            ForEach(Array(SnoozeDuration.allCases.enumerated()), id: \.element.id) { index, duration in
-                Button {
-                    onSelect(duration)
-                } label: {
-                    HStack {
-                        Text("\(index + 1)")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .frame(width: 14)
-                        Text(duration.label)
-                            .font(.system(size: 12))
-                        Spacer()
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(10)
-        .frame(width: 170)
-    }
-}

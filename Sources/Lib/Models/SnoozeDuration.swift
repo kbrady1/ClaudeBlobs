@@ -2,12 +2,13 @@ import Foundation
 
 /// How long a snoozed blob stays hidden before it pops back into the visible list.
 enum SnoozeDuration: String, CaseIterable, Identifiable {
+    /// First, so it is the default highlighted option in every snooze menu.
+    case indefinite
     case thirtyMinutes
     case oneHour
     case threeHours
     case tomorrowMorning
     case nextWeek
-    case indefinite
 
     var id: String { rawValue }
 
@@ -18,7 +19,7 @@ enum SnoozeDuration: String, CaseIterable, Identifiable {
         case .threeHours: return "3 hrs"
         case .tomorrowMorning: return "Tomorrow, 8 AM"
         case .nextWeek: return "Next week"
-        case .indefinite: return "Indefinitely"
+        case .indefinite: return "Until next message"
         }
     }
 
