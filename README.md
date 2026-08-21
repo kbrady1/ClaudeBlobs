@@ -8,9 +8,11 @@ A macOS menu bar app that monitors your running Claude Code and OpenCode agent s
 
 ClaudeBlobs watches for active Claude Code and OpenCode agent sessions and displays them as animated sprite faces floating at the top of your screen. Each face reflects what the agent is doing — working, waiting for input, or asking for permission — so you can keep tabs on multiple agents at a glance.
 
-![ClaudBlobsDemo](https://github.com/user-attachments/assets/cfd74efd-567f-4617-ad24-3f4d99013d0d)
+![ClaudeBlobsDemo](https://github.com/user-attachments/assets/cfd74efd-567f-4617-ad24-3f4d99013d0d)
 
-Click a face or use the keyboard picker to deep-link straight back to the terminal, cmux workspace, or Claude Desktop session that spawned it.
+Click a face or use the keyboard picker to deep-link straight back to the terminal, cmux workspace, Superset workspace, or Claude Desktop session that spawned it.
+
+For a bigger picture, the **Blob Board** (⌃⌥B) opens a kanban view of every session with tags, stats, and a **Conductor** that ranks what needs your attention next and can reply into sessions for you.
 
 ## Install
 
@@ -57,7 +59,9 @@ On first launch the app will ask to install hooks into your Claude Code settings
 - Agents that go idle show X-eyes and eventually desaturate (configurable threshold)
 - **Sub-agents** appear as mini blobs alongside their parent; a child's status bubbles up to the parent (e.g., a child needing permission turns the parent red too)
 - **Rename** an agent by pressing **R** while it's selected in the picker, or right-click → "Rename"
-- Snooze agents to gray them out; dismiss to remove entirely
+- **Override** an agent's state with **E** (Waiting / Starting / Working); the override clears when the agent's real state changes
+- **Snooze** agents for 30 min, 1 h, 3 h, tomorrow 8 AM, next week, or indefinitely; a snoozed agent wakes early when its state changes. Dismiss to remove entirely
+- When more than nine agents are open, click the **+n** indicator in the expanded view to reveal the extra rows
 
 Each sprite shows a small overlay icon indicating what the agent is doing:
 
@@ -75,7 +79,7 @@ Each sprite shows a small overlay icon indicating what the agent is doing:
 | Warning triangle | Tool error (flashes 3s) |
 | Purple badge | Push notification sent |
 | Fire | API error or outage |
-| Clock badge | Loop/cron schedule active |
+| Clock badge | Loop / cron schedule, Monitor task, or scheduled wakeup active (click to dismiss) |
 | Blue spinning ring | Delegating to subagent |
 
 ### Keyboard Navigation
@@ -84,22 +88,25 @@ Each sprite shows a small overlay icon indicating what the agent is doing:
 - **Tab / Shift+Tab / Arrow keys** — cycle through agents
 - **Enter** — jump to the selected agent
 - **Shift+Enter** — open the permission popover for the selected agent (cmux only)
-- **Backspace** — snooze (first press) or dismiss (second press)
+- **R** — rename; **E** — override state (then **1 / 2 / 3**)
+- **Backspace** — choose a snooze duration (**1–6**); when already snoozed, dismiss
 - **Escape** — close the picker
 
 ### Blob Board
 
-**Ctrl+Option+B** (customizable) opens the Blob Board, a full-size kanban board in its own window. Cards are grouped into columns — Idle, Needs Attention, Working, Monitoring, Snoozed — and sorted by how long each agent has been in that column (oldest at top). Each card shows the agent's latest message and tool call, its location, sub-agents, and tags. Click a card (or press Enter) to deep-link to the agent and close the board.
+**Ctrl+Option+B** (change it under *Change Board Hotkey…*) opens the Blob Board, a full-size kanban board in its own window. Cards are grouped into columns — Idle, Needs Attention, Working, Monitoring, Snoozed — and sorted by how long each agent has been in that column (oldest at top). Each card shows the agent's latest message and tool call, its location, sub-agents, and tags. Click a card (or press Enter) to deep-link to the agent and close the board.
 
 **Tags.** Tag cards with any of the preset tags (core task, side task, code review, research, eng request, orchestrator) or add your own in *Manage Tags*. Each tag carries a description that explains what it means and how to recognize it. When a new session is first seen, ClaudeBlobs runs a small non-interactive `claude -p --model haiku` call against the session's first prompt and proposes one tag. Inferred tags show as a dashed outline with a `?`; confirmed tags are filled. Open the tag editor (press `T` on the card) and choose the tag to confirm it. The tag filter in the header persists across board openings.
 
 **Modes.** The header's segmented control switches between **Board**, **Conductor**, and **Stats** (**⌘1 / ⌘2 / ⌘3**); the board reopens in the last mode used.
 
-**Conductor.** Ranks every session that is waiting on you (Needs Attention, then Idle) and walks you through them. Each session is scored once by a `claude -p --model sonnet` call from its tags, repo, first prompt, pending tool, last message, and your instructions; the score is cached per input fingerprint, so new or changed sessions cost one call and everything else is re-sorted locally (AI score + a working-hours wait boost − a skip penalty). The top item shows the reasoning and a proposed action: an editable reply or an approval you can send straight into a superset or cmux session (**⌘Return**), or just **Open** / **Skip** / **Snooze**. *Instructions…* lets you rewrite how the Conductor prioritizes; *Re-analyze* re-scores everything.
+**Conductor.** Ranks every session that is waiting on you (Needs Attention, then Idle) and walks you through them. Each session is scored once by a `claude -p --model sonnet` call from its tags, repo, first prompt, pending tool, last message, and your instructions; the score is cached per input fingerprint, so new or changed sessions cost one call and everything else is re-sorted locally (AI score + a working-hours wait boost − a skip penalty). The top item shows the session's message (rendered as Markdown), the reasoning, and a proposed action: an editable reply, an approval, or — when the agent asked a multiple-choice question — the enumerated options. Send it straight into a Superset or cmux session with **⌘Return**, or just **Open** / **Skip** / **Snooze**. *Instructions…* lets you rewrite how the Conductor prioritizes; *Re-analyze* re-scores everything.
+
+A session must sit in Needs Attention or Idle for 15 seconds before the Conductor admits it, so blobs that flash idle between background turns never show up. Plan approvals are never auto-approved. Conductor keys: **↑ ↓ / J K** walk the queue, **Return** open, **1–9** choose an option, **⌥1–9** choose and send, **⌘Return** send, **S** skip, **Z** snooze, **I** instructions, **R** re-analyze. **Escape** ends editing in the reply box; while the box is empty, arrows and Return still control the board.
 
 **Stats.** The Stats mode stacks two sections: *Stats* — a trailing 24h / 7d window (**1 / 2**) with tiles and charts for concurrent sessions over time, sessions started, sessions by tag, and Idle / Needs Attention wait-time spreads (median / p75 / max / mean, counting working hours only: Mon–Fri 09:00–17:00); *History* — 7 / 30 / 90 days (**3 / 4 / 5**) with sessions per day stacked by tag, sessions by tag, top repositories, and a session list. Sessions are recorded to `~/Library/Application Support/ClaudeBlobs/history.json` while the app runs and kept for 90 days.
 
-Board keys: **Arrows / H J K L / Tab** move, **Enter** open, **T** tag editor (**↑↓ / Return** walk and toggle, **1–9** toggle, **C** confirm all inferred, **R** re-infer), **S** snooze, **U** unsnooze, **Backspace** snooze / dismiss, **C** collapse column, **1–9** toggle filter tags, **N** untagged filter, **0** clear filter, **⌘1 / ⌘2 / ⌘3** (or **B / D / Y**) board / conductor / stats, **M** manage tags, **?** help, **Escape** close (from Conductor or Stats: back to Board).
+Board keys: **Arrows / H J K L / Tab** move, **Enter** open, **T** tag editor (**↑↓ / Return** walk and toggle, **1–9** toggle, **C** confirm all inferred, **R** re-infer), **S** snooze, **U** unsnooze, **Backspace** snooze / dismiss, **C** collapse column, **1–9** toggle filter tags, **N** untagged filter, **0** clear filter, **⌘1 / ⌘2 / ⌘3** board / conductor / stats, **M** manage tags, **?** help, **Escape** close (from Conductor or Stats: back to Board). *Close Board After Deep Link* in the menu bar controls whether opening a session also closes the board.
 
 ### Deep Linking
 
@@ -108,6 +115,7 @@ Clicking an agent routes you back to its source. The level of support depends on
 | Terminal | Activate app | Select tab | Select surface | Permission popover | Method |
 |----------|:---:|:---:|:---:|:---:|--------|
 | **cmux** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | JSON-RPC (workspace + surface) |
+| **Superset** | :white_check_mark: | :white_check_mark: | :white_check_mark: | | URL scheme (workspace + terminal); Conductor replies via the `superset` CLI |
 | **iTerm2** | :white_check_mark: | :white_check_mark: | | | AppleScript (by TTY) |
 | **Terminal.app** | :white_check_mark: | :white_check_mark: | | | AppleScript (by TTY) |
 | **Ghostty** | :white_check_mark: | :white_check_mark: | | | AppleScript (by working directory) |
@@ -121,9 +129,9 @@ Clicking an agent routes you back to its source. The level of support depends on
 
 cmux provides the deepest integration — it can navigate to the exact workspace, tab, and surface (split pane) where the agent is running. With cmux, clicking a permission-state agent opens a popover showing the full tool request and a "Go to Agent" button to jump directly to the permission prompt. Any terminal not listed above still gets app-level activation via process tree detection.
 
-### Loop / Cron Support
+### Loop / Cron / Monitor Support
 
-Agents that create a loop or cron schedule (via the `/loop` or `/schedule` commands) get a clock badge on their sprite. Loop sessions auto-hide when idle and quiet (done, no errors) and reappear if errors occur. Loop state persists across app restarts.
+Agents that create a loop or cron schedule (via the `/loop` or `/schedule` commands), run a `Monitor` task, or schedule a wakeup get a clock badge on their sprite. These sessions auto-hide when idle and quiet (done, no errors), reappear if errors occur, and land in the board's Monitoring column. Loop state persists across app restarts; click the clock badge to dismiss it.
 
 **Tip:** Loop commands should explicitly ask the user a question or request permission when action is required — this ensures the agent surfaces in the HUD at the right time.
 
@@ -142,6 +150,8 @@ All settings are accessible from the menu bar icon:
 - **Screen Placement** — show blobs on all displays, primary only, or all except primary
 - **Visibility** — hide working agents, hide when collapsed, sort by priority, prominent state change animations
 - **App Icons** — show host app icons on agent cards (always, when expanded, or never)
+- **Board** — *Open Blob Board*, *Close Board After Deep Link*, *Change Board Hotkey…*
+- **Appearance** — the HUD and all windows always render in dark mode, regardless of the system setting
 
 ## How It Works
 
@@ -150,7 +160,11 @@ ClaudeBlobs collects agent state from two providers:
 - Claude Code shell hooks write JSON status files into `~/.claude/agent-status/`
 - The bundled OpenCode plugin writes matching JSON status files into `~/.opencode/agent-status/`
 
-The app watches both directories and renders a single combined HUD.
+The app watches both directories and renders a single combined HUD. Besides status, the hooks record each session's first prompt (`firstPrompt`), any pending multiple-choice question (`pendingQuestions`), and Monitor activity (`monitorActive`).
+
+The board keeps its own state in `~/Library/Application Support/ClaudeBlobs/`: `tags.json` (tags, assignments, filter), `history.json` (90 days of sessions and wait episodes), and `conductor.json` (cached scores and your instructions).
+
+**AI calls.** Two features run `claude -p` under your own Claude Code login: tag inference sends a new session's first prompt to `haiku` once; the Conductor sends a waiting session's tags, repo, first prompt, pending tool, and last message to `sonnet` once per change. Nothing leaves the machine otherwise. Turn them off under *Manage Tags → Auto-infer tags* and *Conductor → Instructions… → Use AI scoring*. `history.json` keeps the first 200 characters of each first prompt for 90 days.
 
 Deep linking is determined by process ancestry — the app walks the process tree from the agent PID to find whether it belongs to a cmux session, a terminal emulator, an editor, or Claude Desktop.
 
@@ -163,6 +177,7 @@ rm -rf /Applications/ClaudeBlobs.app
 rm -rf ~/.claude/agent-status
 rm -rf ~/.opencode/agent-status
 rm -f ~/.config/opencode/plugins/claudeblobs-opencode.js
+rm -rf ~/Library/Application\ Support/ClaudeBlobs
 ```
 
 Then remove the hook entries from `~/.claude/settings.json`.
