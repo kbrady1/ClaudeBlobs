@@ -659,7 +659,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return true
         }
 
-        // When the snooze-duration popover is showing, handle 1-6 and Escape
+        // When the snooze-duration popover is showing, handle arrows, Enter, 1-6, and Escape
         if let target = expansionState.snoozeAgent {
             // Escape — close popover only
             if event.keyCode == 53 {
@@ -667,8 +667,31 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return true
             }
             let liveAgent = store.agents.first(where: { $0.id == target.id }) ?? target
+            let optionCount = SnoozeDuration.allCases.count
+            // Up/Down arrows — move highlighted option
+            if event.keyCode == 126 {
+                DispatchQueue.main.async {
+                    self.expansionState.snoozeIndex = max(0, self.expansionState.snoozeIndex - 1)
+                }
+                return true
+            }
+            if event.keyCode == 125 {
+                DispatchQueue.main.async {
+                    self.expansionState.snoozeIndex = min(optionCount - 1, self.expansionState.snoozeIndex + 1)
+                }
+                return true
+            }
+            // Enter — confirm the highlighted option
+            if event.keyCode == 36 {
+                let duration = SnoozeDuration.allCases[expansionState.snoozeIndex]
+                DispatchQueue.main.async {
+                    self.store.snooze(liveAgent, for: duration)
+                    self.expansionState.clearSnooze()
+                }
+                return true
+            }
             if let chars = event.characters, let digit = chars.first, digit.isNumber,
-               let num = Int(String(digit)), num >= 1, num <= SnoozeDuration.allCases.count {
+               let num = Int(String(digit)), num >= 1, num <= optionCount {
                 let duration = SnoozeDuration.allCases[num - 1]
                 DispatchQueue.main.async {
                     self.store.snooze(liveAgent, for: duration)

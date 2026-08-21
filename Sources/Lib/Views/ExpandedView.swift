@@ -20,6 +20,7 @@ struct ExpandedView: View {
     var onRequestSnooze: ((Agent) -> Void)?
     let onSnooze: (Agent, SnoozeDuration) -> Void
     var snoozePickerAgent: Agent?
+    var snoozePickerIndex: Int = 0
     var onSnoozePickerCancel: (() -> Void)?
     let onDismiss: (Agent) -> Void
     var onDismissChild: ((Agent) -> Void)?
@@ -427,7 +428,7 @@ struct ExpandedView: View {
                         get: { snoozePickerAgent?.id == agent.id },
                         set: { if !$0 { onSnoozePickerCancel?() } }
                     )) {
-                        SnoozeDurationPopover { duration in
+                        SnoozeDurationPopover(highlightedIndex: snoozePickerIndex) { duration in
                             onSnooze(agent, duration)
                         }
                     }
@@ -572,6 +573,7 @@ private struct StatusOverridePopover: View {
 
 /// Popover for choosing how long to snooze a blob.
 private struct SnoozeDurationPopover: View {
+    var highlightedIndex: Int = 0
     var onSelect: (SnoozeDuration) -> Void
 
     var body: some View {
@@ -594,6 +596,10 @@ private struct SnoozeDurationPopover: View {
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(highlightedIndex == index ? Color.white.opacity(0.12) : Color.clear)
+                        )
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)

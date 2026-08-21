@@ -24,6 +24,7 @@ final class HUDExpansionState: ObservableObject {
     @Published var isLoadingPermission = false
     @Published var statusOverrideAgent: Agent?
     @Published var snoozeAgent: Agent?
+    @Published var snoozeIndex: Int = 0
 
     var isShowingPermission: Bool { permissionAgent != nil }
     var isShowingStatusOverride: Bool { statusOverrideAgent != nil }
@@ -51,6 +52,7 @@ final class HUDExpansionState: ObservableObject {
 
     func showSnooze(for agent: Agent) {
         snoozeAgent = agent
+        snoozeIndex = 0
     }
 
     func clearSnooze() {
@@ -190,6 +192,7 @@ struct HUDContentView: View {
                     expansionState.clearSnooze()
                 },
                 snoozePickerAgent: expansionState.snoozeAgent,
+                snoozePickerIndex: expansionState.snoozeIndex,
                 onSnoozePickerCancel: { expansionState.clearSnooze() },
                 onDismiss: { store.dismiss($0) },
                 onDismissChild: { store.dismiss($0) },
