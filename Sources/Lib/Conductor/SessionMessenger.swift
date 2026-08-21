@@ -36,15 +36,18 @@ enum SessionMessenger {
 
     /// One committed action in an AskUserQuestion answer sequence.
     enum AnswerStep: Equatable {
-        case select(Int)     // move the highlight to a 1-based option and press Enter
-        case text(String)    // type text and press Enter
-        case submit          // press Enter on the final review step
+        case select(Int)                 // move the highlight to a 1-based row and press Enter
+        case typeInto(Int, String)       // move to the "Type something" row, type, then Enter
+        case text(String)                // type into the current input and press Enter
+        case submit                      // Enter on the final review step
     }
 
     /// One answer per pending question, in order.
     enum Selection: Equatable {
         case option(Int)                       // 1-based option
         case typed(optionIndex: Int, text: String)  // choose "Type something" (1-based), then type
+        /// Choose "Chat about this" (1-based) and send a general reply instead of answers.
+        case chat(optionIndex: Int, text: String)
     }
 
     /// The highlight starts on option 1, ↓ moves it, Enter commits the
@@ -58,8 +61,12 @@ enum SessionMessenger {
             switch selection {
             case .option(let n): steps.append(.select(n))
             case .typed(let n, let text):
-                steps.append(.select(n))
-                steps.append(.text(text))
+                // "Type something" is an inline field: move there, type, then Enter.
+                // Enter on the empty row declines the whole question set.
+                steps.append(.typeInto(n, text))
+            case .chat(let n, let text):
+                // Leaves the question flow entirely; no review step follows.
+                return [.select(n), .text(text)]
             }
         }
         if selections.count > 1 && !steps.isEmpty { steps.append(.submit) }
@@ -74,7 +81,7 @@ enum SessionMessenger {
             // input. Focus the terminal and press real keys instead.
             guard isAccessibilityTrusted(prompt: true) else { return .failure(MessengerError.accessibilityDenied) }
             SupersetLinker.activate(agent)
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
         }
         for (index, step) in steps.enumerated() {
             if index > 0 { try? await Task.sleep(nanoseconds: 450_000_000) }
@@ -91,15 +98,25 @@ enum SessionMessenger {
     private static func perform(_ step: AnswerStep, in agent: Agent) async -> Result<Void, Error> {
         switch (channel(for: agent), step) {
         case (.superset?, .select(let option)):
-            return await pressKeys(Array(repeating: 125, count: max(0, option - 1)) + [36])
+            return await selectVerified(option, in: agent)
+        case (.superset?, .typeInto(let row, let text)):
+            if case .failure(let error) = await moveHighlight(to: row, in: agent) { return .failure(error) }
+            return await typeText(text)
         case (.superset?, .text(let text)):
             return await typeText(text)
         case (.superset?, .submit):
-            return await pressKeys([36])
+            // The review step highlights "Submit answers" (row 1); make sure of it.
+            return await selectVerified(1, in: agent)
         case (.cmux?, .select(let option)):
             for _ in 0..<max(0, option - 1) {
                 guard CommandExecutor.sendKey("down", agent: agent) else { return .failure(MessengerError.failed("cmux send-key down failed")) }
             }
+            return cmuxResult(CommandExecutor.sendKey("enter", agent: agent), "send-key enter")
+        case (.cmux?, .typeInto(let row, let text)):
+            for _ in 0..<max(0, row - 1) {
+                guard CommandExecutor.sendKey("down", agent: agent) else { return .failure(MessengerError.failed("cmux send-key down failed")) }
+            }
+            guard CommandExecutor.sendText(text, agent: agent) else { return .failure(MessengerError.failed("cmux send failed")) }
             return cmuxResult(CommandExecutor.sendKey("enter", agent: agent), "send-key enter")
         case (.cmux?, .text(let text)):
             guard CommandExecutor.sendText(text, agent: agent) else { return .failure(MessengerError.failed("cmux send failed")) }
@@ -111,7 +128,68 @@ enum SessionMessenger {
         }
     }
 
-    /// Key codes: 125 = ↓, 36 = Return. Sent to the frontmost app.
+    /// Moves the highlight to `option` by reading the screen and nudging, then
+    /// presses Return. Blind arrow counts drift right after the focus switch.
+    private static func selectVerified(_ option: Int, in agent: Agent) async -> Result<Void, Error> {
+        if case .failure(let error) = await moveHighlight(to: option, in: agent) { return .failure(error) }
+        return await pressKeys([36])
+    }
+
+    private static func moveHighlight(to option: Int, in agent: Agent) async -> Result<Void, Error> {
+        for attempt in 0..<4 {
+            guard let current = highlightedRow(in: agent) else {
+                // No menu visible: fall back to a blind move on the first try.
+                if attempt == 0 {
+                    let moves = Array(repeating: 125, count: max(0, option - 1))
+                    if !moves.isEmpty, case .failure(let error) = await pressKeys(moves) { return .failure(error) }
+                    continue
+                }
+                break
+            }
+            if current == option { break }
+            let delta = option - current
+            let moves = Array(repeating: delta > 0 ? 125 : 126, count: abs(delta))
+            if case .failure(let error) = await pressKeys(moves) { return .failure(error) }
+            try? await Task.sleep(nanoseconds: 350_000_000)
+        }
+        return .success(())
+    }
+
+    /// Row number of the "❯ N." highlight on the terminal screen, if a menu is showing.
+    static func highlightedRow(in agent: Agent) -> Int? {
+        guard let screen = readScreen(agent) else { return nil }
+        return highlightedRow(inScreen: screen)
+    }
+
+    static func highlightedRow(inScreen screen: String) -> Int? {
+        let lines = screen.split(separator: "\n")
+        for line in lines.reversed() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("❯") else { continue }
+            let rest = trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
+            let digits = rest.prefix { $0.isNumber }
+            if let n = Int(digits), rest.dropFirst(digits.count).hasPrefix(".") { return n }
+        }
+        return nil
+    }
+
+    private static func readScreen(_ agent: Agent) -> String? {
+        guard let workspace = agent.supersetWorkspace, let terminal = agent.supersetTerminal else { return nil }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", "exec superset terminals read --workspace \(shellQuote(workspace)) --terminal \(shellQuote(terminal))"]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return nil }
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return obj["text"] as? String
+    }
+
+    /// Key codes: 125 = ↓, 126 = ↑, 36 = Return. Sent to the frontmost app.
     private static func pressKeys(_ codes: [Int]) async -> Result<Void, Error> {
         let body = codes.map { "key code \($0)\ndelay 0.15" }.joined(separator: "\n")
         let ok = await AppleScriptRunner.run("tell application \"System Events\"\n\(body)\nend tell")

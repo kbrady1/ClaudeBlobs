@@ -265,8 +265,25 @@ struct ConductorStoreTests {
                 == [S.select(1), .select(2), .select(1), .submit])
         // Typed text goes through that question's "Type something" slot, then the review Enter.
         #expect(SessionMessenger.answerSteps(selections: [.option(2), .typed(optionIndex: 3, text: "hi")])
-                == [S.select(2), .select(3), .text("hi"), .submit])
+                == [S.select(2), .typeInto(3, "hi"), .submit])
         #expect(SessionMessenger.answerSteps(selections: []).isEmpty)
+        // A general reply leaves the flow: no review Enter afterwards.
+        #expect(SessionMessenger.answerSteps(selections: [.chat(optionIndex: 5, text: "later")])
+                == [S.select(5), .text("later")])
+    }
+
+    @Test func highlightedRowParsing() {
+        let screen = """
+        Some output
+        ❯ 1. Option one
+             The default.
+          2. Option two
+        Enter to select · Tab/Arrow keys to navigate
+        """
+        #expect(SessionMessenger.highlightedRow(inScreen: screen) == 1)
+        #expect(SessionMessenger.highlightedRow(inScreen: "  ❯ 3. Type something.\n  4. Chat about this") == 3)
+        #expect(SessionMessenger.highlightedRow(inScreen: "❯\n  ⏵⏵ auto mode on") == nil)
+        #expect(SessionMessenger.highlightedRow(inScreen: "plain prompt") == nil)
     }
 
     @Test func shellQuoting() {

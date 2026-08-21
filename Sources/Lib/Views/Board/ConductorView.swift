@@ -65,6 +65,7 @@ struct ConductorView: View {
                             hostAppIcon: store.hostAppIcons[focused.agent.pid],
                             theme: theme,
                             draft: $viewModel.conductorDraft,
+                            replyInstead: $viewModel.conductorReplyInstead,
                             choices: viewModel.conductorChoices,
                             canSend: viewModel.conductorCanSend,
                             isSending: viewModel.conductorSending,
@@ -166,6 +167,7 @@ private struct ConductorHeroCard: View {
     let hostAppIcon: NSImage?
     let theme: ColorTheme
     @Binding var draft: String
+    @Binding var replyInstead: Bool
     let choices: [Int: Int]
     let canSend: Bool
     let isSending: Bool
@@ -349,6 +351,17 @@ private struct ConductorHeroCard: View {
                     .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(accent.opacity(0.45), lineWidth: 1.5))
                     .disabled(isSending)
                     .onChange(of: draft) { _ in onDraftEdited() }
+                if hasQuestions && choices.isEmpty && !draft.isEmpty {
+                    Picker("", selection: $replyInstead) {
+                        Text("Reply instead of answering").tag(true)
+                        Text("Answer the question with this text").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 420)
+                    .focusable(false)
+                    .help("Reply: selects \"Chat about this\" and sends your text as a general message. Answer: puts the text into each unanswered question's \"Type something\" slot.")
+                }
             }
             if !canMessage {
                 Text("No superset / cmux channel for this session — open it to reply.")
