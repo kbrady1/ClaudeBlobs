@@ -12,7 +12,7 @@ resolve_agent_status_file
 ensure_status_file
 
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty')
-RAW_MSG=$(echo "$LAST_MSG" | head -c 2000)
+RAW_MSG=$(printf '%s' "$LAST_MSG" | jq -Rrs '.[:12000]')
 TS=$(now_ms)
 
 # Strip markdown formatting and extract a clean first sentence.
@@ -58,6 +58,6 @@ atomic_update "$STATUS_FILE" \
   --arg waitReason "$WAIT_REASON" \
   --arg rawLastMessage "$RAW_MSG" \
   --argjson ts "$TS" \
-  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .waitReason = $waitReason | .rawLastMessage = (if $rawLastMessage == "" then null else $rawLastMessage end) | .toolFailure = null | .updatedAt = $ts'
+  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .waitReason = $waitReason | .rawLastMessage = (if $rawLastMessage == "" then null else $rawLastMessage end) | .toolFailure = null | .pendingQuestions = null | .updatedAt = $ts'
 
 debug_log_result

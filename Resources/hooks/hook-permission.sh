@@ -16,6 +16,7 @@ RAW_INPUT=$(echo "$INPUT" | jq -c '.tool_input // empty' 2>/dev/null)
 TS=$(now_ms)
 
 TOOL_USE_STR=$(format_tool_input "$TOOL_NAME" "$RAW_INPUT")
+QUESTIONS_JSON=$(extract_pending_questions "$TOOL_NAME")
 PERMISSION_KEY=$(printf '%s:%s' "$TOOL_NAME" "$RAW_INPUT" | md5 -q)
 
 atomic_update "$STATUS_FILE" \
@@ -23,8 +24,9 @@ atomic_update "$STATUS_FILE" \
   --arg toolUse "$TOOL_USE_STR" \
   --arg permKey "$PERMISSION_KEY" \
   --arg permTool "$TOOL_NAME" \
+  --argjson questions "$QUESTIONS_JSON" \
   --argjson ts "$TS" \
-  '(if (.status != $status or .permissionKey != $permKey) then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .permissionKey = $permKey | .permissionTool = $permTool | .updatedAt = $ts'
+  '(if (.status != $status or .permissionKey != $permKey) then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .permissionKey = $permKey | .permissionTool = $permTool | .pendingQuestions = $questions | .updatedAt = $ts'
 
 # When a subagent needs permission, also update the parent's lastToolUse
 # so the parent blob reflects the actual blocking permission.

@@ -87,6 +87,20 @@ Each sprite shows a small overlay icon indicating what the agent is doing:
 - **Backspace** — snooze (first press) or dismiss (second press)
 - **Escape** — close the picker
 
+### Blob Board
+
+**Ctrl+Option+B** (customizable) opens the Blob Board, a full-size kanban board in its own window. Cards are grouped into columns — Idle, Needs Attention, Working, Monitoring, Snoozed — and sorted by how long each agent has been in that column (oldest at top). Each card shows the agent's latest message and tool call, its location, sub-agents, and tags. Click a card (or press Enter) to deep-link to the agent and close the board.
+
+**Tags.** Tag cards with any of the preset tags (core task, side task, code review, research, eng request, orchestrator) or add your own in *Manage Tags*. Each tag carries a description that explains what it means and how to recognize it. When a new session is first seen, ClaudeBlobs runs a small non-interactive `claude -p --model haiku` call against the session's first prompt and proposes one tag. Inferred tags show as a dashed outline with a `?`; confirmed tags are filled. Open the tag editor (press `T` on the card) and choose the tag to confirm it. The tag filter in the header persists across board openings.
+
+**Modes.** The header's segmented control switches between **Board**, **Conductor**, and **Stats** (**⌘1 / ⌘2 / ⌘3**); the board reopens in the last mode used.
+
+**Conductor.** Ranks every session that is waiting on you (Needs Attention, then Idle) and walks you through them. Each session is scored once by a `claude -p --model sonnet` call from its tags, repo, first prompt, pending tool, last message, and your instructions; the score is cached per input fingerprint, so new or changed sessions cost one call and everything else is re-sorted locally (AI score + a working-hours wait boost − a skip penalty). The top item shows the reasoning and a proposed action: an editable reply or an approval you can send straight into a superset or cmux session (**⌘Return**), or just **Open** / **Skip** / **Snooze**. *Instructions…* lets you rewrite how the Conductor prioritizes; *Re-analyze* re-scores everything.
+
+**Stats.** The Stats mode stacks two sections: *Stats* — a trailing 24h / 7d window (**1 / 2**) with tiles and charts for concurrent sessions over time, sessions started, sessions by tag, and Idle / Needs Attention wait-time spreads (median / p75 / max / mean, counting working hours only: Mon–Fri 09:00–17:00); *History* — 7 / 30 / 90 days (**3 / 4 / 5**) with sessions per day stacked by tag, sessions by tag, top repositories, and a session list. Sessions are recorded to `~/Library/Application Support/ClaudeBlobs/history.json` while the app runs and kept for 90 days.
+
+Board keys: **Arrows / H J K L / Tab** move, **Enter** open, **T** tag editor (**↑↓ / Return** walk and toggle, **1–9** toggle, **C** confirm all inferred, **R** re-infer), **S** snooze, **U** unsnooze, **Backspace** snooze / dismiss, **C** collapse column, **1–9** toggle filter tags, **N** untagged filter, **0** clear filter, **⌘1 / ⌘2 / ⌘3** (or **B / D / Y**) board / conductor / stats, **M** manage tags, **?** help, **Escape** close (from Conductor or Stats: back to Board).
+
 ### Deep Linking
 
 Clicking an agent routes you back to its source. The level of support depends on the terminal:

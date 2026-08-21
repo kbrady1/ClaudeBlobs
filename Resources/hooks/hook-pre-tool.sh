@@ -16,6 +16,7 @@ RAW_INPUT=$(echo "$INPUT" | jq -c '.tool_input // empty' 2>/dev/null)
 TS=$(now_ms)
 
 TOOL_USE_STR=$(format_tool_input "$TOOL_NAME" "$RAW_INPUT")
+QUESTIONS_JSON=$(extract_pending_questions "$TOOL_NAME")
 
 # Monitor/TaskStop flip a durable flag instead of relying on lastToolUse, which
 # gets overwritten by the very next tool call in the same turn.
@@ -60,7 +61,8 @@ fi
 atomic_update "$STATUS_FILE" \
   --arg status "working" \
   --arg toolUse "$TOOL_USE_STR" \
+  --argjson questions "$QUESTIONS_JSON" \
   --argjson ts "$TS" \
-  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .waitReason = null | .toolFailure = null | .lastMessage = null | .rawLastMessage = null | .updatedAt = $ts | '"$MONITOR_ACTIVE_FILTER"
+  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .pendingQuestions = $questions | .waitReason = null | .toolFailure = null | .lastMessage = null | .rawLastMessage = null | .updatedAt = $ts | '"$MONITOR_ACTIVE_FILTER"
 
 debug_log_result

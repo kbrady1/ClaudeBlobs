@@ -151,13 +151,13 @@ struct HookScriptTests {
             #expect(r.status?["rawLastMessage"] is NSNull)
         }
 
-        @Test("rawLastMessage is truncated to 2000 chars")
+        @Test("rawLastMessage is truncated to 12000 characters, not bytes")
         func rawLastMessageTruncated() throws {
             let h = try HookTestHelper()
-            let longMsg = String(repeating: "x", count: 3000)
+            let longMsg = String(repeating: "é", count: 13000)
             let r = try h.runHook("hook-stop.sh", input: ["last_assistant_message": longMsg])
             let raw = r.status?["rawLastMessage"] as? String ?? ""
-            #expect(raw.count <= 2000)
+            #expect(raw.count == 12000)
         }
     }
 
@@ -728,6 +728,115 @@ struct HookScriptTests {
             #expect(r.status?["lastMessage"] is NSNull)
             #expect(r.status?["waitReason"] is NSNull)
             #expect(r.status?["toolFailure"] is NSNull)
+        }
+
+        @Test("records the first prompt and keeps it on later prompts")
+        func recordsFirstPrompt() throws {
+            let h = try HookTestHelper()
+            let existing: [String: Any] = [
+                "sessionId": "test-session",
+                "pid": 99999,
+                "status": "waiting",
+                "createdAt": 1000000,
+                "updatedAt": 1000000,
+            ]
+            let first = try h.runHook(
+                "hook-user-prompt.sh", input: ["prompt": "Review PR #42 for me"], existingStatus: existing
+            )
+            #expect(first.status?["firstPrompt"] as? String == "Review PR #42 for me")
+
+            let second = try h.runHook(
+                "hook-user-prompt.sh", input: ["prompt": "now fix the tests"], existingStatus: first.status
+            )
+            #expect(second.status?["firstPrompt"] as? String == "Review PR #42 for me")
+        }
+
+        @Test("caps firstPrompt at 4000 characters")
+        func truncatesFirstPrompt() throws {
+            let h = try HookTestHelper()
+            let long = String(repeating: "a", count: 5000)
+            let r = try h.runHook("hook-user-prompt.sh", input: ["prompt": long])
+            #expect((r.status?["firstPrompt"] as? String)?.count == 4000)
+        }
+
+        @Test("leaves firstPrompt unset when the input has no prompt")
+        func noPromptNoField() throws {
+            let h = try HookTestHelper()
+            let existing: [String: Any] = [
+                "sessionId": "test-session", "pid": 99999, "status": "waiting",
+                "createdAt": 1000000, "updatedAt": 1000000,
+            ]
+            let r = try h.runHook("hook-user-prompt.sh", input: [:], existingStatus: existing)
+            #expect(r.status?["firstPrompt"] == nil)
+        }
+    }
+
+    // MARK: - AskUserQuestion payload
+
+    @Suite("pendingQuestions")
+    struct PendingQuestions {
+        static let questions: [[String: Any]] = [[
+            "question": "Stop it now?",
+            "header": "Stop leaked sandbox",
+            "options": [["label": "Yes", "description": "tear down"], ["label": "No"]],
+        ]]
+
+        @Test("PermissionRequest stores the full AskUserQuestion payload")
+        func permissionStoresQuestions() throws {
+            let h = try HookTestHelper()
+            let r = try h.runHook("hook-permission.sh", input: [
+                "tool_name": "AskUserQuestion",
+                "tool_input": ["questions": Self.questions],
+            ])
+            let stored = r.status?["pendingQuestions"] as? [[String: Any]]
+            #expect(stored?.first?["question"] as? String == "Stop it now?")
+            #expect((stored?.first?["options"] as? [[String: Any]])?.count == 2)
+        }
+
+        @Test("PreToolUse stores the payload for AskUserQuestion and nulls it for other tools")
+        func preToolUseSetsAndClears() throws {
+            let h = try HookTestHelper()
+            let ask = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "AskUserQuestion", "tool_input": ["questions": Self.questions],
+            ])
+            let stored = ask.status?["pendingQuestions"] as? [[String: Any]]
+            #expect(stored?.first?["question"] as? String == "Stop it now?")
+
+            let bash = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Bash", "tool_input": ["command": "ls"],
+            ], existingStatus: ask.status)
+            #expect(bash.status?["pendingQuestions"] is NSNull)
+        }
+
+        @Test("UserPromptSubmit clears it")
+        func userPromptClears() throws {
+            let h = try HookTestHelper()
+            let withQuestions = try h.runHook("hook-permission.sh", input: [
+                "tool_name": "AskUserQuestion", "tool_input": ["questions": Self.questions],
+            ]).status
+            let r = try h.runHook("hook-user-prompt.sh", input: ["prompt": "yes"], existingStatus: withQuestions)
+            #expect(r.status?["pendingQuestions"] is NSNull)
+            #expect(r.status?["status"] as? String == "working")
+        }
+
+        @Test("other permissions clear it; PostToolUse and Stop clear it")
+        func clearsOnOtherActivity() throws {
+            let h = try HookTestHelper()
+            let withQuestions = try h.runHook("hook-permission.sh", input: [
+                "tool_name": "AskUserQuestion", "tool_input": ["questions": Self.questions],
+            ]).status
+            let other = try h.runHook("hook-permission.sh", input: [
+                "tool_name": "Bash", "tool_input": ["command": "ls"],
+            ], existingStatus: withQuestions)
+            #expect(other.status?["pendingQuestions"] is NSNull)
+
+            let post = try h.runHook("hook-post-tool.sh", input: [
+                "tool_name": "AskUserQuestion", "tool_input": ["questions": Self.questions, "answers": [:]],
+            ], existingStatus: withQuestions)
+            #expect(post.status?["pendingQuestions"] is NSNull)
+
+            let stop = try h.runHook("hook-stop.sh", input: ["last_assistant_message": "Done."], existingStatus: withQuestions)
+            #expect(stop.status?["pendingQuestions"] is NSNull)
         }
     }
 

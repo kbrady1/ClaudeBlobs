@@ -11,11 +11,13 @@ debug_log_input "UserPromptSubmit"
 ensure_status_file
 
 TS=$(now_ms)
+PROMPT=$(echo "$INPUT" | jq -r '(.prompt // "") | .[:4000]')
 
 atomic_update "$STATUS_FILE" \
   --arg status "working" \
+  --arg prompt "$PROMPT" \
   --argjson ts "$TS" \
-  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastMessage = null | .waitReason = null | .rawLastMessage = null | .toolFailure = null | .updatedAt = $ts'
+  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastMessage = null | .waitReason = null | .rawLastMessage = null | .toolFailure = null | .pendingQuestions = null | .updatedAt = $ts | (if (.firstPrompt // "") == "" and $prompt != "" then .firstPrompt = $prompt else . end)'
 
 # Clean up orphaned subagents stuck in permission or done states.
 # At UserPromptSubmit time the previous turn is complete, so these are stale.

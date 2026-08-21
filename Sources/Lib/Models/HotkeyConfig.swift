@@ -10,20 +10,27 @@ struct HotkeyConfig: Equatable {
         modifiers: UInt32(controlKey | optionKey)
     )
 
+    static let boardDefault = HotkeyConfig(
+        keyCode: UInt32(kVK_ANSI_B),
+        modifiers: UInt32(controlKey | optionKey)
+    )
+
+    static let pickerPrefix = "hotkey"
+    static let boardPrefix = "boardHotkey"
+
     /// Persist to UserDefaults.
-    func save() {
-        UserDefaults.standard.set(Int(keyCode), forKey: "hotkeyKeyCode")
-        UserDefaults.standard.set(Int(modifiers), forKey: "hotkeyModifiers")
+    func save(prefix: String = HotkeyConfig.pickerPrefix) {
+        UserDefaults.standard.set(Int(keyCode), forKey: "\(prefix)KeyCode")
+        UserDefaults.standard.set(Int(modifiers), forKey: "\(prefix)Modifiers")
     }
 
-    /// Load from UserDefaults, falling back to default.
-    static func load() -> HotkeyConfig {
-        guard UserDefaults.standard.object(forKey: "hotkeyKeyCode") != nil else {
-            return .default
+    static func load(prefix: String = HotkeyConfig.pickerPrefix, fallback: HotkeyConfig = .default) -> HotkeyConfig {
+        guard UserDefaults.standard.object(forKey: "\(prefix)KeyCode") != nil else {
+            return fallback
         }
         return HotkeyConfig(
-            keyCode: UInt32(UserDefaults.standard.integer(forKey: "hotkeyKeyCode")),
-            modifiers: UInt32(UserDefaults.standard.integer(forKey: "hotkeyModifiers"))
+            keyCode: UInt32(UserDefaults.standard.integer(forKey: "\(prefix)KeyCode")),
+            modifiers: UInt32(UserDefaults.standard.integer(forKey: "\(prefix)Modifiers"))
         )
     }
 

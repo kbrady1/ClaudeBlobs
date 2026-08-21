@@ -46,6 +46,23 @@ struct AgentTests {
         #expect(agent.provider == .claudeCode)
     }
 
+    @Test func malformedPendingQuestionsDoesNotFailDecode() throws {
+        let json = """
+        {"sessionId": "q-1", "pid": 42, "status": "permission", "updatedAt": 1000, "pendingQuestions": "not-an-array"}
+        """
+        let agent = try JSONDecoder().decode(Agent.self, from: Data(json.utf8))
+        #expect(agent.sessionId == "q-1")
+        #expect(agent.pendingQuestions == nil)
+
+        // Entries missing fields decode to empty defaults instead of failing.
+        let sparse = """
+        {"sessionId": "q-2", "pid": 42, "status": "permission", "updatedAt": 1000, "pendingQuestions": [{"header": "h"}]}
+        """
+        let sparseAgent = try JSONDecoder().decode(Agent.self, from: Data(sparse.utf8))
+        #expect(sparseAgent.pendingQuestions?.first?.question == "")
+        #expect(sparseAgent.pendingQuestions?.first?.options.isEmpty == true)
+    }
+
     @Test func decodesOpenCodeProvider() throws {
         let json = """
         {
