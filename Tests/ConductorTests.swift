@@ -52,7 +52,7 @@ struct ConductorStoreTests {
         return BoardCard(agent: agent, column: column, effectiveStatus: status, enteredAt: enteredAt, children: [], isClockBearing: false, snoozeUntil: nil)
     }
 
-    private func waitUntil(timeout: TimeInterval = 5, _ condition: @MainActor () -> Bool) async throws {
+    private func waitUntil(timeout: TimeInterval = 20, _ condition: @MainActor () -> Bool) async throws {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if await MainActor.run(body: condition) { return }

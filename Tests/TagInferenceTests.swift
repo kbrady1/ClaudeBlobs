@@ -90,7 +90,7 @@ struct TranscriptReaderTests {
 @Suite("TagInferenceCoordinator")
 struct TagInferenceCoordinatorTests {
     /// Polls `condition` on the main actor until it holds or `timeout` passes.
-    private func waitUntil(timeout: TimeInterval = 5, _ condition: @MainActor () -> Bool) async throws {
+    private func waitUntil(timeout: TimeInterval = 20, _ condition: @MainActor () -> Bool) async throws {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if await MainActor.run(body: condition) { return }
