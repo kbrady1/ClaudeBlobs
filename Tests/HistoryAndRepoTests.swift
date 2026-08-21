@@ -149,7 +149,13 @@ struct BoardStatsTests {
         store.observe(agents: [], tagsFor: { _ in [] }, now: t0.addingTimeInterval(100))
         #expect(store.records["a"]?.dwells[1].end == t0.addingTimeInterval(100))
 
-        let stats = BoardStats.compute(records: Array(store.records.values), window: 86400, tagOrder: [], now: t0.addingTimeInterval(100))
+        // Pin the calendar: 1_700_000_000 is a Tuesday afternoon in Denver but evening in UTC.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Denver")!
+        let stats = BoardStats.compute(
+            records: Array(store.records.values), window: 86400, tagOrder: [],
+            now: t0.addingTimeInterval(100), workingHours: WorkingHours(calendar: calendar)
+        )
         #expect(stats.idleWait?.max == 60)
         #expect(stats.attentionWait?.median == 30)
         #expect(stats.sessions == 1)
