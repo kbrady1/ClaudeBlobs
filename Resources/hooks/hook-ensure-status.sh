@@ -154,6 +154,53 @@ format_tool_input() {
   fi
 }
 
+# Extract the assistant's text content immediately preceding the most recent
+# tool_use entry in a transcript, walking backward until the previous user
+# entry (a real user turn or a tool result). Used to recover context for
+# blocking tools (AskUserQuestion, ExitPlanMode) whose PreToolUse hook fires
+# before any Stop event would otherwise capture last_assistant_message.
+# Usage: extract_preceding_text TRANSCRIPT_PATH
+extract_preceding_text() {
+  local transcript_path="$1"
+  [ -n "$transcript_path" ] && [ -f "$transcript_path" ] || { echo ""; return; }
+  jq -s -r '
+    [ .[] | select(.type=="user" or .type=="assistant") ] as $rows
+    | (reduce range(($rows|length)-1; -1; -1) as $i ({texts: [], done: false};
+        if .done then .
+        else
+          $rows[$i] as $item
+          | if $item.type == "user" then .done = true
+            else
+              (($item.message.content // []) | map(select(.type=="text") | .text) | join("")) as $t
+              | if ($t | length) > 0 then .texts = [$t] + .texts else . end
+            end
+        end))
+    | .texts | join("\n\n")
+  ' "$transcript_path" 2>/dev/null
+}
+
+# Strip markdown and extract a clean first sentence from a message. Shared by
+# hook-stop.sh (last_assistant_message) and hook-pre-tool.sh (preceding text
+# recovered via extract_preceding_text) so both summarize the same way.
+# Usage: first_sentence_from_message "$LAST_MSG"
+first_sentence_from_message() {
+  local last_msg="$1"
+  local clean_msg line1 line2 first_sentence
+  clean_msg=$(echo "$last_msg" | sed 's/^#\{1,6\}[[:space:]]*//' | sed 's/\*\*//g' | sed 's/`//g' | sed 's/^- //')
+  line1=$(echo "$clean_msg" | head -1 | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+  if echo "$line1" | grep -qiE '^(good|great|now I have|perfect|excellent|sure|okay|alright|here|let me)[,. !]'; then
+    line2=$(echo "$clean_msg" | tail -n +2 | grep -m1 '[^[:space:]]' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+    if [ -n "$line2" ] && [ ${#line2} -gt 5 ]; then
+      line1="$line2"
+    fi
+  fi
+  first_sentence=$(echo "$line1" | cut -c1-200 | sed 's|\([^A-Z:/]\)\. [A-Z].*|\1|' | sed 's/[[:space:]]*$//')
+  if [ -z "$first_sentence" ]; then
+    first_sentence=$(echo "$last_msg" | sed 's/`//g' | cut -c1-200)
+  fi
+  echo "$first_sentence"
+}
+
 # Route to subagent status file when agent_id is present in input.
 # Call after STATUS_FILE is set. Overrides STATUS_FILE only if the subagent
 # file already exists (created by SubagentStart). If it doesn't, the subagent

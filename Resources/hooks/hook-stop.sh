@@ -16,24 +16,7 @@ RAW_MSG=$(printf '%s' "$LAST_MSG" | jq -Rrs '.[:12000]')
 TS=$(now_ms)
 
 # Strip markdown formatting and extract a clean first sentence.
-# 1. Remove markdown: headings, bold, backticks, bullets
-CLEAN_MSG=$(echo "$LAST_MSG" | sed 's/^#\{1,6\}[[:space:]]*//' | sed 's/\*\*//g' | sed 's/`//g' | sed 's/^- //')
-
-# 2. Skip filler preambles on line 1 — if line 1 is short filler, try line 2
-LINE1=$(echo "$CLEAN_MSG" | head -1 | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
-if echo "$LINE1" | grep -qiE '^(good|great|now I have|perfect|excellent|sure|okay|alright|here|let me)[,. !]'; then
-  LINE2=$(echo "$CLEAN_MSG" | tail -n +2 | grep -m1 '[^[:space:]]' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
-  if [ -n "$LINE2" ] && [ ${#LINE2} -gt 5 ]; then
-    LINE1="$LINE2"
-  fi
-fi
-
-# 3. Truncate at sentence boundary (". " followed by uppercase) but not inside URLs
-#    The negative lookbehind avoids splitting on "https://foo.com. Next" style
-FIRST_SENTENCE=$(echo "$LINE1" | cut -c1-200 | sed 's|\([^A-Z:/]\)\. [A-Z].*|\1|' | sed 's/[[:space:]]*$//')
-if [ -z "$FIRST_SENTENCE" ]; then
-  FIRST_SENTENCE=$(echo "$LAST_MSG" | sed 's/`//g' | cut -c1-200)
-fi
+FIRST_SENTENCE=$(first_sentence_from_message "$LAST_MSG")
 
 # Detect if the agent is asking a follow-up question vs reporting completion.
 HEAD=$(echo "$LAST_MSG" | head -2)

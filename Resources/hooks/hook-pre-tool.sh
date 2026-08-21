@@ -18,6 +18,22 @@ TS=$(now_ms)
 TOOL_USE_STR=$(format_tool_input "$TOOL_NAME" "$RAW_INPUT")
 QUESTIONS_JSON=$(extract_pending_questions "$TOOL_NAME")
 
+# AskUserQuestion and ExitPlanMode block the turn until answered, so there is
+# no later Stop event to capture the reasoning that led up to them the way
+# hook-stop.sh normally does. Recover it here from the transcript so the
+# Conductor can show the full context around the question, not just the
+# question itself.
+CONTEXT_LAST_MESSAGE=""
+CONTEXT_RAW_MESSAGE=""
+if [ "$TOOL_NAME" = "AskUserQuestion" ] || [ "$TOOL_NAME" = "ExitPlanMode" ]; then
+  TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty')
+  PRECEDING_TEXT=$(extract_preceding_text "$TRANSCRIPT_PATH")
+  if [ -n "$PRECEDING_TEXT" ]; then
+    CONTEXT_RAW_MESSAGE=$(printf '%s' "$PRECEDING_TEXT" | jq -Rrs '.[:12000]')
+    CONTEXT_LAST_MESSAGE=$(first_sentence_from_message "$PRECEDING_TEXT")
+  fi
+fi
+
 # Monitor/TaskStop flip a durable flag instead of relying on lastToolUse, which
 # gets overwritten by the very next tool call in the same turn.
 #
@@ -62,7 +78,9 @@ atomic_update "$STATUS_FILE" \
   --arg status "working" \
   --arg toolUse "$TOOL_USE_STR" \
   --argjson questions "$QUESTIONS_JSON" \
+  --arg lastMessage "$CONTEXT_LAST_MESSAGE" \
+  --arg rawLastMessage "$CONTEXT_RAW_MESSAGE" \
   --argjson ts "$TS" \
-  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .pendingQuestions = $questions | .waitReason = null | .toolFailure = null | .lastMessage = null | .rawLastMessage = null | .updatedAt = $ts | '"$MONITOR_ACTIVE_FILTER"
+  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastToolUse = $toolUse | .pendingQuestions = $questions | .waitReason = null | .toolFailure = null | .lastMessage = (if $lastMessage == "" then null else $lastMessage end) | .rawLastMessage = (if $rawLastMessage == "" then null else $rawLastMessage end) | .updatedAt = $ts | '"$MONITOR_ACTIVE_FILTER"
 
 debug_log_result
