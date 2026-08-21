@@ -72,9 +72,6 @@ final class BoardViewModel: ObservableObject {
     @Published var conductorDraftDirty = false
     /// question index → 1-based option
     @Published var conductorChoices: [Int: Int] = [:]
-    /// With no options chosen, typed text goes out as a general reply
-    /// ("Chat about this") instead of an answer to the first question.
-    @Published var conductorReplyInstead = true
     @Published var conductorStatus: String?
     @Published var conductorSending = false
 
@@ -228,7 +225,7 @@ final class BoardViewModel: ObservableObject {
         // Per-question answers: a chosen option, or the typed text through the
         // question's "Type something" slot (the UI appends it after the options).
         var selections: [SessionMessenger.Selection] = []
-        if !questions.isEmpty, conductorChoices.isEmpty, conductorReplyInstead, !text.isEmpty, let first = questions.first {
+        if !questions.isEmpty, conductorChoices.isEmpty, !text.isEmpty, let first = questions.first {
             // "Chat about this" sits after "Type something" in Claude Code's menu.
             selections = [.chat(optionIndex: first.options.count + 2, text: text)]
         } else if !questions.isEmpty {
