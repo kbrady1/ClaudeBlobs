@@ -83,6 +83,16 @@ find_claude_pid() {
   echo "$PPID"
 }
 
+# Usage: extract_pending_questions TOOL_NAME   -> prints JSON array or "null"
+extract_pending_questions() {
+  local out=null
+  if [ "$1" = "AskUserQuestion" ]; then
+    out=$(echo "$INPUT" | jq -c '.tool_input.questions // null' 2>/dev/null)
+    [ -n "$out" ] || out=null
+  fi
+  echo "$out"
+}
+
 # Format tool input for human-readable display.
 # Usage: format_tool_input TOOL_NAME RAW_INPUT_JSON
 # Outputs "ToolName: summary" or just "ToolName" if extraction fails.

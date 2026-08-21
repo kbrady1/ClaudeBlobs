@@ -39,6 +39,36 @@ enum AgentStaleness: Sendable, Equatable {
     }
 }
 
+struct AskQuestion: Codable, Equatable, Sendable {
+    struct Option: Codable, Equatable, Sendable {
+        let label: String
+        let description: String?
+    }
+    let question: String
+    let header: String?
+    let options: [Option]
+    let multiSelect: Bool?
+
+    init(question: String, header: String? = nil, options: [Option], multiSelect: Bool? = nil) {
+        self.question = question
+        self.header = header
+        self.options = options
+        self.multiSelect = multiSelect
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        question = try container.decodeIfPresent(String.self, forKey: .question) ?? ""
+        header = try container.decodeIfPresent(String.self, forKey: .header)
+        options = try container.decodeIfPresent([Option].self, forKey: .options) ?? []
+        multiSelect = try container.decodeIfPresent(Bool.self, forKey: .multiSelect)
+    }
+
+    var freeTextOptionIndex: Int? {
+        options.firstIndex { $0.label.lowercased().hasPrefix("type something") || $0.label.lowercased() == "other" }
+    }
+}
+
 struct Agent: Codable, Identifiable, Equatable, Sendable {
     var provider: AgentProvider
     let sessionId: String
@@ -70,6 +100,8 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     /// or when no Monitor is active.
     var monitorExpiresAt: Int64?
     var taskCompletedAt: Int64?
+    var firstPrompt: String?
+    var pendingQuestions: [AskQuestion]?
     var createdAt: Int64?
     var updatedAt: Int64
     var statusChangedAt: Int64?
@@ -98,6 +130,8 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         monitorActive: Bool = false,
         monitorExpiresAt: Int64? = nil,
         taskCompletedAt: Int64? = nil,
+        firstPrompt: String? = nil,
+        pendingQuestions: [AskQuestion]? = nil,
         createdAt: Int64? = nil,
         updatedAt: Int64,
         statusChangedAt: Int64? = nil
@@ -123,6 +157,8 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         self.monitorActive = monitorActive
         self.monitorExpiresAt = monitorExpiresAt
         self.taskCompletedAt = taskCompletedAt
+        self.firstPrompt = firstPrompt
+        self.pendingQuestions = pendingQuestions
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.statusChangedAt = statusChangedAt
@@ -151,6 +187,8 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         case monitorActive
         case monitorExpiresAt
         case taskCompletedAt
+        case firstPrompt
+        case pendingQuestions
         case createdAt
         case updatedAt
         case statusChangedAt
@@ -180,6 +218,8 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         monitorActive = try container.decodeIfPresent(Bool.self, forKey: .monitorActive) ?? false
         monitorExpiresAt = try container.decodeIfPresent(Int64.self, forKey: .monitorExpiresAt)
         taskCompletedAt = try container.decodeIfPresent(Int64.self, forKey: .taskCompletedAt)
+        firstPrompt = try container.decodeIfPresent(String.self, forKey: .firstPrompt)
+        pendingQuestions = try? container.decodeIfPresent([AskQuestion].self, forKey: .pendingQuestions)
         createdAt = try container.decodeIfPresent(Int64.self, forKey: .createdAt)
         updatedAt = try container.decode(Int64.self, forKey: .updatedAt)
         statusChangedAt = try container.decodeIfPresent(Int64.self, forKey: .statusChangedAt)
@@ -686,6 +726,8 @@ extension Agent {
         monitorActive: Bool = false,
         monitorExpiresAt: Int64? = nil,
         taskCompletedAt: Int64? = nil,
+        firstPrompt: String? = nil,
+        pendingQuestions: [AskQuestion]? = nil,
         createdAt: Int64? = nil,
         updatedAt: Int64 = 1000,
         statusChangedAt: Int64? = nil
@@ -705,6 +747,8 @@ extension Agent {
             monitorActive: monitorActive,
             monitorExpiresAt: monitorExpiresAt,
             taskCompletedAt: taskCompletedAt,
+            firstPrompt: firstPrompt,
+            pendingQuestions: pendingQuestions,
             createdAt: createdAt, updatedAt: updatedAt,
             statusChangedAt: statusChangedAt
         )

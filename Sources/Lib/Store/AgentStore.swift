@@ -12,6 +12,7 @@ final class AgentStore: ObservableObject {
     @Published var snoozedSessionIds: Set<String> = []
     /// Wake time for timed snoozes. Absent for indefinite snoozes and unsnoozed agents.
     @Published var snoozeUntil: [String: Date] = [:]
+    @Published var snoozedAt: [String: Date] = [:]
     private var snoozeTimers: [String: DispatchWorkItem] = [:]
     /// Session IDs that have an active cron/loop schedule. Persisted across launches.
     @Published var cronSessionIds: Set<String> = {
@@ -143,6 +144,7 @@ final class AgentStore: ObservableObject {
         snoozeTimers[agent.id]?.cancel()
         snoozeTimers.removeValue(forKey: agent.id)
         snoozedSessionIds.insert(agent.id)
+        snoozedAt[agent.id] = Date()
         ntfyScheduler?.cancelPending(for: agent.id)
 
         guard let wakeDate = duration.wakeDate() else {
@@ -164,6 +166,7 @@ final class AgentStore: ObservableObject {
 
     func unsnooze(_ agent: Agent) {
         snoozedSessionIds.remove(agent.id)
+        snoozedAt.removeValue(forKey: agent.id)
         snoozeUntil.removeValue(forKey: agent.id)
         snoozeTimers[agent.id]?.cancel()
         snoozeTimers.removeValue(forKey: agent.id)
@@ -180,8 +183,10 @@ final class AgentStore: ObservableObject {
     }
 
     func dismissAll() {
+        let now = Date()
         for agent in agents {
             snoozedSessionIds.insert(agent.id)
+            if snoozedAt[agent.id] == nil { snoozedAt[agent.id] = now }
         }
     }
 
@@ -535,6 +540,7 @@ final class AgentStore: ObservableObject {
             snoozeTimers.removeValue(forKey: staleId)
         }
         snoozeUntil = snoozeUntil.filter { activeIds.contains($0.key) }
+        snoozedAt = snoozedAt.filter { activeIds.contains($0.key) }
         cronSessionIds = cronSessionIds.intersection(activeIds)
         dismissedClockIds = dismissedClockIds.intersection(activeIds)
         lastSeenStatus = lastSeenStatus.filter { activeIds.contains($0.key) }

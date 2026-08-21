@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 
 struct HotkeyRecorderView: View {
     @Binding var config: HotkeyConfig
+    var savePrefix: String = HotkeyConfig.pickerPrefix
     let onChanged: () -> Void
 
     @State private var isRecording = false
@@ -45,7 +46,7 @@ struct HotkeyRecorderView: View {
             guard mods != 0 else { return nil }
 
             config = HotkeyConfig(keyCode: UInt32(event.keyCode), modifiers: mods)
-            config.save()
+            config.save(prefix: savePrefix)
             stopRecording()
             onChanged()
             return nil

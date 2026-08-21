@@ -39,6 +39,7 @@ struct AgentSpriteView: View {
     var onClockDismiss: (() -> Void)?
     /// When true, the clock badge is suppressed entirely (e.g. user dismissed it).
     var clockDismissed: Bool = false
+    var animated: Bool = true
 
     @State private var animationPhase: CGFloat = 0
     @State private var isHoveringClock: Bool = false
@@ -264,14 +265,23 @@ struct AgentSpriteView: View {
     }
 
     private var backgroundColor: Color {
-        if isSnoozed { return .gray }
+        Self.blobColor(
+            status: status, isDone: isDone, isSnoozed: isSnoozed,
+            isPlanApproval: isPlanApproval, isAskingQuestion: isAskingQuestion,
+            staleness: .active, theme: theme
+        )
+    }
+
+    static func blobColor(
+        status: AgentStatus, isDone: Bool, isSnoozed: Bool,
+        isPlanApproval: Bool, isAskingQuestion: Bool,
+        staleness: AgentStaleness, theme: ColorTheme
+    ) -> Color {
+        if isSnoozed || staleness == .hung { return .gray }
         if status == .waiting && isDone {
             return AgentStatus.starting.color(for: theme)
         }
-        if status == .permission && isPlanApproval {
-            return Color.orange
-        }
-        if status == .permission && isAskingQuestion {
+        if status == .permission && (isPlanApproval || isAskingQuestion) {
             return Color.orange
         }
         return status.color(for: theme)
@@ -423,6 +433,7 @@ struct AgentSpriteView: View {
     }
 
     private func startBounceTimer() {
+        guard animated else { return }
         bounceTimer?.cancel()
         let duration = bounceDuration
         guard duration > 0 else {
@@ -447,6 +458,7 @@ struct AgentSpriteView: View {
     }
 
     private func startCompactTimer() {
+        guard animated else { return }
         compactTimer?.cancel()
         guard status == .compacting else {
             compactSquished = false
@@ -462,6 +474,7 @@ struct AgentSpriteView: View {
     }
 
     private func startExpressionTimer() {
+        guard animated else { return }
         expressionTimer?.cancel()
         // Hung agents don't cycle expressions — static x-eyes
         if staleness == .hung { return }
@@ -490,6 +503,7 @@ struct AgentSpriteView: View {
     }
 
     private func playWave() {
+        guard animated else { return }
         waveAngle = 0
         withAnimation(.easeInOut(duration: 0.12)) { waveAngle = 15 }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
@@ -504,6 +518,7 @@ struct AgentSpriteView: View {
     }
 
     private func playProminentPop() {
+        guard animated else { return }
         prominentScale = 1.0
         prominentWiggle = 0
         prominentOffsetY = 0

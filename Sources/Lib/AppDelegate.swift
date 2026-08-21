@@ -31,6 +31,15 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotkeyWindow: NSWindow?
     private var hotkeyConfig: HotkeyConfig!
     private var hotkeyMenuItem: NSMenuItem!
+    private var boardHotkeyWindow: NSWindow?
+    private var boardHotkeyConfig: HotkeyConfig!
+    private var boardHotkeyMenuItem: NSMenuItem!
+    private var boardHotkeyRef: EventHotKeyRef?
+    private var tagStore: TagStore!
+    private var tagInference: TagInferenceCoordinator!
+    private var boardController: BoardWindowController!
+    private var historyStore: SessionHistoryStore!
+    private var conductorStore: ConductorStore!
     private var eventHandlerInstalled = false
     private var cancellables = Set<AnyCancellable>()
     private var hideWhileCollapsedMenuItem: NSMenuItem!
@@ -60,6 +69,19 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         soundConfig = SoundConfig()
         soundPlayer = SoundPlayer(config: soundConfig)
         store.soundPlayer = soundPlayer
+        tagStore = TagStore()
+        tagInference = TagInferenceCoordinator(agentStore: store, tagStore: tagStore)
+        tagInference.start()
+        historyStore = SessionHistoryStore()
+        historyStore.start(agentStore: store, tagStore: tagStore)
+        conductorStore = ConductorStore()
+        conductorStore.start(agentStore: store, tagStore: tagStore)
+        boardController = BoardWindowController(
+            viewModel: BoardViewModel(
+                store: store, tagStore: tagStore, themeConfig: themeConfig, inference: tagInference,
+                history: historyStore, conductor: conductorStore
+            )
+        )
         #if DEBUG
         remoteServer = RemoteServer(agentStore: store)
         if UserDefaults.standard.bool(forKey: "remoteControlEnabled") {
@@ -190,6 +212,17 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let boardItem = NSMenuItem(title: "Open Blob Board", action: #selector(openBoard), keyEquivalent: "")
+        boardItem.target = self
+        menu.addItem(boardItem)
+
+        let boardAutoCloseItem = NSMenuItem(title: "Close Board After Deep Link", action: #selector(toggleBoardAutoClose(_:)), keyEquivalent: "")
+        boardAutoCloseItem.target = self
+        boardAutoCloseItem.state = boardController.viewModel.closesAfterDeepLink ? .on : .off
+        menu.addItem(boardAutoCloseItem)
+
+        menu.addItem(.separator())
+
         let alertSettingsItem = NSMenuItem(title: "Alert Settings\u{2026}", action: #selector(openAlertSettings), keyEquivalent: "")
         alertSettingsItem.target = self
         menu.addItem(alertSettingsItem)
@@ -210,6 +243,15 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let changeHotkeyItem = NSMenuItem(title: "Change Hotkey\u{2026}", action: #selector(openHotkeySettings), keyEquivalent: "")
         changeHotkeyItem.target = self
         menu.addItem(changeHotkeyItem)
+
+        boardHotkeyConfig = HotkeyConfig.load(prefix: HotkeyConfig.boardPrefix, fallback: .boardDefault)
+        boardHotkeyMenuItem = NSMenuItem(title: "Board Hotkey: \(boardHotkeyConfig.displayString)", action: nil, keyEquivalent: "")
+        boardHotkeyMenuItem.isEnabled = false
+        menu.addItem(boardHotkeyMenuItem)
+
+        let changeBoardHotkeyItem = NSMenuItem(title: "Change Board Hotkey\u{2026}", action: #selector(openBoardHotkeySettings), keyEquivalent: "")
+        changeBoardHotkeyItem.target = self
+        menu.addItem(changeBoardHotkeyItem)
 
         menu.addItem(.separator())
 
@@ -390,8 +432,18 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
                 guard let userData else { return OSStatus(eventNotHandledErr) }
                 let delegate = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
+                var hotKeyID = EventHotKeyID()
+                GetEventParameter(
+                    event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                    nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID
+                )
+                let id = hotKeyID.id
                 DispatchQueue.main.async {
-                    delegate.togglePicker()
+                    if id == AppDelegate.boardHotkeyId {
+                        delegate.toggleBoard()
+                    } else {
+                        delegate.togglePicker()
+                    }
                 }
                 return noErr
             }, 1, &eventType, selfPtr, nil)
@@ -410,6 +462,50 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             DebugLog.shared.log("Failed to register global hotkey: \(status)")
         }
+
+        registerBoardHotkey()
+    }
+
+    private static let boardHotkeyId: UInt32 = 2
+
+    /// Shares the Carbon handler from `registerGlobalHotkey`; dispatch is by hotkey id.
+    private func registerBoardHotkey() {
+        if let existing = boardHotkeyRef {
+            UnregisterEventHotKey(existing)
+            boardHotkeyRef = nil
+        }
+        let config = boardHotkeyConfig ?? .boardDefault
+        var hotKeyID = EventHotKeyID()
+        hotKeyID.signature = OSType(0x48554430) // "HUD0"
+        hotKeyID.id = Self.boardHotkeyId
+
+        var ref: EventHotKeyRef?
+        let status = RegisterEventHotKey(config.keyCode, config.modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        if status == noErr {
+            boardHotkeyRef = ref
+            DebugLog.shared.log("Registered board hotkey \(config.displayString)")
+        } else {
+            DebugLog.shared.log("Failed to register board hotkey: \(status)")
+        }
+    }
+
+    private func toggleBoard() {
+        if expansionState.isKeyboardExpanded {
+            closePicker()
+        }
+        boardController.open()
+    }
+
+    @objc private func toggleBoardAutoClose(_ sender: NSMenuItem) {
+        boardController.viewModel.closesAfterDeepLink.toggle()
+        sender.state = boardController.viewModel.closesAfterDeepLink ? .on : .off
+    }
+
+    @objc private func openBoard() {
+        if expansionState.isKeyboardExpanded {
+            closePicker()
+        }
+        boardController.open()
     }
 
     private func togglePicker() {
@@ -831,6 +927,36 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotkeyWindow = window
     }
 
+    @objc private func openBoardHotkeySettings() {
+        if let existing = boardHotkeyWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let view = HotkeyRecorderView(config: Binding(
+            get: { [weak self] in self?.boardHotkeyConfig ?? .boardDefault },
+            set: { [weak self] newValue in self?.boardHotkeyConfig = newValue }
+        ), savePrefix: HotkeyConfig.boardPrefix) { [weak self] in
+            guard let self else { return }
+            self.boardHotkeyMenuItem.title = "Board Hotkey: \(self.boardHotkeyConfig.displayString)"
+            self.registerBoardHotkey()
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 60),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Change Board Hotkey"
+        window.contentView = NSHostingView(rootView: view.padding())
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        boardHotkeyWindow = window
+    }
+
     @objc private func toggleHideWhileCollapsed() {
         store.hideWhileCollapsed.toggle()
         hideWhileCollapsedMenuItem.state = store.hideWhileCollapsed ? .on : .off
@@ -984,6 +1110,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
+        historyStore?.save()
         #if DEBUG
         remoteServer?.stop()
         #endif
