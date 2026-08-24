@@ -11,6 +11,8 @@ struct SessionRecord: Codable, Equatable, Identifiable {
     var lastSeenAt: Date
     var endedAt: Date?
     var tagIds: [String]
+    /// Missing for tags recorded before source-tracking was added; treat those as confirmed.
+    var tagSources: [String: TagSource] = [:]
     var firstPrompt: String?
     var dwells: [Dwell] = []
 
@@ -24,7 +26,8 @@ struct SessionRecord: Codable, Equatable, Identifiable {
     var isActive: Bool { endedAt == nil }
 
     init(sessionId: String, provider: AgentProvider, name: String, cwd: String?, repo: String?,
-         firstSeenAt: Date, lastSeenAt: Date, endedAt: Date?, tagIds: [String], firstPrompt: String?,
+         firstSeenAt: Date, lastSeenAt: Date, endedAt: Date?, tagIds: [String],
+         tagSources: [String: TagSource] = [:], firstPrompt: String?,
          dwells: [Dwell] = []) {
         self.sessionId = sessionId
         self.provider = provider
@@ -35,10 +38,46 @@ struct SessionRecord: Codable, Equatable, Identifiable {
         self.lastSeenAt = lastSeenAt
         self.endedAt = endedAt
         self.tagIds = tagIds
+        self.tagSources = tagSources
         self.firstPrompt = firstPrompt
         self.dwells = dwells
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case sessionId, provider, name, cwd, repo, firstSeenAt, lastSeenAt, endedAt, tagIds, tagSources, firstPrompt, dwells
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = try c.decode(String.self, forKey: .sessionId)
+        provider = try c.decode(AgentProvider.self, forKey: .provider)
+        name = try c.decode(String.self, forKey: .name)
+        cwd = try c.decodeIfPresent(String.self, forKey: .cwd)
+        repo = try c.decodeIfPresent(String.self, forKey: .repo)
+        firstSeenAt = try c.decode(Date.self, forKey: .firstSeenAt)
+        lastSeenAt = try c.decode(Date.self, forKey: .lastSeenAt)
+        endedAt = try c.decodeIfPresent(Date.self, forKey: .endedAt)
+        tagIds = try c.decode([String].self, forKey: .tagIds)
+        tagSources = try c.decodeIfPresent([String: TagSource].self, forKey: .tagSources) ?? [:]
+        firstPrompt = try c.decodeIfPresent(String.self, forKey: .firstPrompt)
+        dwells = try c.decodeIfPresent([Dwell].self, forKey: .dwells) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(sessionId, forKey: .sessionId)
+        try c.encode(provider, forKey: .provider)
+        try c.encode(name, forKey: .name)
+        try c.encodeIfPresent(cwd, forKey: .cwd)
+        try c.encodeIfPresent(repo, forKey: .repo)
+        try c.encode(firstSeenAt, forKey: .firstSeenAt)
+        try c.encode(lastSeenAt, forKey: .lastSeenAt)
+        try c.encodeIfPresent(endedAt, forKey: .endedAt)
+        try c.encode(tagIds, forKey: .tagIds)
+        try c.encode(tagSources, forKey: .tagSources)
+        try c.encodeIfPresent(firstPrompt, forKey: .firstPrompt)
+        try c.encode(dwells, forKey: .dwells)
+    }
 }
 
 extension BoardColumn: Codable {}
@@ -90,7 +129,7 @@ final class SessionHistoryStore: ObservableObject {
                 self.observe(
                     agents: agentStore.agents,
                     customNames: agentStore.customNames,
-                    tagsFor: { tagStore.assignments(for: $0).map(\.tagId) },
+                    tagsFor: { tagStore.assignments(for: $0) },
                     columnFor: { agent in
                         BoardModel.column(
                             for: agent,
@@ -107,7 +146,7 @@ final class SessionHistoryStore: ObservableObject {
         tagStore.$assignments
             .receive(on: DispatchQueue.main)
             .sink { [weak self] assignments in
-                self?.refreshTags { assignments[$0]?.map(\.tagId) ?? [] }
+                self?.refreshTags { assignments[$0] ?? [] }
             }
             .store(in: &cancellables)
     }
@@ -119,7 +158,7 @@ final class SessionHistoryStore: ObservableObject {
     func observe(
         agents: [Agent],
         customNames: [String: String] = [:],
-        tagsFor: (String) -> [String],
+        tagsFor: (String) -> [TagAssignment],
         columnFor: (Agent) -> BoardColumn = { _ in .working },
         now: Date = Date()
     ) {
@@ -150,7 +189,9 @@ final class SessionHistoryStore: ObservableObject {
                 record.lastSeenAt = now
             }
             record.endedAt = nil
-            record.tagIds = tagsFor(agent.sessionId)
+            let resolved = tagsFor(agent.sessionId)
+            record.tagIds = resolved.map(\.tagId)
+            record.tagSources = Dictionary(resolved.map { ($0.tagId, $0.source) }, uniquingKeysWith: { _, b in b })
             if record.firstPrompt == nil, let prompt = agent.firstPrompt {
                 record.firstPrompt = String(prompt.prefix(200))
             }
@@ -187,16 +228,35 @@ final class SessionHistoryStore: ObservableObject {
         }
     }
 
-    func refreshTags(_ tagsFor: (String) -> [String]) {
+    func refreshTags(_ tagsFor: (String) -> [TagAssignment]) {
         var changed = false
         for (id, record) in records where record.isActive {
-            let tags = tagsFor(id)
-            if tags != record.tagIds {
-                records[id]?.tagIds = tags
+            let resolved = tagsFor(id)
+            let ids = resolved.map(\.tagId)
+            let sources = Dictionary(resolved.map { ($0.tagId, $0.source) }, uniquingKeysWith: { _, b in b })
+            if ids != record.tagIds || sources != record.tagSources {
+                records[id]?.tagIds = ids
+                records[id]?.tagSources = sources
                 changed = true
             }
         }
         if changed { scheduleSave() }
+    }
+
+    /// For ended sessions, whose `TagStore` assignments are pruned once their status file disappears —
+    /// `SessionRecord.tagIds`/`tagSources` are the only remaining copy, so edits land here directly.
+    /// Live sessions should be edited via `TagStore` instead; it flows back through `refreshTags`.
+    func setTagSource(_ tagId: String, source: TagSource?, on sessionId: String) {
+        guard var record = records[sessionId] else { return }
+        if let source {
+            if !record.tagIds.contains(tagId) { record.tagIds.append(tagId) }
+            record.tagSources[tagId] = source
+        } else {
+            record.tagIds.removeAll { $0 == tagId }
+            record.tagSources.removeValue(forKey: tagId)
+        }
+        records[sessionId] = record
+        scheduleSave()
     }
 
     // MARK: - Queries
