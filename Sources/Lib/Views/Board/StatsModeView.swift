@@ -94,7 +94,12 @@ struct StatsModeView: View {
                     keyHint("3 / 4 / 5")
                 }
                 .padding(.top, 10)
-                HistoryView(history: viewModel.history, tagStore: tagStore, range: viewModel.historyRange)
+                HistoryView(
+                    history: viewModel.history,
+                    tagStore: tagStore,
+                    range: viewModel.historyRange,
+                    onManageTags: { viewModel.isTagManagerShown = true }
+                )
             }
             .padding(.bottom, 10)
         }

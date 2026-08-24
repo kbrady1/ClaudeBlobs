@@ -5,8 +5,34 @@ struct HistoryView: View {
     @ObservedObject var history: SessionHistoryStore
     @ObservedObject var tagStore: TagStore
     let range: HistoryRange
+    let onManageTags: () -> Void
+
+    @State private var editingSessionId: String?
 
     private var records: [SessionRecord] { history.records(in: range) }
+
+    private func resolvedTags(for record: SessionRecord) -> [(tag: AgentTag, source: TagSource)] {
+        if record.isActive {
+            return tagStore.resolvedTags(for: record.sessionId)
+        }
+        return record.tagIds.compactMap { id in
+            guard let tag = tagStore.tag(id: id) else { return nil }
+            return (tag, record.tagSources[id] ?? .confirmed)
+        }
+    }
+
+    private func toggleTag(_ tagId: String, on record: SessionRecord) {
+        if record.isActive {
+            tagStore.toggleTag(tagId, on: record.sessionId)
+            return
+        }
+        switch record.tagSources[tagId] {
+        case nil, .inferred?:
+            history.setTagSource(tagId, source: .confirmed, on: record.sessionId)
+        case .confirmed?:
+            history.setTagSource(tagId, source: nil, on: record.sessionId)
+        }
+    }
 
     private func label(for group: String) -> String {
         tagStore.tag(id: group)?.name ?? (group == HistoryStats.untagged ? "Untagged" : group)
@@ -131,12 +157,39 @@ struct HistoryView: View {
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
                                     .frame(width: 150, alignment: .leading)
-                                HStack(spacing: 4) {
-                                    ForEach(record.tagIds, id: \.self) { id in
-                                        if let tag = tagStore.tag(id: id) {
-                                            TagChip(tag: tag, source: .confirmed)
+                                Button {
+                                    editingSessionId = record.id
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        let tags = resolvedTags(for: record)
+                                        if tags.isEmpty {
+                                            Text("+ tag")
+                                                .font(.system(size: 9))
+                                                .foregroundColor(.secondary)
+                                        } else {
+                                            ForEach(tags, id: \.tag.id) { entry in
+                                                TagChip(tag: entry.tag, source: entry.source)
+                                            }
                                         }
                                     }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .popover(isPresented: Binding(
+                                    get: { editingSessionId == record.id },
+                                    set: { if !$0 { editingSessionId = nil } }
+                                ), arrowEdge: .trailing) {
+                                    HistoryTagEditorPopover(
+                                        tagStore: tagStore,
+                                        sourceFor: { tagId in
+                                            resolvedTags(for: record).first { $0.tag.id == tagId }?.source
+                                        },
+                                        onToggle: { toggleTag($0, on: record) },
+                                        onManage: {
+                                            editingSessionId = nil
+                                            onManageTags()
+                                        }
+                                    )
                                 }
                                 Spacer()
                                 Text(Self.dateFormatter.string(from: record.firstSeenAt))

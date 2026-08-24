@@ -60,7 +60,7 @@ struct SessionHistoryStoreTests {
         let b = Agent.fixture(sessionId: "b", pid: 2, cwd: nil)
         let kid = Agent.fixture(sessionId: "kid", pid: 0, parentSessionId: "a")
 
-        store.observe(agents: [a, b, kid], tagsFor: { $0 == "a" ? ["research"] : [] }, now: t0)
+        store.observe(agents: [a, b, kid], tagsFor: { $0 == "a" ? [TagAssignment(tagId: "research", source: .confirmed)] : [] }, now: t0)
         #expect(store.records.count == 2)
         #expect(store.records["a"]?.tagIds == ["research"])
         #expect(store.records["a"]?.firstSeenAt == t0.addingTimeInterval(-60))
@@ -82,7 +82,7 @@ struct SessionHistoryStoreTests {
         let t0 = Date()
         store.observe(agents: [Agent.fixture(sessionId: "a", pid: 1), Agent.fixture(sessionId: "b", pid: 2)], tagsFor: { _ in [] }, now: t0)
         store.observe(agents: [Agent.fixture(sessionId: "a", pid: 1)], tagsFor: { _ in [] }, now: t0.addingTimeInterval(1))
-        store.refreshTags { _ in ["core-task"] }
+        store.refreshTags { _ in [TagAssignment(tagId: "core-task", source: .confirmed)] }
         #expect(store.records["a"]?.tagIds == ["core-task"])
         #expect(store.records["b"]?.tagIds == [])
     }
