@@ -175,9 +175,16 @@ enum SessionMessenger {
 
     private static func readScreen(_ agent: Agent) -> String? {
         guard let workspace = agent.supersetWorkspace, let terminal = agent.supersetTerminal else { return nil }
+        guard let supersetPath = ExecutablePathResolver.resolve("superset") else {
+            DebugLog.shared.log("SessionMessenger: superset executable not found in PATH")
+            return nil
+        }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", "exec superset terminals read --workspace \(shellQuote(workspace)) --terminal \(shellQuote(terminal))"]
+        process.executableURL = URL(fileURLWithPath: supersetPath)
+        process.arguments = ["terminals", "read", "--workspace", workspace, "--terminal", terminal]
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = ExecutablePathResolver.enrichedPath(base: env["PATH"] ?? "/usr/bin:/bin")
+        process.environment = env
         let stdout = Pipe()
         process.standardOutput = stdout
         process.standardError = FileHandle.nullDevice
@@ -226,12 +233,18 @@ enum SessionMessenger {
         }
     }
 
-    /// Runs the `superset` CLI through a login shell so PATH matches the terminal.
+    /// Runs the `superset` CLI, resolved via `ExecutablePathResolver` since
+    /// GUI apps don't get the terminal's PATH.
     private static func runSuperset(args: [String]) -> Result<Void, Error> {
+        guard let supersetPath = ExecutablePathResolver.resolve("superset") else {
+            return .failure(MessengerError.failed("superset executable not found in PATH"))
+        }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        let quoted = args.map { Self.shellQuote($0) }.joined(separator: " ")
-        process.arguments = ["-lc", "exec superset \(quoted)"]
+        process.executableURL = URL(fileURLWithPath: supersetPath)
+        process.arguments = args
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = ExecutablePathResolver.enrichedPath(base: env["PATH"] ?? "/usr/bin:/bin")
+        process.environment = env
         let stderr = Pipe()
         process.standardError = stderr
         process.standardOutput = FileHandle.nullDevice

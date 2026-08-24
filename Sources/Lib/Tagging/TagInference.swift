@@ -45,20 +45,25 @@ enum TagInference {
         return contained.count == 1 ? contained[0].id : nil
     }
 
-    /// Login shell so PATH matches the terminal. Blocks; call off the main thread.
+    /// Resolves `claude` via `ExecutablePathResolver` since GUI apps don't get
+    /// the terminal's PATH. Blocks; call off the main thread.
     static func runClaude(prompt: String, model: String = "haiku", timeout: TimeInterval = 120) throws -> String {
+        guard let claudePath = ExecutablePathResolver.resolve("claude") else {
+            throw TagInferenceError.failed("claude executable not found in PATH")
+        }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.executableURL = URL(fileURLWithPath: claudePath)
         // A neutral cwd keeps the call free of any project CLAUDE.md or settings.
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("claudeblobs-infer")
         try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         process.currentDirectoryURL = scratch
         process.arguments = [
-            "-lc",
-            "exec claude -p --model \(model) --output-format text --no-session-persistence --tools \"\" --setting-sources \"\"",
+            "-p", "--model", model, "--output-format", "text",
+            "--no-session-persistence", "--tools", "", "--setting-sources", "",
         ]
         var env = ProcessInfo.processInfo.environment
         env["CLAUDEBLOBS_INFERENCE"] = "1"
+        env["PATH"] = ExecutablePathResolver.enrichedPath(base: env["PATH"] ?? "/usr/bin:/bin")
         process.environment = env
 
         let stdin = Pipe()
