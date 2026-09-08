@@ -32,6 +32,11 @@ final class ThemeConfig: ObservableObject {
         didSet { UserDefaults.standard.set(prominentStateChangesDisabled, forKey: "prominentStateChangesDisabled") }
     }
 
+    /// When true, hovering the collapsed HUD no longer auto-expands it.
+    @Published var hoverToExpandDisabled: Bool {
+        didSet { UserDefaults.standard.set(hoverToExpandDisabled, forKey: "hoverToExpandDisabled") }
+    }
+
     init() {
         let raw = UserDefaults.standard.string(forKey: "colorTheme") ?? ""
         self.selectedTheme = ColorTheme(rawValue: raw) ?? .trafficLight
@@ -50,6 +55,7 @@ final class ThemeConfig: ObservableObject {
             self.backgroundShownWhenCollapsed = true
         }
         self.prominentStateChangesDisabled = UserDefaults.standard.bool(forKey: "prominentStateChangesDisabled")
+        self.hoverToExpandDisabled = UserDefaults.standard.bool(forKey: "hoverToExpandDisabled")
         if let data = UserDefaults.standard.data(forKey: "collapsedBackgroundColor"),
            let nsColor = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data) {
             self.backgroundColor = Color(nsColor)

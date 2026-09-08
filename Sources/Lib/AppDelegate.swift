@@ -47,6 +47,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var sortByPriorityMenuItem: NSMenuItem!
     private var conductorHUDMenuItem: NSMenuItem!
     private var prominentStateChangesMenuItem: NSMenuItem!
+    private var hoverToExpandMenuItem: NSMenuItem!
     private var hotkeyRef: EventHotKeyRef?
     private var globalHotkeyMonitor: Any?
     private var localKeyMonitor: Any?
@@ -176,6 +177,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         prominentStateChangesMenuItem.target = self
         prominentStateChangesMenuItem.state = themeConfig.prominentStateChangesDisabled ? .off : .on
         agentDisplayMenu.addItem(prominentStateChangesMenuItem)
+
+        hoverToExpandMenuItem = NSMenuItem(title: "Hover to Expand", action: #selector(toggleHoverToExpand), keyEquivalent: "")
+        hoverToExpandMenuItem.target = self
+        hoverToExpandMenuItem.state = themeConfig.hoverToExpandDisabled ? .off : .on
+        agentDisplayMenu.addItem(hoverToExpandMenuItem)
 
         agentDisplayMenu.addItem(.separator())
 
@@ -1024,6 +1030,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleProminentStateChanges() {
         themeConfig.prominentStateChangesDisabled.toggle()
         prominentStateChangesMenuItem.state = themeConfig.prominentStateChangesDisabled ? .off : .on
+    }
+
+    @objc private func toggleHoverToExpand() {
+        themeConfig.hoverToExpandDisabled.toggle()
+        hoverToExpandMenuItem.state = themeConfig.hoverToExpandDisabled ? .off : .on
     }
 
     private static let idleOptions: [(String, Int)] = [

@@ -118,6 +118,7 @@ struct HUDContentView: View {
             content
                 .padding(.top, notchInset)
                 .onHover { hovering in
+                    if themeConfig.hoverToExpandDisabled { return }
                     isHovering = hovering
                     if hovering {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -252,7 +253,6 @@ struct HUDContentView: View {
                 showAppIcons: store.appIconVisibility == .always,
                 hostAppIcons: store.hostAppIcons,
                 cronSessionIds: store.cronSessionIds,
-                inFlightIds: store.conductorDemotedIds,
                 backgroundStyle: (themeConfig.backgroundEnabled && themeConfig.backgroundShownWhenCollapsed) ? resolvedBackgroundStyle : nil
             )
             .transition(.opacity.combined(with: .scale(scale: 1.05, anchor: .top)))
