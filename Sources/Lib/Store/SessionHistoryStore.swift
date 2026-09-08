@@ -129,6 +129,7 @@ final class SessionHistoryStore: ObservableObject {
                 self.observe(
                     agents: agentStore.agents,
                     customNames: agentStore.customNames,
+                    supersetWorkspaceNames: agentStore.supersetWorkspaceNames,
                     tagsFor: { tagStore.assignments(for: $0) },
                     columnFor: { agent in
                         BoardModel.column(
@@ -158,6 +159,7 @@ final class SessionHistoryStore: ObservableObject {
     func observe(
         agents: [Agent],
         customNames: [String: String] = [:],
+        supersetWorkspaceNames: [String: String] = [:],
         tagsFor: (String) -> [TagAssignment],
         columnFor: (Agent) -> BoardColumn = { _ in .working },
         now: Date = Date()
@@ -170,10 +172,11 @@ final class SessionHistoryStore: ObservableObject {
         for agent in topLevel {
             live.insert(agent.sessionId)
             let firstSeen = agent.createdAt.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) } ?? now
+            let displayName = agent.displayLabel(customName: customNames[agent.sessionId], workspaceNames: supersetWorkspaceNames)
             var record = updated[agent.sessionId] ?? SessionRecord(
                 sessionId: agent.sessionId,
                 provider: agent.provider,
-                name: customNames[agent.sessionId] ?? agent.directoryLabel,
+                name: displayName,
                 cwd: agent.cwd,
                 repo: nil,
                 firstSeenAt: firstSeen,
@@ -182,7 +185,7 @@ final class SessionHistoryStore: ObservableObject {
                 tagIds: [],
                 firstPrompt: nil
             )
-            record.name = customNames[agent.sessionId] ?? agent.directoryLabel
+            record.name = displayName
             record.cwd = agent.cwd
             // Coarse heartbeat: avoids rewriting every record on each snapshot.
             if now.timeIntervalSince(record.lastSeenAt) >= 30 || record.endedAt != nil {

@@ -309,6 +309,13 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         return (cwd as NSString).lastPathComponent
     }
 
+    /// The name to show for this session: a user-set custom name first, then
+    /// the Superset workspace's own name (more meaningful than a generated
+    /// branch or session-folder slug), then `directoryLabel`.
+    func displayLabel(customName: String?, workspaceNames: [String: String]) -> String {
+        customName ?? supersetWorkspace.flatMap { workspaceNames[$0] } ?? directoryLabel
+    }
+
     var speechBubbleText: String {
         switch status {
         case .waiting:

@@ -24,6 +24,9 @@ final class AgentStore: ObservableObject {
     @Published var childSessionIds: [String: [String]] = [:]
     /// Cached host app icons per PID (resolved once per agent).
     @Published var hostAppIcons: [Int: NSImage] = [:]
+    /// Superset workspace ID -> workspace name, refreshed periodically via the `superset` CLI.
+    @Published var supersetWorkspaceNames: [String: String] = [:]
+    private var workspaceNameRefreshTimer: Timer?
 
     /// Tracks the last-seen status per session so we can unsnooze on change.
     private var lastSeenStatus: [String: AgentStatus] = [:]
@@ -267,7 +270,7 @@ final class AgentStore: ObservableObject {
     }
 
     func displayName(for agent: Agent) -> String {
-        customNames[agent.sessionId] ?? agent.directoryLabel
+        agent.displayLabel(customName: customNames[agent.sessionId], workspaceNames: supersetWorkspaceNames)
     }
 
     @Published var hideWorkingAgents: Bool = UserDefaults.standard.bool(forKey: "hideWorkingAgents") {
@@ -343,6 +346,28 @@ final class AgentStore: ObservableObject {
         }
 
         reload()
+        refreshSupersetWorkspaceNames()
+        workspaceNameRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            self?.refreshSupersetWorkspaceNames()
+        }
+    }
+
+    /// Refreshes `supersetWorkspaceNames` off the main thread; the CLI call
+    /// can take a moment, and the board should never stall waiting on it.
+    /// No-ops when nothing in the current snapshot needs it, to avoid shelling
+    /// out on every timer tick for users who never touch Superset.
+    func refreshSupersetWorkspaceNames() {
+        guard agents.contains(where: { $0.isSupersetSession }) else { return }
+        forceRefreshSupersetWorkspaceNames()
+    }
+
+    private func forceRefreshSupersetWorkspaceNames() {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let names = SupersetWorkspaceLookup.fetchNames()
+            DispatchQueue.main.async {
+                self?.supersetWorkspaceNames = names
+            }
+        }
     }
 
     func reload() {
@@ -564,7 +589,7 @@ final class AgentStore: ObservableObject {
                 || (agent.status == .waiting && agent.isDone)
             )
             if notifiable {
-                ntfyScheduler?.scheduleIfNeeded(for: agent, isSnoozed: isSnoozed)
+                ntfyScheduler?.scheduleIfNeeded(for: agent, isSnoozed: isSnoozed, workspaceNames: supersetWorkspaceNames)
             } else {
                 ntfyScheduler?.reset(for: agent.id)
             }
@@ -617,6 +642,16 @@ final class AgentStore: ObservableObject {
         if !staleNames.isEmpty {
             for key in staleNames { customNames.removeValue(forKey: key) }
             UserDefaults.standard.set(customNames, forKey: "customAgentNames")
+        }
+
+        // Pick up names for newly-seen Superset workspaces right away instead
+        // of waiting for the periodic refresh.
+        let hasUnknownWorkspace = loaded.contains { agent in
+            guard let workspace = agent.supersetWorkspace else { return false }
+            return supersetWorkspaceNames[workspace] == nil
+        }
+        if hasUnknownWorkspace {
+            forceRefreshSupersetWorkspaceNames()
         }
 
         // Resolve host app icons for new PIDs
@@ -685,5 +720,6 @@ final class AgentStore: ObservableObject {
         for watcher in watchers {
             watcher.stop()
         }
+        workspaceNameRefreshTimer?.invalidate()
     }
 }

@@ -19,6 +19,7 @@ struct ExpandedView: View {
     var cronSessionIds: Set<String> = []
     var dismissedClockIds: Set<String> = []
     var customNames: [String: String] = [:]
+    var supersetWorkspaceNames: [String: String] = [:]
     let onAgentClick: (Agent) -> Void
     var onRequestSnooze: ((Agent) -> Void)?
     let onSnooze: (Agent, SnoozeDuration) -> Void
@@ -79,7 +80,7 @@ struct ExpandedView: View {
     }
 
     private func displayName(for agent: Agent) -> String {
-        customNames[agent.sessionId] ?? agent.directoryLabel
+        agent.displayLabel(customName: customNames[agent.sessionId], workspaceNames: supersetWorkspaceNames)
     }
 
     private func beginRename(_ agent: Agent) {

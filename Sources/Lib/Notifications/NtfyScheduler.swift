@@ -14,7 +14,7 @@ final class NtfyScheduler: ObservableObject {
     }
 
     /// Schedule a delayed notification if conditions are met.
-    func scheduleIfNeeded(for agent: Agent, isSnoozed: Bool) {
+    func scheduleIfNeeded(for agent: Agent, isSnoozed: Bool, workspaceNames: [String: String] = [:]) {
         let sessionId = agent.id
         guard config.isConfigured, !isSnoozed else { return }
         guard pendingWork[sessionId] == nil,
@@ -23,7 +23,7 @@ final class NtfyScheduler: ObservableObject {
 
         guard shouldNotify(for: agent) else { return }
 
-        let title = buildTitle(for: agent)
+        let title = buildTitle(for: agent, workspaceNames: workspaceNames)
         let body = buildBody(for: agent)
         let priority = agent.status == .permission ? config.permissionPriority : config.defaultPriority
         let endpoint = config.endpoint
@@ -119,8 +119,8 @@ final class NtfyScheduler: ObservableObject {
         }
     }
 
-    private func buildTitle(for agent: Agent) -> String {
-        let label = agent.directoryLabel
+    private func buildTitle(for agent: Agent, workspaceNames: [String: String]) -> String {
+        let label = agent.displayLabel(customName: nil, workspaceNames: workspaceNames)
         switch agent.status {
         case .permission:
             return "\(label) \u{2014} Permission needed"

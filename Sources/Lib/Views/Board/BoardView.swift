@@ -50,6 +50,7 @@ struct BoardView: View {
                                 theme: themeConfig.selectedTheme,
                                 hostAppIcons: store.hostAppIcons,
                                 customNames: store.customNames,
+                                supersetWorkspaceNames: store.supersetWorkspaceNames,
                                 selectedCardId: selectedCardId
                             )
                         }
@@ -270,6 +271,7 @@ private struct BoardColumnView: View {
     let theme: ColorTheme
     let hostAppIcons: [Int: NSImage]
     let customNames: [String: String]
+    let supersetWorkspaceNames: [String: String]
     let selectedCardId: String?
 
     private var accent: Color { data.column.color(theme: theme) }
@@ -324,7 +326,7 @@ private struct BoardColumnView: View {
                                 card: card,
                                 isSelected: card.id == selectedCardId,
                                 theme: theme,
-                                displayName: customNames[card.agent.sessionId] ?? card.agent.directoryLabel,
+                                displayName: card.agent.displayLabel(customName: customNames[card.agent.sessionId], workspaceNames: supersetWorkspaceNames),
                                 hostAppIcon: hostAppIcons[card.agent.pid],
                                 tags: tagStore.resolvedTags(for: card.agent.sessionId),
                                 isInferring: tagStore.inferringSessionIds.contains(card.agent.sessionId),

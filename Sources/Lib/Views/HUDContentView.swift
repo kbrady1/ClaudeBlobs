@@ -183,6 +183,7 @@ struct HUDContentView: View {
                 cronSessionIds: store.cronSessionIds,
                 dismissedClockIds: store.dismissedClockIds,
                 customNames: store.customNames,
+                supersetWorkspaceNames: store.supersetWorkspaceNames,
                 onAgentClick: { agent in
                     onAgentClick(agent)
                     expansionState.collapse()
