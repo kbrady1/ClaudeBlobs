@@ -44,10 +44,14 @@ fi
 # persistent Monitor has no timeout and stays active until an explicit
 # TaskStop, so it gets no expiry.
 MONITOR_ACTIVE_FILTER="."
+# A persistent Monitor has no timeout_ms, but still gets a ceiling: if the
+# agent never calls TaskStop (forgets, gets interrupted, branches away), this
+# bounds how long monitorActive can hide a session instead of staying stuck forever.
+PERSISTENT_MONITOR_CEILING_MS=$((4 * 60 * 60 * 1000))
 if [ "$TOOL_NAME" = "Monitor" ]; then
   IS_PERSISTENT=$(echo "$RAW_INPUT" | jq -r 'if .persistent == true then "true" else "false" end' 2>/dev/null)
   if [ "$IS_PERSISTENT" = "true" ]; then
-    MONITOR_ACTIVE_FILTER=".monitorActive = true | .monitorExpiresAt = null"
+    MONITOR_ACTIVE_FILTER=".monitorActive = true | .monitorExpiresAt = $((TS + PERSISTENT_MONITOR_CEILING_MS))"
   else
     TIMEOUT_MS=$(echo "$RAW_INPUT" | jq -r '.timeout_ms // 300000' 2>/dev/null)
     case "$TIMEOUT_MS" in ''|*[!0-9]*) TIMEOUT_MS=300000 ;; esac

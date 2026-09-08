@@ -403,15 +403,21 @@ struct HookScriptTests {
             #expect(r.status?["status"] as? String == "working")
         }
 
-        @Test("persistent Monitor sets monitorActive with no expiry")
+        @Test("persistent Monitor sets monitorActive with a 4h ceiling expiry")
         func persistentMonitorSetsMonitorActive() throws {
             let h = try HookTestHelper()
+            let before = Int64(Date().timeIntervalSince1970 * 1000)
             let r = try h.runHook("hook-pre-tool.sh", input: [
                 "tool_name": "Monitor",
                 "tool_input": ["command": "tail -f log", "persistent": true],
             ], existingStatus: makeWorkingStatus())
             #expect(r.status?["monitorActive"] as? Bool == true)
-            #expect(r.status?["monitorExpiresAt"] == nil || r.status?["monitorExpiresAt"] is NSNull)
+            // No timeout_ms was given, but a persistent Monitor still gets a hard ceiling
+            // so a forgotten TaskStop can't hide a session forever.
+            let ceilingMs: Int64 = 4 * 60 * 60 * 1000
+            let expiresAt = try #require(r.status?["monitorExpiresAt"] as? Int64 ?? (r.status?["monitorExpiresAt"] as? Int).map(Int64.init))
+            #expect(expiresAt >= before + ceilingMs)
+            #expect(expiresAt <= before + ceilingMs + 5000) // generous slack for test runtime
 
             // A later, unrelated tool call must not clear the flag — this is
             // exactly the case that was silently dropped when the app tried to
@@ -622,6 +628,20 @@ struct HookScriptTests {
             #expect(updatedParent?["permissionKey"] as? String != "old-key")
         }
 
+        @Test("clears a stale monitorActive flag — a permission request means the developer is engaged")
+        func clearsMonitorActive() throws {
+            let h = try HookTestHelper()
+            var existing = makeWorkingStatus()
+            existing["monitorActive"] = true
+            existing["monitorExpiresAt"] = 9999999999999
+            let r = try h.runHook("hook-permission.sh", input: [
+                "tool_name": "Bash",
+                "tool_input": ["command": "rm -rf /"],
+            ], existingStatus: existing)
+            #expect(r.status?["monitorActive"] as? Bool == false)
+            #expect(r.status?["monitorExpiresAt"] == nil || r.status?["monitorExpiresAt"] is NSNull)
+        }
+
         @Test("permission with Edit extracts basename")
         func permissionEdit() throws {
             let h = try HookTestHelper()
@@ -810,6 +830,17 @@ struct HookScriptTests {
             #expect(r.status?["lastMessage"] is NSNull)
             #expect(r.status?["waitReason"] is NSNull)
             #expect(r.status?["toolFailure"] is NSNull)
+        }
+
+        @Test("clears a stale monitorActive flag — a fresh prompt means the developer is back")
+        func clearsMonitorActive() throws {
+            let h = try HookTestHelper()
+            var existing = makeStatus(status: "waiting")
+            existing["monitorActive"] = true
+            existing["monitorExpiresAt"] = 9999999999999
+            let r = try h.runHook("hook-user-prompt.sh", input: [:], existingStatus: existing)
+            #expect(r.status?["monitorActive"] as? Bool == false)
+            #expect(r.status?["monitorExpiresAt"] == nil || r.status?["monitorExpiresAt"] is NSNull)
         }
 
         @Test("records the first prompt and keeps it on later prompts")

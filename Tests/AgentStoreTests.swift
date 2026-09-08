@@ -191,8 +191,10 @@ struct AgentStoreTests {
 
         store.conductorHUDEnabled = true
         // Ranked first, highest rank first; the unranked working session
-        // trails, and the in-flight session sits last however high it ranks.
-        #expect(store.collapsedAgents.map(\.sessionId) == ["c", "b", "a", "d"])
+        // trails. The in-flight session is dropped entirely from the compact
+        // row (no room to explain a dim) but still shows, demoted, in the
+        // expanded view.
+        #expect(store.collapsedAgents.map(\.sessionId) == ["c", "b", "a"])
         #expect(store.sortedTopLevelAgents.map(\.sessionId) == ["c", "b", "a", "d"])
         #expect(store.conductorDemotedIds == [running.id])
         store.conductorHUDEnabled = false

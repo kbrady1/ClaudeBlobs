@@ -152,9 +152,11 @@ struct ConductorView: View {
 
     private func summary(_ queue: [ConductorItem]) -> String {
         let attention = queue.filter { $0.card.column == .needsAttention }.count
-        let idle = queue.count - attention
+        let monitoring = queue.filter { $0.card.column == .monitoring }.count
+        let idle = queue.count - attention - monitoring
         var parts: [String] = []
         if attention > 0 { parts.append("\(attention) need attention") }
+        if monitoring > 0 { parts.append("\(monitoring) flagged from monitors") }
         if idle > 0 { parts.append("\(idle) idle") }
         return parts.isEmpty ? "queue empty" : parts.joined(separator: " · ")
     }

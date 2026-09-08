@@ -193,17 +193,28 @@ final class ConductorStore: ObservableObject {
             return Self.waitingCards(in: columns)
         }
 
-        // Re-rank every minute so wait boosts move.
+        // Re-rank every minute so wait boosts move, and re-run `refresh` (not just
+        // `rebuildQueue`) so a quiet monitoring card that just crossed
+        // `monitorCheckDelay` gets assessed even with no agent-state change to trigger it.
         Timer.publish(every: 60, on: .main, in: .common).autoconnect()
-            .sink { [weak self] _ in self?.rebuildQueue() }
+            .sink { [weak self] _ in
+                guard let self, let cards = self.reloadCards?() else { return }
+                self.refresh(cards: cards, tagsFor: self.lastTagsFor)
+            }
             .store(in: &cancellables)
     }
 
     static func waitingCards(in columns: [BoardColumnData]) -> [BoardCard] {
         let attention = columns.first { $0.column == .needsAttention }?.cards ?? []
         let idle = columns.first { $0.column == .idle }?.cards ?? []
-        return attention + idle
+        let monitoring = columns.first { $0.column == .monitoring }?.cards ?? []
+        return attention + idle + monitoring
     }
+
+    /// A monitoring card is only assessed once it has been quiet (no new turn) this long.
+    /// Keeps armed monitors from costing an LLM call on every turn while still catching
+    /// one that's actually stuck on a real question.
+    static let monitorCheckDelay: TimeInterval = 20 * 60
 
     // MARK: - Fingerprint
 
@@ -262,9 +273,9 @@ final class ConductorStore: ObservableObject {
             if let skipPrint = skipped[sessionId], skipPrint != print {
                 skipped.removeValue(forKey: sessionId); changed = true
             }
-            if aiEnabled, !assessing.contains(sessionId) {
-                assess(card: card, tags: tags, fingerprint: print)
-            }
+            guard aiEnabled, !assessing.contains(sessionId) else { continue }
+            if card.column == .monitoring, now.timeIntervalSince(card.enteredAt) < Self.monitorCheckDelay { continue }
+            assess(card: card, tags: tags, fingerprint: print)
         }
         if changed { save() }
         rebuildQueue()
@@ -375,7 +386,14 @@ final class ConductorStore: ObservableObject {
             let wait = waitSeconds(for: card, now: now)
             let isSkipped = skipped[sessionId] != nil
             let assessment = assessments[sessionId]
-            let isInFlight = (assessment?.inFlight ?? false) && Self.canBeInFlight(card)
+            // An un-assessed monitoring card stays hidden (as if in flight) until the
+            // 20-minute quiet gate lets Conductor actually check it — never surfaced unscored.
+            let isInFlight: Bool
+            if card.column == .monitoring, assessment == nil {
+                isInFlight = true
+            } else {
+                isInFlight = (assessment?.inFlight ?? false) && Self.canBeInFlight(card)
+            }
             return ConductorItem(
                 card: card,
                 assessment: assessment,
@@ -475,7 +493,10 @@ final class ConductorStore: ObservableObject {
             if agent.isInterrupted { return "interrupted by the user" }
             if agent.isAPIError { return "hit an API error" }
             if agent.isToolFailure { return "hit a tool error" }
-            return agent.isDone ? "finished its turn (idle)" : "asked a question and is waiting"
+            if agent.isDone {
+                return card.column == .monitoring ? "flagged despite an active monitor" : "finished its turn (idle)"
+            }
+            return "asked a question and is waiting"
         default:
             return card.effectiveStatus.displayName.lowercased()
         }

@@ -52,6 +52,15 @@ struct ConductorStoreTests {
         return BoardCard(agent: agent, column: column, effectiveStatus: status, enteredAt: enteredAt, children: [], isClockBearing: false, snoozeUntil: nil)
     }
 
+    /// A done, clock-bearing session — resolves to `.monitoring`, same as an armed Monitor
+    /// that finished its turn quietly.
+    private func monitorCard(_ id: String, message: String? = nil, enteredAt: Date = Date()) -> BoardCard {
+        let agent = Agent.fixture(sessionId: id, pid: 1, status: .waiting, lastMessage: message, waitReason: "done")
+        let column = BoardModel.column(for: agent, effectiveStatus: .waiting, isSnoozed: false, isClockBearing: true)
+        precondition(column == .monitoring)
+        return BoardCard(agent: agent, column: column, effectiveStatus: .waiting, enteredAt: enteredAt, children: [], isClockBearing: true, snoozeUntil: nil)
+    }
+
     private func waitUntil(timeout: TimeInterval = 20, _ condition: @MainActor () -> Bool) async throws {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
@@ -215,6 +224,64 @@ struct ConductorStoreTests {
         await MainActor.run {
             #expect(store.queue.count == 2)
             #expect(calls == 2)
+        }
+    }
+
+    @Test func monitoringCardsAreHiddenUntilQuietLongEnough() async throws {
+        var calls = 0
+        let store = ConductorStore(fileURL: tmpURL(), settleSeconds: 0) { _ in
+            calls += 1
+            return #"{"score": 40, "inFlight": false, "reason": "needs a decision", "action": {"kind": "open"}}"#
+        }
+        let now = Date()
+        // Only quiet for 5 minutes — below the 20-minute check delay.
+        let quiet = monitorCard("m", enteredAt: now.addingTimeInterval(-5 * 60))
+        await MainActor.run { store.refresh(cards: [quiet], tagsFor: { _ in [] }, now: now) }
+        try await Task.sleep(nanoseconds: 200_000_000)
+        await MainActor.run {
+            #expect(calls == 0)
+            #expect(store.assessments.isEmpty)
+            #expect(store.queue.isEmpty)
+            // Hidden the same way genuinely in-flight work is, so it doesn't clutter the queue unscored.
+            #expect(store.inFlight.map(\.id) == [quiet.id])
+        }
+    }
+
+    @Test func monitoringCardIsAssessedOnceAfterTheQuietWindowThenLeftAlone() async throws {
+        var calls = 0
+        let store = ConductorStore(fileURL: tmpURL(), settleSeconds: 0) { _ in
+            calls += 1
+            return #"{"score": 70, "inFlight": false, "reason": "actually needs you", "action": {"kind": "open"}}"#
+        }
+        let now = Date()
+        let quiet = monitorCard("m", message: "Need your call before continuing.", enteredAt: now.addingTimeInterval(-21 * 60))
+        await MainActor.run { store.refresh(cards: [quiet], tagsFor: { _ in [] }, now: now) }
+        try await waitUntil { store.assessments["m"] != nil }
+        await MainActor.run {
+            #expect(calls == 1)
+            // The AI judged this one as not in flight, so it surfaces in the visible queue.
+            #expect(store.queue.map(\.id) == [quiet.id])
+            #expect(store.inFlight.isEmpty)
+        }
+
+        // Same fingerprint (no new turn) → the existing dedup keeps it from being re-scored,
+        // even though it is still well past the quiet threshold.
+        await MainActor.run { store.refresh(cards: [quiet], tagsFor: { _ in [] }, now: now.addingTimeInterval(60)) }
+        try await Task.sleep(nanoseconds: 200_000_000)
+        await MainActor.run { #expect(calls == 1) }
+    }
+
+    @Test func monitoringCardJudgedStillInFlightStaysHiddenAfterAssessment() async throws {
+        let store = ConductorStore(fileURL: tmpURL(), settleSeconds: 0) { _ in
+            #"{"score": 20, "inFlight": true, "reason": "still watching the deploy", "action": {"kind": "open"}}"#
+        }
+        let now = Date()
+        let quiet = monitorCard("m", enteredAt: now.addingTimeInterval(-21 * 60))
+        await MainActor.run { store.refresh(cards: [quiet], tagsFor: { _ in [] }, now: now) }
+        try await waitUntil { store.assessments["m"] != nil }
+        await MainActor.run {
+            #expect(store.queue.isEmpty)
+            #expect(store.inFlight.map(\.id) == [quiet.id])
         }
     }
 

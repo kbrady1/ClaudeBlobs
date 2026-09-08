@@ -17,7 +17,7 @@ atomic_update "$STATUS_FILE" \
   --arg status "working" \
   --arg prompt "$PROMPT" \
   --argjson ts "$TS" \
-  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastMessage = null | .waitReason = null | .rawLastMessage = null | .toolFailure = null | .pendingQuestions = null | .updatedAt = $ts | (if (.firstPrompt // "") == "" and $prompt != "" then .firstPrompt = $prompt else . end)'
+  '(if .status != $status then .statusChangedAt = $ts else . end) | .status = $status | .lastMessage = null | .waitReason = null | .rawLastMessage = null | .toolFailure = null | .pendingQuestions = null | .updatedAt = $ts | .monitorActive = false | .monitorExpiresAt = null | (if (.firstPrompt // "") == "" and $prompt != "" then .firstPrompt = $prompt else . end)'
 
 # Clean up orphaned subagents stuck in permission or done states.
 # At UserPromptSubmit time the previous turn is complete, so these are stale.

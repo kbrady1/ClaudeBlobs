@@ -58,6 +58,10 @@ final class AgentStore: ObservableObject {
                 && !snoozedSessionIds.contains($0.id)
                 && !subs.contains($0.id)
                 && !cronIsQuiet($0)
+                // The compact row has no room to explain itself, so a session the
+                // Conductor already judged not-actionable is dropped outright here
+                // rather than dimmed — the expanded view still shows it, dimmed.
+                && !isConductorDemoted($0)
         }
         if usesConductorOrder {
             result.sort { conductorPrecedes($0, $1) }
@@ -67,7 +71,7 @@ final class AgentStore: ObservableObject {
         return result
     }
 
-    /// Sessions the HUD should render as not-actionable-yet (dimmed).
+    /// Sessions the expanded HUD should render as not-actionable-yet (dimmed).
     var conductorDemotedIds: Set<String> {
         conductorHUDEnabled ? conductorInFlightIds : []
     }
