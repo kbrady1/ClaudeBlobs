@@ -58,6 +58,10 @@ final class AgentStore: ObservableObject {
                 && !snoozedSessionIds.contains($0.id)
                 && !subs.contains($0.id)
                 && !cronIsQuiet($0)
+                // An orchestrated worker reports to its orchestrator, not to
+                // the developer, so it stays out of the compact row entirely
+                // until it needs a human.
+                && !isOrchestrated($0)
                 // The compact row has no room to explain itself, so a session the
                 // Conductor already judged not-actionable is dropped outright here
                 // rather than dimmed — the expanded view still shows it, dimmed.
@@ -126,8 +130,8 @@ final class AgentStore: ObservableObject {
         let prioritySort = sortByPriority
         let conductorSort = usesConductorOrder
         return topLevelAgents.sorted { a, b in
-            let aDemoted = snoozed.contains(a.id) || cronIsQuiet(a) || isConductorDemoted(a)
-            let bDemoted = snoozed.contains(b.id) || cronIsQuiet(b) || isConductorDemoted(b)
+            let aDemoted = snoozed.contains(a.id) || cronIsQuiet(a) || isConductorDemoted(a) || isOrchestrated(a)
+            let bDemoted = snoozed.contains(b.id) || cronIsQuiet(b) || isConductorDemoted(b) || isOrchestrated(b)
             if aDemoted != bDemoted { return !aDemoted }
             if conductorSort { return conductorPrecedes(a, b) }
             if prioritySort { return priorityPrecedes(a, b) }
@@ -223,6 +227,38 @@ final class AgentStore: ObservableObject {
             snoozedSessionIds.insert(agent.id)
             if snoozedAt[agent.id] == nil { snoozedAt[agent.id] = now }
         }
+    }
+
+    /// Sessions whose last turn reported to an orchestrator. Set from the
+    /// sentinel on each turn as it lands, and cleared by the first turn that
+    /// carries no sentinel.
+    @Published var orchestratedSessionIds: Set<String> = []
+
+    /// Sessions the developer has taken back from their orchestrator by hand.
+    /// Such a session is treated as an ordinary session again until the
+    /// developer hands it back.
+    @Published var orchestrateOptedOutIds: Set<String> = []
+
+    /// Whether this session is an `/orchestrate` worker the board should park
+    /// out of the way. False once the worker needs a human, or once the
+    /// developer has opted it out.
+    func isOrchestrated(_ agent: Agent) -> Bool {
+        BoardModel.isOrchestrated(
+            agent,
+            orchestratedIds: orchestratedSessionIds,
+            optedOutIds: orchestrateOptedOutIds
+        )
+    }
+
+    /// Takes an orchestrated worker back: it returns to its normal column and
+    /// to the HUD.
+    func stopOrchestrating(_ agent: Agent) {
+        orchestrateOptedOutIds.insert(agent.id)
+    }
+
+    /// Hands a session back to its orchestrator after an opt-out.
+    func resumeOrchestrating(_ agent: Agent) {
+        orchestrateOptedOutIds.remove(agent.id)
     }
 
     /// Sessions whose clock badge has been hand-dismissed. Treated as no-longer-cron
@@ -536,6 +572,21 @@ final class AgentStore: ObservableObject {
             }
         }
 
+        // Read each turn's orchestrate verdict as it lands. A turn with a
+        // sentinel marks the session orchestrated (or, for BLOCKED and DONE,
+        // hands it back); the first turn without one makes it an ordinary
+        // session again. A turn mid-tool-call carries no message at all, so it
+        // says nothing and the session keeps its verdict.
+        for agent in loaded {
+            guard let verdict = BoardModel.orchestrateVerdict(for: agent) else { continue }
+            if verdict {
+                orchestratedSessionIds.insert(agent.id)
+            } else {
+                orchestratedSessionIds.remove(agent.id)
+                orchestrateOptedOutIds.remove(agent.id)
+            }
+        }
+
         // Unsnooze agents whose status changed and trigger peek.
         // Also unsnooze when a new turn lands in an alerting status
         // (permission/waiting/starting) even if the enum value didn't change —
@@ -587,7 +638,8 @@ final class AgentStore: ObservableObject {
             // Suppress notifications for quiet cron/monitor sessions
             let isQuietBackgroundTask = (cronSessionIds.contains(agent.id) || agent.isMonitorActive)
                 && cronIsQuiet(agent)
-            let notifiable = !isQuietBackgroundTask && effective != .delegating && (
+            // Suppress notifications while an orchestrator is answering for the developer
+            let notifiable = !isQuietBackgroundTask && !isOrchestrated(agent) && effective != .delegating && (
                 agent.status == .permission
                 || (agent.status == .waiting && !agent.isDone)
                 || (agent.status == .waiting && agent.isDone)
@@ -611,6 +663,8 @@ final class AgentStore: ObservableObject {
         snoozedAt = snoozedAt.filter { activeIds.contains($0.key) }
         cronSessionIds = cronSessionIds.intersection(activeIds)
         dismissedClockIds = dismissedClockIds.intersection(activeIds)
+        orchestratedSessionIds = orchestratedSessionIds.intersection(activeIds)
+        orchestrateOptedOutIds = orchestrateOptedOutIds.intersection(activeIds)
         lastSeenStatus = lastSeenStatus.filter { activeIds.contains($0.key) }
         lastSeenStatusChangedAt = lastSeenStatusChangedAt.filter { activeIds.contains($0.key) }
         ntfyScheduler?.cleanupGone(activeIds: activeIds)

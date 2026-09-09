@@ -19,7 +19,7 @@ struct BoardModelTests {
     }
 
     @Test func columnOrderMatchesSpec() {
-        #expect(BoardColumn.allCases == [.idle, .needsAttention, .working, .monitoring, .snoozed])
+        #expect(BoardColumn.allCases == [.idle, .needsAttention, .working, .monitoring, .orchestrated, .snoozed])
     }
 
     @Test func snoozedWinsOverEverything() {

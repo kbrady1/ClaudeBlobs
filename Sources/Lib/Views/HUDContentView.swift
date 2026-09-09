@@ -172,6 +172,7 @@ struct HUDContentView: View {
                 agents: store.sortedTopLevelAgents,
                 snoozedIds: store.snoozedSessionIds,
                 inFlightIds: store.conductorDemotedIds,
+                orchestratedIds: Set(store.agents.filter { store.isOrchestrated($0) }.map(\.id)),
                 snoozeUntil: store.snoozeUntil,
                 notifiedIds: ntfyScheduler.notifiedSessionIds,
                 childAgents: resolvedChildren,

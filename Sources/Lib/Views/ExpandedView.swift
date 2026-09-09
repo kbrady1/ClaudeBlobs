@@ -7,6 +7,9 @@ struct ExpandedView: View {
     /// Sessions the Conductor says are still running work. Dimmed like a
     /// snoozed blob, but they keep their real status colour.
     var inFlightIds: Set<String> = []
+    /// Sessions an /orchestrate run is driving. Dimmed like a snoozed blob and
+    /// badged with the orchestrated accent icon.
+    var orchestratedIds: Set<String> = []
     var snoozeUntil: [String: Date] = [:]
     var notifiedIds: Set<String> = []
     var childAgents: [String: [Agent]] = [:]
@@ -213,7 +216,7 @@ struct ExpandedView: View {
         }
         .buttonStyle(.plain)
         .help(inFlightIds.contains(agent.id) ? "Still running work — nothing to do here yet" : "")
-        .opacity(snoozedIds.contains(agent.id) || inFlightIds.contains(agent.id) ? 0.45 : (cronSessionIds.contains(agent.id) || agent.isMonitorActive || agent.isScheduledWakeup) && agent.isDone && agent.toolFailure == nil ? 0.45 : agent.status == .working ? 0.7 : 1.0)
+        .opacity(snoozedIds.contains(agent.id) || inFlightIds.contains(agent.id) || orchestratedIds.contains(agent.id) ? 0.45 : (cronSessionIds.contains(agent.id) || agent.isMonitorActive || agent.isScheduledWakeup) && agent.isDone && agent.toolFailure == nil ? 0.45 : agent.status == .working ? 0.7 : 1.0)
         .contextMenu {
             Button("Rename\u{2026}") { beginRename(agent) }
             if customNames[agent.sessionId] != nil {
@@ -374,6 +377,7 @@ struct ExpandedView: View {
                         isCronSession: cronSessionIds.contains(agent.id),
                         isScheduledWakeup: agent.isScheduledWakeup,
                         isMonitorActive: agent.isMonitorActive,
+                        isOrchestrated: orchestratedIds.contains(agent.id),
                         isTaskJustCompleted: agent.isTaskJustCompleted,
                         isInterrupted: agent.isInterrupted,
                         isToolFailure: agent.isToolFailure,

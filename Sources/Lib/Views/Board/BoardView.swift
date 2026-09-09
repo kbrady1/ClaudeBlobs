@@ -345,6 +345,10 @@ private struct BoardColumnView: View {
                                         viewModel.toggleSnoozePicker(for: card)
                                     }
                                 },
+                                onOrchestrateButton: {
+                                    viewModel.select(card)
+                                    viewModel.toggleOrchestrated(card)
+                                },
                                 onDismiss: { viewModel.dismiss(card) }
                             )
                             .id(card.id)
@@ -497,6 +501,7 @@ private struct BoardHelpOverlay: View {
         ("  C", "…confirm every inferred tag on the card"),
         ("  R", "…run tag inference again"),
         ("S", "Snooze the selected card; unsnooze when snoozed"),
+        ("O", "Take an orchestrated worker back; hand it back again"),
         ("  ↑ ↓ / Return", "…move the highlight and pick a duration (1–6 picks directly)"),
         ("U", "Unsnooze the selected card"),
         ("Delete", "Snooze; when already snoozed, dismiss the session"),

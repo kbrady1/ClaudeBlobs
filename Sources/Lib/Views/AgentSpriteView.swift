@@ -27,6 +27,8 @@ struct AgentSpriteView: View {
     var isCronSession: Bool = false
     var isScheduledWakeup: Bool = false
     var isMonitorActive: Bool = false
+    /// Driven by an /orchestrate run: shown with its own accent badge.
+    var isOrchestrated: Bool = false
     var isTaskJustCompleted: Bool = false
     var isInterrupted: Bool = false
     var isToolFailure: Bool = false
@@ -98,6 +100,15 @@ struct AgentSpriteView: View {
                     .fill(Color.purple)
                     .frame(width: size * 0.25, height: size * 0.25)
                     .offset(x: size * 0.35, y: -size * 0.35)
+            }
+
+            // Orchestrated worker badge: this session reports to an orchestrator.
+            if isOrchestrated {
+                Image(systemName: BoardColumn.orchestratedSymbol)
+                    .font(.system(size: accentFont * 0.85, weight: .heavy))
+                    .foregroundColor(.white)
+                    .shadow(color: .black, radius: 2)
+                    .offset(x: -size * 0.35, y: -size * 0.35)
             }
 
             // Cron/loop clock badge (fallback when no working/permission icon is showing).

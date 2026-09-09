@@ -5,6 +5,7 @@ enum BoardColumn: String, CaseIterable, Identifiable {
     case needsAttention
     case working
     case monitoring
+    case orchestrated
     case snoozed
 
     var id: String { rawValue }
@@ -15,6 +16,7 @@ enum BoardColumn: String, CaseIterable, Identifiable {
         case .needsAttention: return "Needs Attention"
         case .working: return "Working"
         case .monitoring: return "Monitoring"
+        case .orchestrated: return "Orchestrated"
         case .snoozed: return "Snoozed"
         }
     }
@@ -25,6 +27,7 @@ enum BoardColumn: String, CaseIterable, Identifiable {
         case .needsAttention: return "exclamationmark.bubble.fill"
         case .working: return "hammer.fill"
         case .monitoring: return "clock.fill"
+        case .orchestrated: return BoardColumn.orchestratedSymbol
         case .snoozed: return "moon.fill"
         }
     }
@@ -35,9 +38,14 @@ enum BoardColumn: String, CaseIterable, Identifiable {
         case .needsAttention: return theme.color(for: .permission)
         case .working: return theme.color(for: .working)
         case .monitoring: return theme.color(for: .compacting)
+        case .orchestrated: return Color(red: 0.44, green: 0.62, blue: 0.98)
         case .snoozed: return Color(white: 0.55)
         }
     }
+
+    /// Accent icon for orchestrated worker sessions, shared by the column
+    /// header, the board card, and the blob badge.
+    static let orchestratedSymbol = "link"
 }
 
 struct BoardCard: Identifiable, Equatable {
@@ -48,6 +56,11 @@ struct BoardCard: Identifiable, Equatable {
     let children: [Agent]
     let isClockBearing: Bool
     let snoozeUntil: Date?
+    /// The worker's last sentinel, for cards in the orchestrated column.
+    var orchestrateReport: OrchestrateReport? = nil
+    /// Whether an orchestrator is driving this session, even when it has been
+    /// pulled out of the orchestrated column. Drives the hand-back button.
+    var isOrchestrateWorker: Bool = false
 
     var id: String { agent.id }
 }
@@ -65,9 +78,11 @@ enum BoardModel {
         for agent: Agent,
         effectiveStatus: AgentStatus,
         isSnoozed: Bool,
-        isClockBearing: Bool
+        isClockBearing: Bool,
+        isOrchestrated: Bool = false
     ) -> BoardColumn {
         if isSnoozed { return .snoozed }
+        if isOrchestrated { return .orchestrated }
         switch effectiveStatus {
         case .permission:
             return .needsAttention
@@ -77,6 +92,34 @@ enum BoardModel {
         case .working, .starting, .compacting, .delegating:
             return .working
         }
+    }
+
+    /// Whether the board should park this session in the orchestrated column:
+    /// its last turn reported to an orchestrator, the developer has not opted
+    /// it out, and it does not currently need a human.
+    ///
+    /// `orchestratedIds` comes from `AgentStore`, which reads the verdict off
+    /// each turn as it lands. It cannot be derived from an `Agent` alone: the
+    /// hooks null the message on every tool call, so a session mid-turn is
+    /// carrying no sentinel even while an orchestrator drives it.
+    static func isOrchestrated(
+        _ agent: Agent,
+        orchestratedIds: Set<String>,
+        optedOutIds: Set<String>,
+        now: Date = Date(),
+        silenceThreshold: TimeInterval = Agent.orchestrateSilenceThreshold
+    ) -> Bool {
+        if optedOutIds.contains(agent.id) { return false }
+        guard orchestratedIds.contains(agent.id) else { return false }
+        return !agent.orchestrateNeedsHuman(now: now, silenceThreshold: silenceThreshold)
+    }
+
+    /// The verdict a single turn carries. `nil` means the turn said nothing —
+    /// the hooks cleared the message for a tool call — so the session keeps
+    /// whatever it was.
+    static func orchestrateVerdict(for agent: Agent) -> Bool? {
+        if let report = agent.orchestrateReport { return !report.sentinel.needsHuman }
+        return agent.hasCurrentMessage ? false : nil
     }
 
     static func isClockBearing(_ agent: Agent, cronSessionIds: Set<String>, dismissedClockIds: Set<String>) -> Bool {
@@ -92,6 +135,9 @@ enum BoardModel {
         snoozeUntil: [String: Date],
         cronSessionIds: Set<String>,
         dismissedClockIds: Set<String>,
+        orchestratedIds: Set<String> = [],
+        orchestrateOptedOutIds: Set<String> = [],
+        now: Date = Date(),
         passesFilter: (Agent) -> Bool
     ) -> [BoardColumnData] {
         var cards: [BoardColumn: [BoardCard]] = [:]
@@ -102,7 +148,19 @@ enum BoardModel {
             let effective = Agent.effectiveStatus(of: agent, children: kids)
             let snoozed = snoozedIds.contains(agent.id)
             let clock = isClockBearing(agent, cronSessionIds: cronSessionIds, dismissedClockIds: dismissedClockIds)
-            let column = column(for: agent, effectiveStatus: effective, isSnoozed: snoozed, isClockBearing: clock)
+            let orchestrated = isOrchestrated(
+                agent,
+                orchestratedIds: orchestratedIds,
+                optedOutIds: orchestrateOptedOutIds,
+                now: now
+            )
+            let column = column(
+                for: agent,
+                effectiveStatus: effective,
+                isSnoozed: snoozed,
+                isClockBearing: clock,
+                isOrchestrated: orchestrated
+            )
 
             guard passesFilter(agent) else {
                 hidden[column, default: 0] += 1
@@ -120,7 +178,9 @@ enum BoardModel {
                 enteredAt: enteredAt,
                 children: kids,
                 isClockBearing: clock,
-                snoozeUntil: snoozeUntil[agent.id]
+                snoozeUntil: snoozeUntil[agent.id],
+                orchestrateReport: agent.orchestrateReport,
+                isOrchestrateWorker: orchestratedIds.contains(agent.id)
             ))
         }
 

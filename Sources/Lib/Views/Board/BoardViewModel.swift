@@ -307,6 +307,8 @@ final class BoardViewModel: ObservableObject {
             snoozeUntil: store.snoozeUntil,
             cronSessionIds: store.cronSessionIds,
             dismissedClockIds: store.dismissedClockIds,
+            orchestratedIds: store.orchestratedSessionIds,
+            orchestrateOptedOutIds: store.orchestrateOptedOutIds,
             passesFilter: { [tagStore] agent in tagStore.matchesFilter(sessionId: agent.sessionId) }
         )
     }
@@ -448,6 +450,16 @@ final class BoardViewModel: ObservableObject {
     func unsnooze(_ card: BoardCard) {
         guard let agent = agent(id: card.id) else { return }
         store.unsnooze(agent)
+    }
+
+    /// Takes an orchestrated worker back from its orchestrator, or hands it back.
+    func toggleOrchestrated(_ card: BoardCard) {
+        guard let agent = agent(id: card.id) else { return }
+        if card.column == .orchestrated {
+            store.stopOrchestrating(agent)
+        } else {
+            store.resumeOrchestrating(agent)
+        }
     }
 
     func dismiss(_ card: BoardCard) {
@@ -660,6 +672,10 @@ final class BoardViewModel: ObservableObject {
             }
         case "u":
             if let card = selectedCard, card.column == .snoozed { unsnooze(card) }
+        case "o":
+            if let card = selectedCard, card.column == .orchestrated || card.isOrchestrateWorker {
+                toggleOrchestrated(card)
+            }
         case "m":
             isTagManagerShown = true
         case "c":

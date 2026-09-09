@@ -188,6 +188,8 @@ final class ConductorStore: ObservableObject {
                 snoozeUntil: agentStore.snoozeUntil,
                 cronSessionIds: agentStore.cronSessionIds,
                 dismissedClockIds: agentStore.dismissedClockIds,
+                orchestratedIds: agentStore.orchestratedSessionIds,
+                orchestrateOptedOutIds: agentStore.orchestrateOptedOutIds,
                 passesFilter: { _ in true }
             )
             return Self.waitingCards(in: columns)

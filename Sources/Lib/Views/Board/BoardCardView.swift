@@ -13,6 +13,7 @@ struct BoardCardView: View {
     let onSelect: () -> Void
     let onTagButton: () -> Void
     let onSnoozeButton: () -> Void
+    let onOrchestrateButton: () -> Void
     let onDismiss: () -> Void
 
     @State private var isHovering = false
@@ -94,6 +95,7 @@ struct BoardCardView: View {
                 isGithubTool: agent.isGithubTool,
                 isScheduledWakeup: agent.isScheduledWakeup,
                 isMonitorActive: agent.isMonitorActive,
+                isOrchestrated: card.column == .orchestrated,
                 isInterrupted: agent.isInterrupted,
                 isToolFailure: agent.isToolFailure,
                 isAPIError: agent.isAPIError,
@@ -103,10 +105,18 @@ struct BoardCardView: View {
             .frame(width: 34, height: 32)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 5) {
+                    if card.column == .orchestrated {
+                        Image(systemName: BoardColumn.orchestratedSymbol)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(BoardColumn.orchestrated.color(theme: theme))
+                            .help("Driven by an /orchestrate run")
+                    }
+                    Text(displayName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
                 HStack(spacing: 5) {
                     Circle().fill(statusColor).frame(width: 6, height: 6)
                     Text(statusLabel)
@@ -129,7 +139,13 @@ struct BoardCardView: View {
                     if card.column == .snoozed {
                         iconButton("bell.fill", help: "Unsnooze (S)", action: onSnoozeButton)
                         iconButton("xmark", help: "Dismiss session (⌫)", action: onDismiss)
+                    } else if card.column == .orchestrated {
+                        iconButton("bell.fill", help: "Take back from the orchestrator (O)", action: onOrchestrateButton)
+                        iconButton("moon.fill", help: "Snooze… (S)", action: onSnoozeButton)
                     } else {
+                        if card.isOrchestrateWorker {
+                            iconButton(BoardColumn.orchestratedSymbol, help: "Hand back to the orchestrator (O)", action: onOrchestrateButton)
+                        }
                         iconButton("moon.fill", help: "Snooze… (S)", action: onSnoozeButton)
                     }
                 }
@@ -138,6 +154,10 @@ struct BoardCardView: View {
     }
 
     private var statusLabel: String {
+        if card.column == .orchestrated, let report = card.orchestrateReport {
+            return report.detail.isEmpty ? report.sentinel.label : report.detail
+        }
+        if card.column == .orchestrated { return "Orchestrated" }
         if card.column == .snoozed {
             if let until = card.snoozeUntil {
                 return "Snoozed until \(Self.timeFormatter.string(from: until))"
