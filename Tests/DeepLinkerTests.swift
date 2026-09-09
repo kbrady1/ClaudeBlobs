@@ -41,4 +41,40 @@ struct DeepLinkerTests {
         let agent = Agent.fixture(provider: .openCode, cwd: nil, cmuxWorkspace: nil, cmuxSurface: nil)
         #expect(DeepLinker.linkType(for: agent) == .terminal)
     }
+
+    @Test func focusesExistingDesktopSession() {
+        let agent = Agent.fixture(sessionId: "122c7a92-ff70-4790-bfe0-b097e5c41af7")
+        let route = DesktopLinker.route(
+            for: agent,
+            localSessionId: "local_115a68e0-6cde-4823-9640-d17816cd0692"
+        )
+        #expect(route == .focus(localSessionId: "local_115a68e0-6cde-4823-9640-d17816cd0692"))
+        #expect(
+            route?.url?.absoluteString
+                == "claude://claude.ai/epitaxy/local_115a68e0-6cde-4823-9640-d17816cd0692"
+        )
+    }
+
+    @Test func importsTranscriptWhenDesktopHasNoSession() {
+        let agent = Agent.fixture(sessionId: "0859bda4-73a8-4662-b9cc-c9edecc6a776")
+        let route = DesktopLinker.route(for: agent, localSessionId: nil)
+        #expect(route == .importTranscript(cliSessionId: "0859bda4-73a8-4662-b9cc-c9edecc6a776"))
+        #expect(
+            route?.url?.absoluteString
+                == "claude://resume?session=0859bda4-73a8-4662-b9cc-c9edecc6a776"
+        )
+    }
+
+    @Test func noRouteForNonUUIDSessionIdWithoutDesktopSession() {
+        let agent = Agent.fixture(sessionId: "not-a-uuid")
+        #expect(DesktopLinker.route(for: agent, localSessionId: nil) == nil)
+    }
+
+    @Test func noRouteForOpenCode() {
+        let agent = Agent.fixture(
+            provider: .openCode,
+            sessionId: "0859bda4-73a8-4662-b9cc-c9edecc6a776"
+        )
+        #expect(DesktopLinker.route(for: agent, localSessionId: nil) == nil)
+    }
 }

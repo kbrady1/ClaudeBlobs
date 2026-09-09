@@ -9,7 +9,7 @@ enum LinkType: Equatable {
 }
 
 struct DeepLinker {
-    private static let desktopBundleId = "com.anthropic.claudefordesktop"
+    private static let desktopBundleId = DesktopLinker.bundleId
 
     static func linkType(for agent: Agent) -> LinkType {
         if agent.isCmuxSession { return .cmux }
@@ -47,16 +47,7 @@ struct DeepLinker {
         case .terminal:
             TerminalLinker.activate(agent)
         case .desktop:
-            if let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == desktopBundleId }) {
-                app.unhide()
-                app.activate()
-                DebugLog.shared.log("DeepLinker: activated running Claude Desktop")
-            } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: desktopBundleId) {
-                NSWorkspace.shared.openApplication(at: url, configuration: .init())
-                DebugLog.shared.log("DeepLinker: launched Claude Desktop at \(url)")
-            } else {
-                DebugLog.shared.log("DeepLinker: Claude Desktop not found")
-            }
+            DesktopLinker.activate(agent)
         }
     }
 }
