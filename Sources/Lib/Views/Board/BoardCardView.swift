@@ -106,7 +106,10 @@ struct BoardCardView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
-                    if card.column == .orchestrated {
+                    // A worker the silence clock surfaced sits in a normal
+                    // column but an orchestrator still drives it, so the card
+                    // keeps the marker.
+                    if card.column == .orchestrated || card.isOrchestrateWorker {
                         Image(systemName: BoardColumn.orchestratedSymbol)
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(BoardColumn.orchestrated.color(theme: theme))
@@ -154,15 +157,15 @@ struct BoardCardView: View {
     }
 
     private var statusLabel: String {
-        if card.column == .orchestrated, let report = card.orchestrateReport {
-            return report.detail.isEmpty ? report.sentinel.label : report.detail
+        if card.column == .orchestrated, let unit = card.orchestrateUnit {
+            return unit.label
         }
         if card.column == .orchestrated { return "Orchestrated" }
         if card.column == .snoozed {
             if let until = card.snoozeUntil {
                 return "Snoozed until \(Self.timeFormatter.string(from: until))"
             }
-            return "Snoozed"
+            return card.isSnoozedIndefinitely ? "Snoozed indefinitely" : "Snoozed"
         }
         switch card.effectiveStatus {
         case .waiting:

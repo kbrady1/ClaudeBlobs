@@ -456,6 +456,58 @@ struct HookScriptTests {
             #expect(expiresAt >= before + 300000)
         }
 
+        @Test("ScheduleWakeup records a due time that survives later tool calls")
+        func scheduleWakeupSetsDueTime() throws {
+            let h = try HookTestHelper()
+            let before = Int64(Date().timeIntervalSince1970 * 1000)
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "ScheduleWakeup",
+                "tool_input": ["delaySeconds": 1200, "reason": "next inbox tick", "noop": true],
+            ], existingStatus: makeWorkingStatus())
+            let dueAt = try #require(r.status?["scheduledWakeupAt"] as? Int64 ?? (r.status?["scheduledWakeupAt"] as? Int).map(Int64.init))
+            #expect(dueAt >= before + 1_200_000)
+            #expect(dueAt <= before + 1_200_000 + 5000)
+
+            // The whole point: the rest of the turn must not erase it.
+            let r2 = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "Bash",
+                "tool_input": ["command": "gh pr list"],
+            ], existingStatus: r.status!)
+            let stillDue = try #require(r2.status?["scheduledWakeupAt"] as? Int64 ?? (r2.status?["scheduledWakeupAt"] as? Int).map(Int64.init))
+            #expect(stillDue == dueAt)
+        }
+
+        @Test("ScheduleWakeup stop:true clears the due time")
+        func scheduleWakeupStopClears() throws {
+            let h = try HookTestHelper()
+            var existing = makeWorkingStatus()
+            existing["scheduledWakeupAt"] = 9999999999999
+            let r = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "ScheduleWakeup",
+                "tool_input": ["stop": true],
+            ], existingStatus: existing)
+            #expect(r.status?["scheduledWakeupAt"] == nil || r.status?["scheduledWakeupAt"] is NSNull)
+        }
+
+        @Test("ScheduleWakeup clamps delaySeconds to the runtime's own range")
+        func scheduleWakeupClampsDelay() throws {
+            let h = try HookTestHelper()
+            let before = Int64(Date().timeIntervalSince1970 * 1000)
+            let tooBig = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "ScheduleWakeup",
+                "tool_input": ["delaySeconds": 999999],
+            ], existingStatus: makeWorkingStatus())
+            let cappedAt = try #require(tooBig.status?["scheduledWakeupAt"] as? Int64 ?? (tooBig.status?["scheduledWakeupAt"] as? Int).map(Int64.init))
+            #expect(cappedAt <= before + 3_600_000 + 5000)
+
+            let tooSmall = try h.runHook("hook-pre-tool.sh", input: [
+                "tool_name": "ScheduleWakeup",
+                "tool_input": ["delaySeconds": 1],
+            ], existingStatus: makeWorkingStatus())
+            let flooredAt = try #require(tooSmall.status?["scheduledWakeupAt"] as? Int64 ?? (tooSmall.status?["scheduledWakeupAt"] as? Int).map(Int64.init))
+            #expect(flooredAt >= before + 60_000)
+        }
+
         @Test("TaskStop clears monitorActive and monitorExpiresAt")
         func taskStopClearsMonitorActive() throws {
             let h = try HookTestHelper()

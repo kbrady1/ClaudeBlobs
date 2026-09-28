@@ -418,3 +418,101 @@ struct AgentTests {
         #expect(urgent?.isBashPermission == true)
     }
 }
+
+@Suite("ScheduledWakeup durability")
+struct ScheduledWakeupTests {
+    private var now: Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
+
+    /// The bug this field exists to fix: a /loop session schedules its next
+    /// tick and then keeps working, so lastToolUse names the last tool, not
+    /// ScheduleWakeup.
+    @Test func survivesLaterToolCallsInTheSameTurn() {
+        let agent = Agent.fixture(
+            status: .waiting,
+            lastToolUse: "Bash: gh pr list",
+            waitReason: "done",
+            scheduledWakeupAt: now + 20 * 60 * 1000,
+            updatedAt: now
+        )
+        #expect(agent.isScheduledWakeup)
+    }
+
+    @Test func fallsBackToLastToolUseForOlderStatusFiles() {
+        let agent = Agent.fixture(
+            status: .waiting,
+            lastToolUse: "ScheduleWakeup: {\"delaySeconds\":1200}",
+            waitReason: "done",
+            updatedAt: now
+        )
+        #expect(agent.isScheduledWakeup)
+    }
+
+    @Test func noWakeupMeansNoLoop() {
+        let agent = Agent.fixture(status: .waiting, lastToolUse: "Bash: ls", waitReason: "done", updatedAt: now)
+        #expect(!agent.isScheduledWakeup)
+    }
+
+    /// A loop that never came back is a stalled session, not a quiet one.
+    @Test func goesStaleOnceLongOverdue() {
+        let overdue = Agent.fixture(
+            status: .waiting, waitReason: "done",
+            scheduledWakeupAt: now - (Agent.scheduledWakeupGrace + 60_000),
+            updatedAt: now
+        )
+        #expect(!overdue.isScheduledWakeup)
+
+        // A tick that is merely late still counts as pending.
+        let slightlyLate = Agent.fixture(
+            status: .waiting, waitReason: "done",
+            scheduledWakeupAt: now - 60_000,
+            updatedAt: now
+        )
+        #expect(slightlyLate.isScheduledWakeup)
+    }
+
+    /// The end-to-end behaviour the user reported: a green (waiting+done) loop
+    /// session with a pending wake-up is hidden from the HUD.
+    @Test func aQuietLoopSessionIsHidden() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wakeup-hide-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let store = AgentStore(statusDirectory: dir, enableWatcher: false, isProcessAlive: { _ in true })
+        let looper = Agent.fixture(
+            sessionId: "inbox",
+            status: .waiting,
+            lastToolUse: "Bash: gh pr list",
+            waitReason: "done",
+            scheduledWakeupAt: now + 20 * 60 * 1000,
+            updatedAt: now
+        )
+        try JSONEncoder().encode(looper).write(to: dir.appendingPathComponent("inbox.json"))
+        store.reload()
+
+        #expect(store.cronIsQuiet(looper))
+        #expect(!store.collapsedAgents.contains { $0.id == looper.id })
+    }
+
+    /// A loop session that hit an error still reaches the developer.
+    @Test func aFailedLoopSessionIsNotHidden() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wakeup-fail-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let store = AgentStore(statusDirectory: dir, enableWatcher: false, isProcessAlive: { _ in true })
+        let failed = Agent.fixture(
+            sessionId: "inbox",
+            status: .waiting,
+            waitReason: "done",
+            toolFailure: "gh: exit 1",
+            scheduledWakeupAt: now + 20 * 60 * 1000,
+            updatedAt: now
+        )
+        try JSONEncoder().encode(failed).write(to: dir.appendingPathComponent("inbox.json"))
+        store.reload()
+
+        #expect(!store.cronIsQuiet(failed))
+    }
+}

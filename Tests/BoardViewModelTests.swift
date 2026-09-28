@@ -89,8 +89,8 @@ struct BoardViewModelTests {
     }
 
     @Test func snoozeMenuStartsOnUntilNextMessage() {
-        #expect(SnoozeDuration.allCases.first == .indefinite)
-        #expect(SnoozeDuration.indefinite.label == "Until next message")
+        #expect(SnoozeDuration.allCases.first == .untilNextMessage)
+        #expect(SnoozeDuration.untilNextMessage.label == "Until next message")
     }
 
     @Test func escapeSemanticsPerMode() {

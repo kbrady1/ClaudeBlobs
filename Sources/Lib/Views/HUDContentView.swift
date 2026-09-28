@@ -174,6 +174,7 @@ struct HUDContentView: View {
                 inFlightIds: store.conductorDemotedIds,
                 orchestratedIds: Set(store.agents.filter { store.isOrchestrated($0) }.map(\.id)),
                 snoozeUntil: store.snoozeUntil,
+                indefiniteSnoozeIds: store.indefiniteSnoozeIds,
                 notifiedIds: ntfyScheduler.notifiedSessionIds,
                 childAgents: resolvedChildren,
                 selectedIndex: expansionState.isKeyboardExpanded ? expansionState.selectedIndex : nil,

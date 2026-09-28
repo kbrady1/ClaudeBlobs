@@ -18,67 +18,50 @@ struct OrchestrateTests {
         )
     }
 
-    // MARK: - Sentinel parsing
-
-    @Test func parsesEachSentinel() {
-        #expect(OrchestrateReport.parse("ORCHESTRATE-STATUS running the tests")
-            == OrchestrateReport(sentinel: .status, detail: "running the tests"))
-        #expect(OrchestrateReport.parse("ORCHESTRATE-BLOCKED no Android SDK")?.sentinel == .blocked)
-        #expect(OrchestrateReport.parse("ORCHESTRATE-QUESTION which AVD?")?.sentinel == .question)
-        #expect(OrchestrateReport.parse("ORCHESTRATE-PLAN-READY /tmp/plan.md")?.sentinel == .planReady)
-        #expect(OrchestrateReport.parse("ORCHESTRATE-PR https://github.com/x/y/pull/1")?.sentinel == .pr)
-        #expect(OrchestrateReport.parse("ORCHESTRATE-DONE shipped")?.sentinel == .done)
-    }
-
-    @Test func planReadyWinsOverPrefixMatch() {
-        #expect(OrchestrateReport.parse("ORCHESTRATE-PLAN-READY /tmp/plan.md")?.detail == "/tmp/plan.md")
-    }
-
-    @Test func ignoresUnknownToken() {
-        #expect(OrchestrateReport.parse("ORCHESTRATE-PRIVATE something") == nil)
-        #expect(OrchestrateReport.parse("no sentinel here") == nil)
-    }
-
-    @Test func takesLastSentinelAndStripsDecoration() {
-        let text = """
-        ORCHESTRATE-STATUS reading the ticket
-        Some prose in between.
-        **ORCHESTRATE-STATUS opening the pull request**
-        """
-        #expect(OrchestrateReport.parse(text)?.detail == "opening the pull request")
-    }
-
-    // MARK: - Per-turn verdict
-
-    @Test func sentinelTurnMarksTheSessionOrchestrated() {
-        #expect(BoardModel.orchestrateVerdict(for: worker(lastMessage: "ORCHESTRATE-STATUS building")) == true)
-    }
-
-    @Test func blockedTurnHandsTheSessionBack() {
-        #expect(BoardModel.orchestrateVerdict(for: worker(lastMessage: "ORCHESTRATE-BLOCKED no SDK")) == false)
-    }
-
-    @Test func turnWithoutASentinelHandsTheSessionBack() {
-        #expect(BoardModel.orchestrateVerdict(for: worker(lastMessage: "Refactored the parser.")) == false)
-    }
-
-    @Test func clearedMessageCarriesNoVerdict() {
-        #expect(BoardModel.orchestrateVerdict(for: worker()) == nil)
-    }
-
     // MARK: - Column placement
 
-    private func isOrchestrated(_ agent: Agent, optedOut: Set<String> = []) -> Bool {
+    private func isOrchestrated(
+        _ agent: Agent,
+        optedOut: Set<String> = [],
+        effectiveStatus: AgentStatus? = nil
+    ) -> Bool {
         BoardModel.isOrchestrated(
             agent,
             orchestratedIds: [agent.id],
             optedOutIds: optedOut,
-            silenceThreshold: 30 * 60
+            effectiveStatus: effectiveStatus,
+            silenceThreshold: 60 * 60
         )
     }
 
+    @Test func permissionSurfaces() {
+        let asking = Agent.fixture(status: .permission)
+        #expect(!isOrchestrated(asking))
+    }
+
+    /// A worker whose child subagent is asking for permission surfaces too:
+    /// the effective status carries the child's prompt up to the parent.
+    @Test func childPermissionSurfaces() {
+        #expect(!isOrchestrated(worker(), effectiveStatus: .permission))
+    }
+
+    @Test func permissionWorkerLandsInNeedsAttention() {
+        let asking = Agent.fixture(status: .permission)
+        let columns = BoardModel.build(
+            agents: [asking],
+            children: { _ in [] },
+            snoozedIds: [], snoozedAt: [:], snoozeUntil: [:],
+            cronSessionIds: [], dismissedClockIds: [],
+            orchestratedIds: [asking.id],
+            passesFilter: { _ in true }
+        )
+        let card = columns.flatMap(\.cards).first { $0.agent.id == asking.id }
+        #expect(card?.column == .needsAttention)
+        #expect(card?.isOrchestrateWorker == true)
+    }
+
     @Test func workingWorkerParksInOrchestratedColumn() {
-        let agent = worker(lastMessage: "ORCHESTRATE-STATUS running the tests")
+        let agent = worker()
         #expect(isOrchestrated(agent))
         #expect(BoardModel.column(
             for: agent, effectiveStatus: .working, isSnoozed: false,
@@ -86,43 +69,59 @@ struct OrchestrateTests {
         ) == .orchestrated)
     }
 
-    @Test func questionStaysWithTheOrchestrator() {
-        #expect(isOrchestrated(worker(lastMessage: "ORCHESTRATE-QUESTION which AVD should I name?")))
+    /// The orchestrator answers its own workers, so nothing a worker writes in
+    /// its message pulls it back onto the board.
+    @Test func workerOutputNeverSurfacesTheSession() {
+        #expect(isOrchestrated(worker(lastMessage: "ORCHESTRATE-BLOCKED the worktree is gone")))
+        #expect(isOrchestrated(worker(lastMessage: "ORCHESTRATE-DONE shipped")))
+        #expect(isOrchestrated(worker(lastMessage: "Refactored the parser.")))
     }
 
-    @Test func blockedSurfaces() {
-        #expect(!isOrchestrated(worker(lastMessage: "ORCHESTRATE-BLOCKED the worktree is gone")))
-    }
-
-    @Test func doneSurfaces() {
-        #expect(!isOrchestrated(worker(lastMessage: "ORCHESTRATE-DONE shipped")))
-    }
-
-    @Test func toolFailureSurfaces() {
-        #expect(!isOrchestrated(worker(lastMessage: "ORCHESTRATE-STATUS building", toolFailure: "error")))
+    /// A failed tool is the worker's problem to report to its orchestrator.
+    @Test func toolFailureStaysWithTheOrchestrator() {
+        #expect(isOrchestrated(worker(toolFailure: "error")))
     }
 
     @Test func silenceSurfaces() {
-        let quiet = worker(lastMessage: "ORCHESTRATE-STATUS building", ageSeconds: 31 * 60)
-        #expect(!isOrchestrated(quiet))
-        let recent = worker(lastMessage: "ORCHESTRATE-STATUS building", ageSeconds: 5 * 60)
-        #expect(isOrchestrated(recent))
+        #expect(!isOrchestrated(worker(ageSeconds: 61 * 60)))
+        #expect(isOrchestrated(worker(ageSeconds: 45 * 60)))
+    }
+
+    @Test func silenceThresholdDefaultsToAnHour() {
+        UserDefaults.standard.removeObject(forKey: "orchestrateSilenceMinutes")
+        #expect(Agent.orchestrateSilenceThreshold == 60 * 60)
+    }
+
+    /// The card reads `isOrchestrateWorker` to keep the orchestrated marker on
+    /// a worker the silence clock pushed into a normal column.
+    @Test func surfacedWorkerStaysMarkedAsAWorker() {
+        let quiet = worker(ageSeconds: 61 * 60)
+        let columns = BoardModel.build(
+            agents: [quiet],
+            children: { _ in [] },
+            snoozedIds: [], snoozedAt: [:], snoozeUntil: [:],
+            cronSessionIds: [], dismissedClockIds: [],
+            orchestratedIds: [quiet.id],
+            passesFilter: { _ in true }
+        )
+        let card = columns.flatMap(\.cards).first { $0.agent.id == quiet.id }
+        #expect(card?.column != .orchestrated)
+        #expect(card?.isOrchestrateWorker == true)
     }
 
     @Test func optOutSurfaces() {
-        let agent = worker(lastMessage: "ORCHESTRATE-STATUS building")
+        let agent = worker()
         #expect(!isOrchestrated(agent, optedOut: [agent.id]))
     }
 
     @Test func snoozeWinsOverOrchestrated() {
-        let agent = worker(lastMessage: "ORCHESTRATE-STATUS building")
         #expect(BoardModel.column(
-            for: agent, effectiveStatus: .working, isSnoozed: true,
+            for: worker(), effectiveStatus: .working, isSnoozed: true,
             isClockBearing: false, isOrchestrated: true
         ) == .snoozed)
     }
 
-    // MARK: - Store tracking across turns
+    // MARK: - Store tracking
 
     private func store(in dir: URL) -> AgentStore {
         AgentStore(statusDirectory: dir, enableWatcher: false, isProcessAlive: { _ in true })
@@ -132,9 +131,11 @@ struct OrchestrateTests {
         try JSONEncoder().encode(agent).write(to: dir.appendingPathComponent("\(agent.sessionId).json"))
     }
 
-    @Test func aToolCallKeepsTheVerdictButAPlainTurnClearsIt() throws {
+    /// Without a registry claiming the terminal, no session is orchestrated —
+    /// whatever the session's own message says.
+    @Test func registryIsTheOnlySourceOfTruth() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("orchestrate-turns-\(UUID().uuidString)")
+            .appendingPathComponent("orchestrate-registry-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = store(in: dir)
@@ -142,49 +143,11 @@ struct OrchestrateTests {
         let reporting = worker(lastMessage: "ORCHESTRATE-STATUS running the tests")
         try write(reporting, to: dir)
         store.reload()
-        #expect(store.isOrchestrated(reporting))
-
-        // Mid-turn: the hooks nulled the message. The verdict must hold.
-        let midTurn = worker()
-        try write(midTurn, to: dir)
-        store.reload()
-        #expect(store.isOrchestrated(midTurn))
-
-        // A turn with no sentinel hands the session back for good.
-        let plain = worker(lastMessage: "Refactored the parser.")
-        try write(plain, to: dir)
-        store.reload()
-        #expect(!store.isOrchestrated(plain))
-
-        try write(midTurn, to: dir)
-        store.reload()
-        #expect(!store.isOrchestrated(midTurn))
+        #expect(!store.isOrchestrated(reporting))
     }
 
-    @Test func doneStaysClearedAfterTheSentinelIsGone() throws {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("orchestrate-done-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let store = store(in: dir)
-
-        try write(worker(lastMessage: "ORCHESTRATE-STATUS building"), to: dir)
-        store.reload()
-
-        let done = worker(lastMessage: "ORCHESTRATE-DONE shipped")
-        try write(done, to: dir)
-        store.reload()
-        #expect(!store.isOrchestrated(done))
-
-        // The next tool call clears the message; the session must stay surfaced.
-        let after = worker()
-        try write(after, to: dir)
-        store.reload()
-        #expect(!store.isOrchestrated(after))
-    }
-
-    @Test func buildPlacesWorkerCardWithItsReport() {
-        let agent = worker(lastMessage: "ORCHESTRATE-STATUS running the tests")
+    @Test func buildPlacesWorkerCardInTheOrchestratedColumn() {
+        let agent = worker()
         let columns = BoardModel.build(
             agents: [agent],
             children: { _ in [] },
@@ -199,6 +162,6 @@ struct OrchestrateTests {
         )
         let cards = columns.first { $0.column == .orchestrated }?.cards ?? []
         #expect(cards.count == 1)
-        #expect(cards.first?.orchestrateReport?.detail == "running the tests")
+        #expect(cards.first?.agent.id == agent.id)
     }
 }

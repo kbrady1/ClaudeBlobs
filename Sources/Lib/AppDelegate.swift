@@ -40,6 +40,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var boardController: BoardWindowController!
     private var historyStore: SessionHistoryStore!
     private var conductorStore: ConductorStore!
+    private var orchestrateStore: OrchestrateStore!
     private var eventHandlerInstalled = false
     private var cancellables = Set<AnyCancellable>()
     private var hideWhileCollapsedMenuItem: NSMenuItem!
@@ -71,6 +72,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         soundConfig = SoundConfig()
         soundPlayer = SoundPlayer(config: soundConfig)
         store.soundPlayer = soundPlayer
+        orchestrateStore = OrchestrateStore()
+        store.orchestrateStore = orchestrateStore
         tagStore = TagStore()
         tagInference = TagInferenceCoordinator(agentStore: store, tagStore: tagStore)
         tagInference.start()
@@ -306,6 +309,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         reinstallItem.target = self
         menu.addItem(reinstallItem)
 
+        let addLocationItem = NSMenuItem(title: "Add Claude Config Location…", action: #selector(addHookConfigLocation), keyEquivalent: "")
+        addLocationItem.target = self
+        menu.addItem(addLocationItem)
+
         let openCodeItem = NSMenuItem(title: "Reinstall OpenCode Plugin", action: #selector(installOpenCodePlugin), keyEquivalent: "")
         openCodeItem.target = self
         menu.addItem(openCodeItem)
@@ -320,7 +327,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Always reinstall hooks in debug builds so dev changes take effect
         #if DEBUG
-        try? HookInstaller().install()
+        HookInstaller.installAll()
         #endif
 
         // First launch: confirm and install hooks
@@ -341,6 +348,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             do {
                 try HookInstaller().install()
+                HookInstaller.installAll()
                 try FileManager.default.createDirectory(
                     at: AgentProvider.claudeCode.statusDirectory,
                     withIntermediateDirectories: true
@@ -380,6 +388,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if alert.runModal() == .alertFirstButtonReturn {
                     do {
                         try HookInstaller().install()
+                        HookInstaller.installAll()
                         try fm.createDirectory(
                             at: AgentProvider.claudeCode.statusDirectory,
                             withIntermediateDirectories: true
@@ -406,7 +415,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             // Silently update existing installations (e.g. new hook paths after app update)
             if UserDefaults.standard.bool(forKey: "claudeHooksInstalled") {
-                try? HookInstaller().install()
+                HookInstaller.installAll()
             }
             if UserDefaults.standard.bool(forKey: "openCodeHooksInstalled") {
                 try? OpenCodeInstaller().install()
@@ -1122,14 +1131,51 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do {
             try HookInstaller().install()
             UserDefaults.standard.set(true, forKey: "claudeHooksInstalled")
+            let failures = HookInstaller.installAll()
             let alert = NSAlert()
             alert.messageText = "Claude Code hooks reinstalled"
+            if !failures.isEmpty {
+                let paths = failures.map { $0.0.path }.joined(separator: "\n")
+                alert.informativeText = "Failed for:\n\(paths)"
+            }
             alert.runModal()
         } catch {
             let alert = NSAlert()
             alert.messageText = "Failed to reinstall hooks"
             alert.informativeText = error.localizedDescription
             alert.runModal()
+        }
+    }
+
+    @objc private func addHookConfigLocation() {
+        let alert = NSAlert()
+        alert.messageText = "Add Claude Code config location"
+        alert.informativeText = "Enter the path to a settings.json file (e.g. for a second CLAUDE_CONFIG_DIR profile). ClaudeBlobs hooks will be installed there too."
+        alert.addButton(withTitle: "Add")
+        alert.addButton(withTitle: "Cancel")
+
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+        input.placeholderString = "~/.claude-neighbor/settings.json"
+        alert.accessoryView = input
+        alert.window.initialFirstResponder = input
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let raw = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return }
+
+        let path = URL(fileURLWithPath: (raw as NSString).expandingTildeInPath)
+        do {
+            try HookConfigLocations().addExtraSettingsPath(path)
+            try HookInstaller(settingsPath: path).install()
+            let confirm = NSAlert()
+            confirm.messageText = "Config location added"
+            confirm.informativeText = "ClaudeBlobs hooks installed at \(path.path)."
+            confirm.runModal()
+        } catch {
+            let failAlert = NSAlert()
+            failAlert.messageText = "Failed to add config location"
+            failAlert.informativeText = error.localizedDescription
+            failAlert.runModal()
         }
     }
 

@@ -305,10 +305,12 @@ final class BoardViewModel: ObservableObject {
             snoozedIds: store.snoozedSessionIds,
             snoozedAt: store.snoozedAt,
             snoozeUntil: store.snoozeUntil,
+            indefiniteSnoozeIds: store.indefiniteSnoozeIds,
             cronSessionIds: store.cronSessionIds,
             dismissedClockIds: store.dismissedClockIds,
             orchestratedIds: store.orchestratedSessionIds,
             orchestrateOptedOutIds: store.orchestrateOptedOutIds,
+            orchestrateUnits: store.orchestrateUnits,
             passesFilter: { [tagStore] agent in tagStore.matchesFilter(sessionId: agent.sessionId) }
         )
     }

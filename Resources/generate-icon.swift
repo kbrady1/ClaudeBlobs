@@ -72,44 +72,63 @@ guard CommandLine.arguments.count > 1 else {
 let outputPath = CommandLine.arguments[1]
 let outputURL = URL(fileURLWithPath: outputPath)
 
-let sizes: [(Int, String)] = [
-    (16, "16x16"),
-    (32, "16x16@2x"),
-    (32, "32x32"),
-    (64, "32x32@2x"),
-    (128, "128x128"),
-    (256, "128x128@2x"),
-    (256, "256x256"),
-    (512, "256x256@2x"),
-    (512, "512x512"),
-    (1024, "512x512@2x"),
+// ICNS element type for each rendered pixel size. The file is written directly
+// because `iconutil` rejects every iconset on some macOS releases (26.7).
+let elements: [(px: Int, type: String)] = [
+    (16, "icp4"),    // 16x16
+    (32, "icp5"),    // 32x32
+    (32, "ic11"),    // 16x16@2x
+    (64, "icp6"),    // 64x64
+    (64, "ic12"),    // 32x32@2x
+    (128, "ic07"),   // 128x128
+    (256, "ic08"),   // 256x256
+    (256, "ic13"),   // 128x128@2x
+    (512, "ic09"),   // 512x512
+    (512, "ic14"),   // 256x256@2x
+    (1024, "ic10"),  // 512x512@2x
 ]
 
-let iconsetURL = outputURL.deletingLastPathComponent().appendingPathComponent("AppIcon.iconset")
-try FileManager.default.createDirectory(at: iconsetURL, withIntermediateDirectories: true)
-
-for (px, name) in sizes {
-    let image = drawIcon(size: CGFloat(px))
-    guard let tiff = image.tiffRepresentation,
-          let rep = NSBitmapImageRep(data: tiff),
-          let png = rep.representation(using: .png, properties: [:]) else {
-        fputs("Failed to render \(name)\n", stderr)
-        exit(1)
-    }
-    try png.write(to: iconsetURL.appendingPathComponent("icon_\(name).png"))
+func bigEndian(_ value: UInt32) -> Data {
+    withUnsafeBytes(of: value.bigEndian) { Data($0) }
 }
 
-let process = Process()
-process.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
-process.arguments = ["-c", "icns", iconsetURL.path, "-o", outputURL.path]
-try process.run()
-process.waitUntilExit()
+var pngCache: [Int: Data] = [:]
+var body = Data()
+for (px, type) in elements {
+    if pngCache[px] == nil {
+        // Draw into an explicit bitmap so the pixel size does not depend on the screen scale.
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px,
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                         isPlanar: false, colorSpaceName: .deviceRGB,
+                                         bytesPerRow: 0, bitsPerPixel: 0) else {
+            fputs("Failed to create bitmap for \(px)px\n", stderr)
+            exit(1)
+        }
+        rep.size = NSSize(width: px, height: px)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        drawIcon(size: CGFloat(px)).draw(in: NSRect(x: 0, y: 0, width: px, height: px))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let png = rep.representation(using: .png, properties: [:]) else {
+            fputs("Failed to render \(px)px\n", stderr)
+            exit(1)
+        }
+        pngCache[px] = png
+    }
+    let png = pngCache[px]!
+    body.append(type.data(using: .ascii)!)
+    body.append(bigEndian(UInt32(8 + png.count)))
+    body.append(png)
+}
 
-try? FileManager.default.removeItem(at: iconsetURL)
+var icns = "icns".data(using: .ascii)!
+icns.append(bigEndian(UInt32(8 + body.count)))
+icns.append(body)
 
-if process.terminationStatus == 0 {
+do {
+    try icns.write(to: outputURL)
     print("Generated \(outputPath)")
-} else {
-    fputs("iconutil failed with status \(process.terminationStatus)\n", stderr)
+} catch {
+    fputs("Failed to write \(outputPath): \(error)\n", stderr)
     exit(1)
 }

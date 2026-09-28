@@ -10,8 +10,10 @@ struct AgentStatusSource: Equatable {
 final class AgentStore: ObservableObject {
     @Published var agents: [Agent] = []
     @Published var snoozedSessionIds: Set<String> = []
-    /// Wake time for timed snoozes. Absent for indefinite snoozes and unsnoozed agents.
+    /// Wake time for timed snoozes. Absent for untimed snoozes and unsnoozed agents.
     @Published var snoozeUntil: [String: Date] = [:]
+    /// Snoozes that a status change does not end. Only a manual wake ends them.
+    @Published var indefiniteSnoozeIds: Set<String> = []
     @Published var snoozedAt: [String: Date] = [:]
     private var snoozeTimers: [String: DispatchWorkItem] = [:]
     /// Session IDs that have an active cron/loop schedule. Persisted across launches.
@@ -38,6 +40,23 @@ final class AgentStore: ObservableObject {
 
     var ntfyScheduler: NtfyScheduler?
     var soundPlayer: SoundPlayer?
+
+    /// Reads which sessions an `/orchestrate` run is driving. Set by the app at
+    /// launch; nil in tests that do not exercise orchestration.
+    /// Assigned after `init`, so the first `reload()` runs without it. Re-joining
+    /// here is what claims the workers that first pass could not see a unit for.
+    var orchestrateStore: OrchestrateStore? {
+        didSet {
+            applyOrchestrateSnapshot(to: agents)
+            orchestrateSubscription = orchestrateStore?.$snapshot
+                .receive(on: RunLoop.main)
+                .sink { [weak self] _ in
+                    guard let self else { return }
+                    self.applyOrchestrateSnapshot(to: self.agents)
+                }
+        }
+    }
+    private var orchestrateSubscription: AnyCancellable?
 
     private let statusSources: [AgentStatusSource]
     private var watchers: [StatusFileWatcher] = []
@@ -179,12 +198,17 @@ final class AgentStore: ObservableObject {
         return true
     }
 
-    func snooze(_ agent: Agent, for duration: SnoozeDuration = .indefinite) {
+    func snooze(_ agent: Agent, for duration: SnoozeDuration = .untilNextMessage) {
         snoozeTimers[agent.id]?.cancel()
         snoozeTimers.removeValue(forKey: agent.id)
         snoozedSessionIds.insert(agent.id)
         snoozedAt[agent.id] = Date()
         ntfyScheduler?.cancelPending(for: agent.id)
+        if duration == .indefinite {
+            indefiniteSnoozeIds.insert(agent.id)
+        } else {
+            indefiniteSnoozeIds.remove(agent.id)
+        }
 
         guard let wakeDate = duration.wakeDate() else {
             snoozeUntil.removeValue(forKey: agent.id)
@@ -207,6 +231,7 @@ final class AgentStore: ObservableObject {
         snoozedSessionIds.remove(agent.id)
         snoozedAt.removeValue(forKey: agent.id)
         snoozeUntil.removeValue(forKey: agent.id)
+        indefiniteSnoozeIds.remove(agent.id)
         snoozeTimers[agent.id]?.cancel()
         snoozeTimers.removeValue(forKey: agent.id)
     }
@@ -229,10 +254,15 @@ final class AgentStore: ObservableObject {
         }
     }
 
-    /// Sessions whose last turn reported to an orchestrator. Set from the
-    /// sentinel on each turn as it lands, and cleared by the first turn that
-    /// carries no sentinel.
+    /// Sessions an `/orchestrate` run is driving, joined from the run's own
+    /// shared state by Superset terminal id. Refreshed by `OrchestrateStore`
+    /// on every registry change. The registry is the only source: a session's
+    /// own output never decides whether an orchestrator is driving it.
     @Published var orchestratedSessionIds: Set<String> = []
+
+    /// The unit driving each orchestrated session, keyed by `Agent.id`. Carries
+    /// the ticket and stage the board and the Conductor show.
+    @Published var orchestrateUnits: [String: OrchestrateUnit] = [:]
 
     /// Sessions the developer has taken back from their orchestrator by hand.
     /// Such a session is treated as an ordinary session again until the
@@ -246,8 +276,50 @@ final class AgentStore: ObservableObject {
         BoardModel.isOrchestrated(
             agent,
             orchestratedIds: orchestratedSessionIds,
-            optedOutIds: orchestrateOptedOutIds
+            optedOutIds: orchestrateOptedOutIds,
+            unit: orchestrateUnits[agent.id],
+            effectiveStatus: effectiveStatus(of: agent)
         )
+    }
+
+    /// The `/orchestrate` unit driving this session, when one does.
+    func orchestrateUnit(for agent: Agent) -> OrchestrateUnit? {
+        orchestrateUnits[agent.id]
+    }
+
+    /// Joins the current registry snapshot onto the loaded sessions.
+    ///
+    /// A session is orchestrated when a live run claims its Superset terminal
+    /// and the unit is still being driven. A unit that has merged, been dropped
+    /// or been paused hands its worker back to the developer, so it falls out
+    /// of the set here and the developer's own opt-out is cleared with it.
+    private func applyOrchestrateSnapshot(to loaded: [Agent]) {
+        var units: [String: OrchestrateUnit] = [:]
+        var next: Set<String> = []
+
+        for agent in loaded {
+            guard let unit = orchestrateStore?.snapshot.unit(forTerminal: agent.supersetTerminal) else { continue }
+            units[agent.id] = unit
+            if unit.isDriven { next.insert(agent.id) }
+        }
+
+        // A worker handed back is no longer opted out of anything.
+        for id in orchestrateOptedOutIds.subtracting(next) {
+            orchestrateOptedOutIds.remove(id)
+        }
+
+        if orchestrateUnits != units { orchestrateUnits = units }
+        if orchestratedSessionIds != next {
+            let added = next.subtracting(orchestratedSessionIds)
+            let removed = orchestratedSessionIds.subtracting(next)
+            for id in added {
+                DebugLog.shared.log("Orchestrate claimed \(id): \(units[id]?.label ?? "no unit")")
+            }
+            for id in removed {
+                DebugLog.shared.log("Orchestrate released \(id): \(units[id]?.label ?? "no live run")")
+            }
+            orchestratedSessionIds = next
+        }
     }
 
     /// Takes an orchestrated worker back: it returns to its normal column and
@@ -284,6 +356,7 @@ final class AgentStore: ObservableObject {
 
     func setStatusOverride(_ status: AgentStatus, for agent: Agent) {
         snoozedSessionIds.remove(agent.id)
+        indefiniteSnoozeIds.remove(agent.id)
         statusOverrides[agent.id] = status
         statusOverrideAnchors[agent.id] = rawStatusByAgentId[agent.id] ?? agent.status
     }
@@ -572,20 +645,7 @@ final class AgentStore: ObservableObject {
             }
         }
 
-        // Read each turn's orchestrate verdict as it lands. A turn with a
-        // sentinel marks the session orchestrated (or, for BLOCKED and DONE,
-        // hands it back); the first turn without one makes it an ordinary
-        // session again. A turn mid-tool-call carries no message at all, so it
-        // says nothing and the session keeps its verdict.
-        for agent in loaded {
-            guard let verdict = BoardModel.orchestrateVerdict(for: agent) else { continue }
-            if verdict {
-                orchestratedSessionIds.insert(agent.id)
-            } else {
-                orchestratedSessionIds.remove(agent.id)
-                orchestrateOptedOutIds.remove(agent.id)
-            }
-        }
+        applyOrchestrateSnapshot(to: loaded)
 
         // Unsnooze agents whose status changed and trigger peek.
         // Also unsnooze when a new turn lands in an alerting status
@@ -604,7 +664,7 @@ final class AgentStore: ObservableObject {
                 return current > previous
             }()
             if statusChanged || turnAdvanced {
-                if snoozedSessionIds.contains(agent.id) {
+                if snoozedSessionIds.contains(agent.id) && !indefiniteSnoozeIds.contains(agent.id) {
                     unsnooze(agent)
                 }
                 changedIds.insert(agent.id)
@@ -655,6 +715,7 @@ final class AgentStore: ObservableObject {
         let activeIds = Set(loaded.map(\.id))
         let activeSessionIds = Set(loaded.map(\.sessionId))
         snoozedSessionIds = snoozedSessionIds.intersection(activeIds)
+        indefiniteSnoozeIds = indefiniteSnoozeIds.intersection(activeIds)
         for staleId in snoozeUntil.keys where !activeIds.contains(staleId) {
             snoozeTimers[staleId]?.cancel()
             snoozeTimers.removeValue(forKey: staleId)
@@ -665,6 +726,7 @@ final class AgentStore: ObservableObject {
         dismissedClockIds = dismissedClockIds.intersection(activeIds)
         orchestratedSessionIds = orchestratedSessionIds.intersection(activeIds)
         orchestrateOptedOutIds = orchestrateOptedOutIds.intersection(activeIds)
+        orchestrateUnits = orchestrateUnits.filter { activeIds.contains($0.key) }
         lastSeenStatus = lastSeenStatus.filter { activeIds.contains($0.key) }
         lastSeenStatusChangedAt = lastSeenStatusChangedAt.filter { activeIds.contains($0.key) }
         ntfyScheduler?.cleanupGone(activeIds: activeIds)

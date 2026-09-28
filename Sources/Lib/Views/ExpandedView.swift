@@ -11,6 +11,7 @@ struct ExpandedView: View {
     /// badged with the orchestrated accent icon.
     var orchestratedIds: Set<String> = []
     var snoozeUntil: [String: Date] = [:]
+    var indefiniteSnoozeIds: Set<String> = []
     var notifiedIds: Set<String> = []
     var childAgents: [String: [Agent]] = [:]
     let selectedIndex: Int?
@@ -320,6 +321,7 @@ struct ExpandedView: View {
     }
 
     private func snoozeHelpText(for agent: Agent) -> String {
+        if indefiniteSnoozeIds.contains(agent.id) { return "Snoozed indefinitely" }
         guard let wakeDate = snoozeUntil[agent.id] else { return "Snoozed until the next message" }
         let formatter = DateFormatter()
         formatter.dateStyle = .none

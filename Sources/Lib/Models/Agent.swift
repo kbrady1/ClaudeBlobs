@@ -99,6 +99,10 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
     /// alone can't be trusted past it. Nil for persistent Monitors (no timeout)
     /// or when no Monitor is active.
     var monitorExpiresAt: Int64?
+    /// When this session's self-paced `/loop` wake-up is due (epoch ms), or nil
+    /// when no loop is running. Set durably by the hooks on `ScheduleWakeup`,
+    /// since `lastToolUse` is overwritten by the rest of the turn.
+    var scheduledWakeupAt: Int64?
     var taskCompletedAt: Int64?
     var firstPrompt: String?
     var pendingQuestions: [AskQuestion]?
@@ -129,6 +133,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         toolFailure: String? = nil,
         monitorActive: Bool = false,
         monitorExpiresAt: Int64? = nil,
+        scheduledWakeupAt: Int64? = nil,
         taskCompletedAt: Int64? = nil,
         firstPrompt: String? = nil,
         pendingQuestions: [AskQuestion]? = nil,
@@ -156,6 +161,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         self.toolFailure = toolFailure
         self.monitorActive = monitorActive
         self.monitorExpiresAt = monitorExpiresAt
+        self.scheduledWakeupAt = scheduledWakeupAt
         self.taskCompletedAt = taskCompletedAt
         self.firstPrompt = firstPrompt
         self.pendingQuestions = pendingQuestions
@@ -186,6 +192,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         case toolFailure
         case monitorActive
         case monitorExpiresAt
+        case scheduledWakeupAt
         case taskCompletedAt
         case firstPrompt
         case pendingQuestions
@@ -217,6 +224,7 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         toolFailure = try container.decodeIfPresent(String.self, forKey: .toolFailure)
         monitorActive = try container.decodeIfPresent(Bool.self, forKey: .monitorActive) ?? false
         monitorExpiresAt = try container.decodeIfPresent(Int64.self, forKey: .monitorExpiresAt)
+        scheduledWakeupAt = try container.decodeIfPresent(Int64.self, forKey: .scheduledWakeupAt)
         taskCompletedAt = try container.decodeIfPresent(Int64.self, forKey: .taskCompletedAt)
         firstPrompt = try container.decodeIfPresent(String.self, forKey: .firstPrompt)
         pendingQuestions = try? container.decodeIfPresent([AskQuestion].self, forKey: .pendingQuestions)
@@ -602,10 +610,29 @@ struct Agent: Codable, Identifiable, Equatable, Sendable {
         lastToolUse?.hasPrefix("CronDelete") == true
     }
 
-    /// Whether the last tool use was ScheduleWakeup (a self-paced /loop sleep).
+    /// Whether a self-paced `/loop` wake-up is pending for this session.
+    ///
+    /// Reads the durable `scheduledWakeupAt` the hooks set, not `lastToolUse`:
+    /// a loop session schedules its next tick and then keeps working, so by the
+    /// end of the turn `lastToolUse` names whatever ran last. The `lastToolUse`
+    /// check stays as a fallback for a session whose status file predates the
+    /// durable flag.
+    ///
+    /// The flag goes stale once the wake-up is overdue by more than
+    /// `scheduledWakeupGrace` — a loop that never came back is a stalled
+    /// session the developer should see, not one to keep hiding.
     var isScheduledWakeup: Bool {
-        lastToolUse?.hasPrefix("ScheduleWakeup") == true
+        if let due = scheduledWakeupAt {
+            let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+            return nowMs < due + Self.scheduledWakeupGrace
+        }
+        return lastToolUse?.hasPrefix("ScheduleWakeup") == true
     }
+
+    /// How long past its due time a scheduled wake-up still counts as pending.
+    /// A tick fires a little late under load; a loop that is an hour overdue is
+    /// not late, it is gone.
+    static let scheduledWakeupGrace: Int64 = 60 * 60 * 1000
 
     /// Parsed `reason` and `delaySeconds` from a ScheduleWakeup tool use, if available.
     var scheduledWakeup: (reason: String?, delaySeconds: Int?)? {
@@ -732,6 +759,7 @@ extension Agent {
         toolFailure: String? = nil,
         monitorActive: Bool = false,
         monitorExpiresAt: Int64? = nil,
+        scheduledWakeupAt: Int64? = nil,
         taskCompletedAt: Int64? = nil,
         firstPrompt: String? = nil,
         pendingQuestions: [AskQuestion]? = nil,
@@ -753,6 +781,7 @@ extension Agent {
             toolFailure: toolFailure,
             monitorActive: monitorActive,
             monitorExpiresAt: monitorExpiresAt,
+            scheduledWakeupAt: scheduledWakeupAt,
             taskCompletedAt: taskCompletedAt,
             firstPrompt: firstPrompt,
             pendingQuestions: pendingQuestions,

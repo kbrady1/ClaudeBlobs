@@ -3,12 +3,14 @@ import Foundation
 /// How long a snoozed blob stays hidden before it pops back into the visible list.
 enum SnoozeDuration: String, CaseIterable, Identifiable {
     /// First, so it is the default highlighted option in every snooze menu.
-    case indefinite
+    case untilNextMessage
     case thirtyMinutes
     case oneHour
     case threeHours
     case tomorrowMorning
     case nextWeek
+    /// Stays snoozed through status changes until the user wakes it by hand.
+    case indefinite
 
     var id: String { rawValue }
 
@@ -19,12 +21,14 @@ enum SnoozeDuration: String, CaseIterable, Identifiable {
         case .threeHours: return "3 hrs"
         case .tomorrowMorning: return "Tomorrow, 8 AM"
         case .nextWeek: return "Next week"
-        case .indefinite: return "Until next message"
+        case .untilNextMessage: return "Until next message"
+        case .indefinite: return "Indefinitely"
         }
     }
 
-    /// The moment the snooze should end, or nil for an indefinite snooze
-    /// (the agent stays hidden until its status changes or it's manually woken).
+    /// The moment the snooze should end, or nil when no timer ends it.
+    /// `.untilNextMessage` ends on the next status change. `.indefinite` ends
+    /// only on a manual wake.
     func wakeDate(from now: Date = Date(), calendar: Calendar = .current) -> Date? {
         switch self {
         case .thirtyMinutes:
@@ -41,7 +45,7 @@ enum SnoozeDuration: String, CaseIterable, Identifiable {
             comps.weekday = 2 // Monday
             let nextMonday = calendar.nextDate(after: now, matching: comps, matchingPolicy: .nextTime) ?? now
             return calendar.date(bySettingHour: 8, minute: 0, second: 0, of: nextMonday)
-        case .indefinite:
+        case .untilNextMessage, .indefinite:
             return nil
         }
     }

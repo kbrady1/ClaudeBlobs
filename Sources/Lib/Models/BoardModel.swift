@@ -56,8 +56,10 @@ struct BoardCard: Identifiable, Equatable {
     let children: [Agent]
     let isClockBearing: Bool
     let snoozeUntil: Date?
-    /// The worker's last sentinel, for cards in the orchestrated column.
-    var orchestrateReport: OrchestrateReport? = nil
+    /// Snoozed until a manual wake. A status change does not end the snooze.
+    var isSnoozedIndefinitely: Bool = false
+    /// The `/orchestrate` unit driving this session, when a live run claims it.
+    var orchestrateUnit: OrchestrateUnit? = nil
     /// Whether an orchestrator is driving this session, even when it has been
     /// pulled out of the orchestrated column. Drives the hand-back button.
     var isOrchestrateWorker: Bool = false
@@ -95,31 +97,51 @@ enum BoardModel {
     }
 
     /// Whether the board should park this session in the orchestrated column:
-    /// its last turn reported to an orchestrator, the developer has not opted
-    /// it out, and it does not currently need a human.
+    /// an `/orchestrate` run is driving it, the developer has not opted it out,
+    /// and it does not currently need a human.
     ///
-    /// `orchestratedIds` comes from `AgentStore`, which reads the verdict off
-    /// each turn as it lands. It cannot be derived from an `Agent` alone: the
-    /// hooks null the message on every tool call, so a session mid-turn is
-    /// carrying no sentinel even while an orchestrator drives it.
+    /// `orchestratedIds` comes from `AgentStore`, which joins the run's own
+    /// shared state onto each session by Superset terminal id. It cannot be
+    /// derived from an `Agent` alone — the session file says nothing about who
+    /// is driving the session.
+    ///
+    /// `unit` is that run's record for this session, when one exists. A paused
+    /// unit is the one case where an orchestrated worker is waiting on the
+    /// developer specifically: the orchestrator parks a unit it wants a human
+    /// to decide, and records why in `pauseReason`.
+    ///
+    /// The unit's `gate` is deliberately not read here. `gate` is the unit's
+    /// policy for when its gate is eventually reached, not a live request —
+    /// most units in a run carry `gate: "operator"` from creation, including
+    /// units that already finished. Treating the policy as the request put
+    /// every unit on the board for the whole of its verify stage.
+    ///
+    /// `effectiveStatus` keeps a worker that is asking for permission on the
+    /// board. An orchestrator cannot answer a permission prompt, so hiding a
+    /// red session would stall the run with nothing on screen to explain it.
+    ///
+    /// Nothing the worker says in its own output is read here. The orchestrator
+    /// answers the worker, so a worker that claims to be blocked stays hidden;
+    /// only silence past `silenceThreshold` hands it back to the developer.
     static func isOrchestrated(
         _ agent: Agent,
         orchestratedIds: Set<String>,
         optedOutIds: Set<String>,
+        unit: OrchestrateUnit? = nil,
+        effectiveStatus: AgentStatus? = nil,
         now: Date = Date(),
         silenceThreshold: TimeInterval = Agent.orchestrateSilenceThreshold
     ) -> Bool {
         if optedOutIds.contains(agent.id) { return false }
         guard orchestratedIds.contains(agent.id) else { return false }
+        // A permission prompt needs the developer: the orchestrator has no way
+        // to approve it.
+        if (effectiveStatus ?? agent.status) == .permission { return false }
+        // The orchestrator parks a unit it wants a human to decide, so a paused
+        // unit comes back to the developer. A unit the orchestrator is still
+        // driving is never waiting on the developer.
+        if let unit, unit.paused { return false }
         return !agent.orchestrateNeedsHuman(now: now, silenceThreshold: silenceThreshold)
-    }
-
-    /// The verdict a single turn carries. `nil` means the turn said nothing —
-    /// the hooks cleared the message for a tool call — so the session keeps
-    /// whatever it was.
-    static func orchestrateVerdict(for agent: Agent) -> Bool? {
-        if let report = agent.orchestrateReport { return !report.sentinel.needsHuman }
-        return agent.hasCurrentMessage ? false : nil
     }
 
     static func isClockBearing(_ agent: Agent, cronSessionIds: Set<String>, dismissedClockIds: Set<String>) -> Bool {
@@ -133,10 +155,12 @@ enum BoardModel {
         snoozedIds: Set<String>,
         snoozedAt: [String: Date],
         snoozeUntil: [String: Date],
+        indefiniteSnoozeIds: Set<String> = [],
         cronSessionIds: Set<String>,
         dismissedClockIds: Set<String>,
         orchestratedIds: Set<String> = [],
         orchestrateOptedOutIds: Set<String> = [],
+        orchestrateUnits: [String: OrchestrateUnit] = [:],
         now: Date = Date(),
         passesFilter: (Agent) -> Bool
     ) -> [BoardColumnData] {
@@ -148,10 +172,13 @@ enum BoardModel {
             let effective = Agent.effectiveStatus(of: agent, children: kids)
             let snoozed = snoozedIds.contains(agent.id)
             let clock = isClockBearing(agent, cronSessionIds: cronSessionIds, dismissedClockIds: dismissedClockIds)
+            let unit = orchestrateUnits[agent.id]
             let orchestrated = isOrchestrated(
                 agent,
                 orchestratedIds: orchestratedIds,
                 optedOutIds: orchestrateOptedOutIds,
+                unit: unit,
+                effectiveStatus: effective,
                 now: now
             )
             let column = column(
@@ -179,7 +206,8 @@ enum BoardModel {
                 children: kids,
                 isClockBearing: clock,
                 snoozeUntil: snoozeUntil[agent.id],
-                orchestrateReport: agent.orchestrateReport,
+                isSnoozedIndefinitely: indefiniteSnoozeIds.contains(agent.id),
+                orchestrateUnit: unit,
                 isOrchestrateWorker: orchestratedIds.contains(agent.id)
             ))
         }

@@ -364,6 +364,39 @@ struct AgentStoreTests {
         #expect(store.snoozeUntil[loaded.id] == nil)
     }
 
+    @Test func untilNextMessageSnoozeEndsOnStatusChange() throws {
+        let url = tmpDir.appendingPathComponent("snooze-next.json")
+        try JSONEncoder().encode(Agent.fixture(sessionId: "snooze-next", status: .waiting)).write(to: url)
+
+        let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.reload()
+        let loaded = try #require(store.agents.first)
+        store.snooze(loaded, for: .untilNextMessage)
+
+        try JSONEncoder().encode(Agent.fixture(sessionId: "snooze-next", status: .working)).write(to: url)
+        store.reload()
+        #expect(!store.snoozedSessionIds.contains(loaded.id))
+    }
+
+    @Test func indefiniteSnoozeSurvivesStatusChangeUntilManualWake() throws {
+        let url = tmpDir.appendingPathComponent("snooze-forever.json")
+        try JSONEncoder().encode(Agent.fixture(sessionId: "snooze-forever", status: .waiting)).write(to: url)
+
+        let store = AgentStore(statusDirectory: tmpDir, enableWatcher: false, isProcessAlive: { _ in true })
+        store.reload()
+        let loaded = try #require(store.agents.first)
+        store.snooze(loaded, for: .indefinite)
+
+        try JSONEncoder().encode(Agent.fixture(sessionId: "snooze-forever", status: .permission)).write(to: url)
+        store.reload()
+        #expect(store.snoozedSessionIds.contains(loaded.id))
+        #expect(store.indefiniteSnoozeIds.contains(loaded.id))
+
+        store.unsnooze(loaded)
+        #expect(!store.snoozedSessionIds.contains(loaded.id))
+        #expect(!store.indefiniteSnoozeIds.contains(loaded.id))
+    }
+
     @Test func timedSnoozeRecordsWakeDate() throws {
         let agent = Agent.fixture(sessionId: "snooze-timed", status: .waiting)
         let data = try JSONEncoder().encode(agent)

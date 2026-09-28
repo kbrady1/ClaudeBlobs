@@ -59,6 +59,28 @@ if [ "$TOOL_NAME" = "Monitor" ]; then
   fi
 elif [ "$TOOL_NAME" = "TaskStop" ]; then
   MONITOR_ACTIVE_FILTER=".monitorActive = false | .monitorExpiresAt = null"
+elif [ "$TOOL_NAME" = "ScheduleWakeup" ]; then
+  # Same durable-flag treatment as Monitor, and for the same reason: a /loop
+  # session calls ScheduleWakeup and then keeps working (Bash, Agent, Edit), so
+  # by the end of the turn lastToolUse names the last tool, not the wakeup.
+  # Reading the schedule off lastToolUse therefore misses every loop that does
+  # any work after scheduling — which is all of them.
+  #
+  # `stop: true` ends the loop, so it clears the flag. Otherwise the wakeup is
+  # due at now + delaySeconds; the app treats the flag as stale past that, with
+  # a grace window so a session is not surfaced the instant it is due.
+  WAKEUP_STOP=$(echo "$RAW_INPUT" | jq -r 'if .stop == true then "true" else "false" end' 2>/dev/null)
+  if [ "$WAKEUP_STOP" = "true" ]; then
+    MONITOR_ACTIVE_FILTER=".scheduledWakeupAt = null"
+  else
+    DELAY_S=$(echo "$RAW_INPUT" | jq -r '.delaySeconds // 0' 2>/dev/null)
+    case "$DELAY_S" in ''|*[!0-9]*) DELAY_S=0 ;; esac
+    # The runtime clamps delaySeconds to [60, 3600]; mirror the ceiling so a
+    # bad value cannot hide a session for an unbounded stretch.
+    [ "$DELAY_S" -gt 3600 ] && DELAY_S=3600
+    [ "$DELAY_S" -lt 60 ] && DELAY_S=60
+    MONITOR_ACTIVE_FILTER=".scheduledWakeupAt = $((TS + DELAY_S * 1000))"
+  fi
 fi
 
 # Never overwrite permission — PreToolUse fires BEFORE PermissionRequest for

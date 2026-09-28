@@ -21,6 +21,9 @@ struct Uninstaller {
 
     func uninstall() throws {
         try hookInstaller.uninstall()
+        for path in HookConfigLocations().extraSettingsPaths() {
+            try? HookInstaller(settingsPath: path).uninstall()
+        }
         try? openCodeInstaller.uninstall()
 
         for statusDir in statusDirs where FileManager.default.fileExists(atPath: statusDir.path) {

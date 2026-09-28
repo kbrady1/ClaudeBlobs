@@ -118,3 +118,39 @@ struct HookInstaller {
         try data.write(to: settingsPath, options: .atomic)
     }
 }
+
+extension HookInstaller {
+    /// Installs hooks into the default settings path plus every path from `locations`.
+    /// Returns the paths that failed, paired with their errors.
+    @discardableResult
+    static func installAll(
+        locations: HookConfigLocations = HookConfigLocations(),
+        hooksDir: String? = nil
+    ) -> [(URL, Error)] {
+        var failures: [(URL, Error)] = []
+        for path in locations.allSettingsPaths() {
+            do {
+                try HookInstaller(settingsPath: path, hooksDir: hooksDir).install()
+            } catch {
+                failures.append((path, error))
+            }
+        }
+        return failures
+    }
+
+    @discardableResult
+    static func uninstallAll(
+        locations: HookConfigLocations = HookConfigLocations(),
+        hooksDir: String? = nil
+    ) -> [(URL, Error)] {
+        var failures: [(URL, Error)] = []
+        for path in locations.allSettingsPaths() {
+            do {
+                try HookInstaller(settingsPath: path, hooksDir: hooksDir).uninstall()
+            } catch {
+                failures.append((path, error))
+            }
+        }
+        return failures
+    }
+}

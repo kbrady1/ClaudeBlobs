@@ -466,3 +466,132 @@ struct MarkdownBlocksTests {
         ])
     }
 }
+
+@Suite("ConductorExternalWait")
+struct ConductorExternalWaitTests {
+    private func card(
+        status: AgentStatus = .waiting,
+        waitReason: String? = "done",
+        monitorActive: Bool = false,
+        unit: OrchestrateUnit? = nil,
+        pendingQuestions: [AskQuestion]? = nil,
+        toolFailure: String? = nil,
+        column: BoardColumn = .idle
+    ) -> BoardCard {
+        let agent = Agent.fixture(
+            sessionId: "s", pid: 1, status: status,
+            waitReason: waitReason,
+            toolFailure: toolFailure,
+            monitorActive: monitorActive,
+            pendingQuestions: pendingQuestions,
+            updatedAt: Int64(Date().timeIntervalSince1970 * 1000)
+        )
+        return BoardCard(
+            agent: agent, column: column, effectiveStatus: status, enteredAt: Date(),
+            children: [], isClockBearing: monitorActive, snoozeUntil: nil,
+            orchestrateUnit: unit
+        )
+    }
+
+    private func unit(
+        stage: OrchestrateStage = .implement,
+        gate: String? = nil,
+        paused: Bool = false
+    ) -> OrchestrateUnit {
+        OrchestrateUnit(
+            ticket: "ENG-1", project: "PLN-1", projectTitle: "P", title: "T",
+            stage: stage, paused: paused, gate: gate,
+            prUrl: nil, terminalId: "term-a"
+        )
+    }
+
+    // MARK: - waitsOnSomethingElse
+
+    @Test func anArmedWatcherWaitsOnSomethingElse() {
+        #expect(ConductorStore.waitsOnSomethingElse(card(monitorActive: true)))
+    }
+
+    @Test func anOrdinaryIdleSessionDoesNot() {
+        #expect(!ConductorStore.waitsOnSomethingElse(card()))
+    }
+
+    @Test func anOrchestratedWorkerWaitsOnItsOrchestrator() {
+        #expect(ConductorStore.waitsOnSomethingElse(card(unit: unit())))
+    }
+
+    /// A merged or dropped unit is nobody's but the developer's again.
+    @Test func aFinishedUnitDoesNotWait() {
+        #expect(!ConductorStore.waitsOnSomethingElse(card(unit: unit(stage: .done))))
+        #expect(!ConductorStore.waitsOnSomethingElse(card(unit: unit(paused: true))))
+    }
+
+    /// The unit's `gate` is its policy, not a live request. Most units in a run
+    /// carry `gate: "operator"` from creation, so a driven unit still answers to
+    /// its orchestrator whatever its gate policy says.
+    @Test func anOperatorGatePolicyDoesNotMakeAUnitTheDevelopers() {
+        #expect(ConductorStore.waitsOnSomethingElse(
+            card(unit: unit(stage: .verify, gate: "operator"))
+        ))
+        #expect(ConductorStore.waitsOnSomethingElse(
+            card(unit: unit(stage: .review, gate: "operator"))
+        ))
+    }
+
+    /// The one orchestrated case that is the developer's to answer: the
+    /// orchestrator parked the unit for a human decision.
+    @Test func aPausedUnitIsTheDevelopersToAnswer() {
+        #expect(!ConductorStore.waitsOnSomethingElse(
+            card(unit: unit(stage: .verify, gate: "operator", paused: true))
+        ))
+    }
+
+    // MARK: - canBeInFlight still overrides
+
+    @Test func aPendingQuestionIsNeverHidden() {
+        let asking = card(
+            monitorActive: true,
+            pendingQuestions: [AskQuestion(question: "Which?", options: [])]
+        )
+        #expect(ConductorStore.waitsOnSomethingElse(asking))
+        #expect(!ConductorStore.canBeInFlight(asking))
+    }
+
+    @Test func aToolFailureIsNeverHidden() {
+        let failed = card(monitorActive: true, toolFailure: "boom")
+        #expect(!ConductorStore.canBeInFlight(failed))
+    }
+
+    @Test func aPermissionRequestIsNeverHidden() {
+        let asking = card(status: .permission, waitReason: nil, monitorActive: true, column: .needsAttention)
+        #expect(!ConductorStore.canBeInFlight(asking))
+    }
+
+    // MARK: - Prompt facts
+
+    @Test func promptNamesWhatTheSessionWaitsOn() {
+        let lines = ConductorStore.externalWaitLines(card(monitorActive: true, unit: unit()))
+        let text = lines.joined(separator: "\n")
+        #expect(text.contains("ENG-1"))
+        #expect(text.contains("implementing"))
+        #expect(text.contains("monitor/watcher is armed"))
+    }
+
+    @Test func promptFlagsAPausedUnit() {
+        let lines = ConductorStore.externalWaitLines(
+            card(unit: unit(stage: .verify, gate: "operator", paused: true))
+        )
+        #expect(lines.joined().contains("paused this unit for a human decision"))
+    }
+
+    /// A gate policy alone must not tell the model a human is needed.
+    @Test func promptDoesNotFlagAnUnpausedGatePolicy() {
+        let lines = ConductorStore.externalWaitLines(
+            card(unit: unit(stage: .verify, gate: "operator"))
+        )
+        #expect(!lines.joined().contains("human decision"))
+    }
+
+    @Test func anOrdinarySessionAddsNoLines() {
+        #expect(ConductorStore.externalWaitLines(card()).isEmpty)
+    }
+}

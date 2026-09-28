@@ -11,6 +11,7 @@ struct SnoozeDurationTests {
     }
 
     @Test func indefiniteHasNoWakeDate() {
+        #expect(SnoozeDuration.untilNextMessage.wakeDate() == nil)
         #expect(SnoozeDuration.indefinite.wakeDate() == nil)
     }
 
